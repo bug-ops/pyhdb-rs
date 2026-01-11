@@ -25,6 +25,7 @@ hdbconnect-arrow = { path = "../hdbconnect-arrow" }
 parking_lot = { workspace = true }
 pyo3 = { workspace = true }
 pyo3-arrow = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
 

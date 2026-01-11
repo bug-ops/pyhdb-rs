@@ -39,6 +39,16 @@ pub trait HanaCompatibleBuilder: Sealed + Send {
     /// After calling this method, the builder is reset and can be reused.
     fn finish(&mut self) -> ArrayRef;
 
+    /// Reset the builder, clearing all data while preserving capacity.
+    ///
+    /// This is more efficient than calling `finish()` when you want to
+    /// reuse the builder without creating an array. Useful for batch
+    /// boundary resets where the previous batch data is discarded.
+    fn reset(&mut self) {
+        // Default implementation: call finish() and discard the result
+        let _ = self.finish();
+    }
+
     /// Returns the number of values (including nulls) appended so far.
     fn len(&self) -> usize;
 

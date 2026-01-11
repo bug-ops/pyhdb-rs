@@ -18,6 +18,7 @@ Example::
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
@@ -26,11 +27,34 @@ if TYPE_CHECKING:
 __all__ = ["read_hana", "to_hana"]
 
 
+# SQL identifier pattern: letter/underscore start, alphanumeric/underscore body
+# Supports schema.table notation
+_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$")
+
+
+def _validate_identifier(name: str) -> str:
+    """Validate SQL identifier to prevent injection.
+
+    Args:
+        name: Table or schema.table name to validate
+
+    Returns:
+        The validated name if valid
+
+    Raises:
+        ValueError: If name contains invalid characters
+    """
+    if not _IDENTIFIER_PATTERN.match(name):
+        raise ValueError(f"Invalid SQL identifier: {name!r}")
+    return name
+
+
 def read_hana(
     query: str,
     connection_uri: str,
     *,
     batch_size: int = 65536,
+    stream: bool = False,
 ) -> pd.DataFrame:
     """Read SAP HANA query results into a pandas DataFrame.
 
@@ -40,6 +64,8 @@ def read_hana(
         query: SQL query to execute
         connection_uri: HANA connection URI (hdbsql://user:pass@host:port)
         batch_size: Number of rows per Arrow batch
+        stream: If True, process data in chunks to reduce peak memory usage.
+            Useful for large datasets. Default False for backward compatibility.
 
     Returns:
         pandas DataFrame with query results
@@ -52,12 +78,26 @@ def read_hana(
             "SELECT * FROM sales WHERE year = 2024",
             "hdbsql://user:pass@host:39017"
         )
+
+        # For large datasets, use streaming to reduce memory
+        df = hdb.read_hana(query, uri, stream=True)
     """
+    import pandas as pd
+
     from pyhdb_rs import connect
 
     with connect(connection_uri) as conn:
         reader = conn.execute_arrow(query, batch_size=batch_size)
         arrow_reader = reader.to_pyarrow()
+
+        if stream:
+            chunks = []
+            for batch in arrow_reader:
+                chunks.append(batch.to_pandas())
+            if not chunks:
+                return pd.DataFrame()
+            return pd.concat(chunks, ignore_index=True)
+
         return arrow_reader.read_all().to_pandas()
 
 
@@ -96,35 +136,39 @@ def to_hana(
 
     from pyhdb_rs import connect
 
+    validated_table = _validate_identifier(table)
+
     with connect(connection_uri) as conn:
         cursor = conn.cursor()
 
         if if_exists == "replace":
             try:
-                cursor.execute(f"DROP TABLE {table}")  # noqa: S608
+                cursor.execute(f"DROP TABLE {validated_table}")
             except Exception:
                 pass
-            _create_table_from_pandas(cursor, table, df)
+            _create_table_from_pandas(cursor, validated_table, df)
 
         columns = ", ".join(f'"{col}"' for col in df.columns)
         placeholders = ", ".join(["?"] * len(df.columns))
-        insert_sql = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"  # noqa: S608
+        insert_sql = f"INSERT INTO {validated_table} ({columns}) VALUES ({placeholders})"
 
         rows = df.replace({np.nan: None}).values.tolist()
         total = 0
 
         for i in range(0, len(rows), batch_size):
             batch = rows[i : i + batch_size]
-            for row in batch:
-                cursor.execute(insert_sql, tuple(row))
-                total += 1
+            cursor.executemany(insert_sql, [tuple(row) for row in batch])
+            total += len(batch)
 
         conn.commit()
         return total
 
 
 def _create_table_from_pandas(cursor: Any, table: str, df: pd.DataFrame) -> None:
-    """Generate and execute CREATE TABLE from pandas DataFrame schema."""
+    """Generate and execute CREATE TABLE from pandas DataFrame schema.
+
+    Note: table name should already be validated by caller.
+    """
     type_map: dict[str, str] = {
         "int8": "TINYINT",
         "int16": "SMALLINT",
@@ -149,5 +193,5 @@ def _create_table_from_pandas(cursor: Any, table: str, df: pd.DataFrame) -> None
         hana_type = type_map.get(dtype_str, "NVARCHAR(5000)")
         columns.append(f'"{col_name}" {hana_type}')
 
-    ddl = f"CREATE TABLE {table} ({', '.join(columns)})"  # noqa: S608
+    ddl = f"CREATE TABLE {table} ({', '.join(columns)})"
     cursor.execute(ddl)

@@ -37,7 +37,13 @@ struct StreamingReader {
     exhausted: bool,
 }
 
-// Send is needed for RecordBatchReader trait
+// SAFETY: StreamingReader is only used within a single Python thread context.
+// The hdbconnect::ResultSet is not shared across threads; it is created and
+// consumed within the same connection context. The Send impl is required by
+// pyo3_arrow::PyRecordBatchReader but we ensure thread isolation through:
+// 1. Python GIL protection on the PyRecordBatchReader wrapper
+// 2. Mutex<ConnectionInner> guards all connection state in parent
+// 3. ResultSet iteration is single-threaded by design (no concurrent access)
 unsafe impl Send for StreamingReader {}
 
 impl StreamingReader {

@@ -41,5 +41,6 @@ hdbconnect = "0.32"
 parking_lot = "0.12.5"
 pyo3 = { version = "0.27", features = ["extension-module", "abi3-py311"] }
 pyo3-arrow = "0.15"
+serde = { version = "1.0", features = ["derive"] }
 thiserror = "2.0"
 url = "2.5"

@@ -5,6 +5,41 @@ use pyo3::types::{PyBytes, PyFloat, PyInt, PyString};
 
 use crate::error::PyHdbError;
 
+/// Parse ISO timestamp string to Python datetime.
+fn parse_timestamp_to_python<'py>(py: Python<'py>, s: &str) -> PyResult<Bound<'py, PyAny>> {
+    let datetime_mod = py.import("datetime")?;
+    let datetime_cls = datetime_mod.getattr("datetime")?;
+
+    // Display format: "YYYY-MM-DDTHH:MM:SS[.FFFFFFF]"
+    let parts: Vec<&str> = s.split('T').collect();
+    if parts.len() == 2 {
+        let date_parts: Vec<&str> = parts[0].split('-').collect();
+        let time_str = parts[1];
+        let (time_part, microseconds) =
+            time_str
+                .split_once('.')
+                .map_or((time_str, 0u32), |(t, frac)| {
+                    // Convert fractional seconds (up to 7 digits) to microseconds (6 digits)
+                    let padded = format!("{frac:0<6}");
+                    let micros: u32 = padded[..6].parse().unwrap_or(0);
+                    (t, micros)
+                });
+        let time_parts: Vec<&str> = time_part.split(':').collect();
+
+        if date_parts.len() == 3 && time_parts.len() == 3 {
+            let year: i32 = date_parts[0].parse().unwrap_or(1970);
+            let month: u32 = date_parts[1].parse().unwrap_or(1);
+            let day: u32 = date_parts[2].parse().unwrap_or(1);
+            let hour: u32 = time_parts[0].parse().unwrap_or(0);
+            let minute: u32 = time_parts[1].parse().unwrap_or(0);
+            let second: u32 = time_parts[2].parse().unwrap_or(0);
+            return datetime_cls.call1((year, month, day, hour, minute, second, microseconds));
+        }
+    }
+    // Fallback to string representation
+    Ok(s.into_pyobject(py)?.clone().into_any())
+}
+
 /// Convert a HANA value to a Python object.
 pub fn hana_value_to_python<'py>(
     py: Python<'py>,
@@ -30,8 +65,43 @@ pub fn hana_value_to_python<'py>(
             let s = d.to_string();
             decimal_cls.call1((s,))
         }
-        // Date/Time: convert to string for now
-        // TODO: Convert to Python datetime objects
+        // Date: convert to Python datetime.date
+        HdbValue::DAYDATE(d) => {
+            let datetime_mod = py.import("datetime")?;
+            let date_cls = datetime_mod.getattr("date")?;
+            // DayDate displays as "YYYY-MM-DD"
+            let s = d.to_string();
+            let parts: Vec<&str> = s.split('-').collect();
+            if parts.len() == 3 {
+                let year: i32 = parts[0].parse().unwrap_or(1970);
+                let month: u32 = parts[1].parse().unwrap_or(1);
+                let day: u32 = parts[2].parse().unwrap_or(1);
+                date_cls.call1((year, month, day))
+            } else {
+                // Fallback to string
+                Ok(s.into_pyobject(py)?.clone().into_any())
+            }
+        }
+        // Time: convert to Python datetime.time
+        HdbValue::SECONDTIME(t) => {
+            let datetime_mod = py.import("datetime")?;
+            let time_cls = datetime_mod.getattr("time")?;
+            // SecondTime displays as "HH:MM:SS"
+            let s = t.to_string();
+            let parts: Vec<&str> = s.split(':').collect();
+            if parts.len() == 3 {
+                let hour: u32 = parts[0].parse().unwrap_or(0);
+                let minute: u32 = parts[1].parse().unwrap_or(0);
+                let second: u32 = parts[2].parse().unwrap_or(0);
+                time_cls.call1((hour, minute, second))
+            } else {
+                Ok(s.into_pyobject(py)?.clone().into_any())
+            }
+        }
+        // Timestamp types: convert to Python datetime.datetime
+        HdbValue::LONGDATE(ts) => parse_timestamp_to_python(py, &ts.to_string()),
+        HdbValue::SECONDDATE(sd) => parse_timestamp_to_python(py, &sd.to_string()),
+        // Fallback for other types: Debug representation
         other => {
             let s = format!("{other:?}");
             Ok(s.into_pyobject(py)?.clone().into_any())
@@ -49,6 +119,61 @@ pub fn python_to_hana_value(obj: &Bound<'_, PyAny>) -> PyResult<hdbconnect::HdbV
 
     if obj.is_none() {
         return Ok(HdbValue::NULL);
+    }
+
+    // Check for datetime types first (before generic checks)
+    let py = obj.py();
+    let datetime_mod = py.import("datetime")?;
+
+    // Check if it's a datetime.datetime (must check before date since datetime is a subclass)
+    let datetime_cls = datetime_mod.getattr("datetime")?;
+    if obj.is_instance(&datetime_cls)? {
+        // Extract datetime components and format as ISO string for HANA
+        let year: i32 = obj.getattr("year")?.extract()?;
+        let month: u32 = obj.getattr("month")?.extract()?;
+        let day: u32 = obj.getattr("day")?.extract()?;
+        let hour: u32 = obj.getattr("hour")?.extract()?;
+        let minute: u32 = obj.getattr("minute")?.extract()?;
+        let second: u32 = obj.getattr("second")?.extract()?;
+        let microsecond: u32 = obj.getattr("microsecond")?.extract()?;
+
+        // Format as ISO timestamp string for HANA to parse
+        let ts_str = if microsecond > 0 {
+            format!(
+                "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{microsecond:06}"
+            )
+        } else {
+            format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}")
+        };
+        return Ok(HdbValue::STRING(ts_str));
+    }
+
+    // Check if it's a datetime.date
+    let date_cls = datetime_mod.getattr("date")?;
+    if obj.is_instance(&date_cls)? {
+        let year: i32 = obj.getattr("year")?.extract()?;
+        let month: u32 = obj.getattr("month")?.extract()?;
+        let day: u32 = obj.getattr("day")?.extract()?;
+        let date_str = format!("{year:04}-{month:02}-{day:02}");
+        return Ok(HdbValue::STRING(date_str));
+    }
+
+    // Check if it's a datetime.time
+    let time_cls = datetime_mod.getattr("time")?;
+    if obj.is_instance(&time_cls)? {
+        let hour: u32 = obj.getattr("hour")?.extract()?;
+        let minute: u32 = obj.getattr("minute")?.extract()?;
+        let second: u32 = obj.getattr("second")?.extract()?;
+        let time_str = format!("{hour:02}:{minute:02}:{second:02}");
+        return Ok(HdbValue::STRING(time_str));
+    }
+
+    // Check for Python Decimal
+    let decimal_mod = py.import("decimal")?;
+    let decimal_cls = decimal_mod.getattr("Decimal")?;
+    if obj.is_instance(&decimal_cls)? {
+        let s: String = obj.str()?.extract()?;
+        return Ok(HdbValue::STRING(s));
     }
 
     // Check Python type and convert

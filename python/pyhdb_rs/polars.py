@@ -18,12 +18,35 @@ Example::
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
     import polars as pl
 
 __all__ = ["read_hana", "scan_hana", "write_hana"]
+
+
+# SQL identifier pattern: letter/underscore start, alphanumeric/underscore body
+# Supports schema.table notation
+_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$")
+
+
+def _validate_identifier(name: str) -> str:
+    """Validate SQL identifier to prevent injection.
+
+    Args:
+        name: Table or schema.table name to validate
+
+    Returns:
+        The validated name if valid
+
+    Raises:
+        ValueError: If name contains invalid characters
+    """
+    if not _IDENTIFIER_PATTERN.match(name):
+        raise ValueError(f"Invalid SQL identifier: {name!r}")
+    return name
 
 
 def read_hana(
@@ -133,35 +156,39 @@ def write_hana(
 
     from pyhdb_rs import connect
 
+    validated_table = _validate_identifier(table)
+
     with connect(connection_uri) as conn:
         cursor = conn.cursor()
 
         if if_table_exists == "replace":
             try:
-                cursor.execute(f"DROP TABLE {table}")  # noqa: S608
+                cursor.execute(f"DROP TABLE {validated_table}")
             except Exception:
                 pass
-            _create_table_from_df(cursor, table, df)
+            _create_table_from_df(cursor, validated_table, df)
 
         columns = ", ".join(f'"{col}"' for col in df.columns)
         placeholders = ", ".join(["?"] * len(df.columns))
-        insert_sql = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"  # noqa: S608
+        insert_sql = f"INSERT INTO {validated_table} ({columns}) VALUES ({placeholders})"
 
         rows = df.rows()
         total = 0
 
         for i in range(0, len(rows), batch_size):
             batch = rows[i : i + batch_size]
-            for row in batch:
-                cursor.execute(insert_sql, row)
-                total += 1
+            cursor.executemany(insert_sql, batch)
+            total += len(batch)
 
         conn.commit()
         return total
 
 
 def _create_table_from_df(cursor: Any, table: str, df: pl.DataFrame) -> None:
-    """Generate and execute CREATE TABLE from DataFrame schema."""
+    """Generate and execute CREATE TABLE from DataFrame schema.
+
+    Note: table name should already be validated by caller.
+    """
     import polars as pl
 
     type_map: dict[type, str] = {
@@ -194,5 +221,5 @@ def _create_table_from_df(cursor: Any, table: str, df: pl.DataFrame) -> None:
             hana_type = type_map.get(type(dtype), "NVARCHAR(5000)")
         columns.append(f'"{name}" {hana_type}')
 
-    ddl = f"CREATE TABLE {table} ({', '.join(columns)})"  # noqa: S608
+    ddl = f"CREATE TABLE {table} ({', '.join(columns)})"
     cursor.execute(ddl)

@@ -4,7 +4,7 @@
 
 use parking_lot::Mutex;
 use pyo3::prelude::*;
-use pyo3::types::{PyList, PyTuple};
+use pyo3::types::{PyBytes, PyFloat, PyInt, PyList, PySequence, PyString, PyTuple};
 
 use crate::connection::{ConnectionInner, SharedConnection};
 use crate::cursor::state::ColumnDescription;
@@ -82,17 +82,26 @@ impl PyCursor {
         }
     }
 
-    /// Execute a SQL query.
+    /// Execute a SQL query with optional parameters.
+    ///
+    /// Parameters are passed as a tuple or list and bound to ? placeholders in the SQL.
     #[pyo3(signature = (sql, parameters=None))]
     fn execute(&mut self, sql: &str, parameters: Option<&Bound<'_, PyAny>>) -> PyResult<()> {
-        if parameters.is_some() {
-            return Err(PyHdbError::not_supported("parameters not yet supported").into());
-        }
-
         let mut conn_guard = self.connection.lock();
         match &mut *conn_guard {
             ConnectionInner::Connected(conn) => {
-                let rs = conn.query(sql).map_err(PyHdbError::from)?;
+                let rs = match parameters {
+                    Some(params) => {
+                        // Convert Python params to serde-serializable values
+                        let serializable_params = convert_to_serializable(params)?;
+                        let mut stmt = conn.prepare(sql).map_err(PyHdbError::from)?;
+                        stmt.execute(&serializable_params)
+                            .map_err(PyHdbError::from)?
+                            .into_result_set()
+                            .map_err(PyHdbError::from)?
+                    }
+                    None => conn.query(sql).map_err(PyHdbError::from)?,
+                };
 
                 // Build description from metadata
                 let description: Vec<ColumnDescription> = rs
@@ -129,23 +138,35 @@ impl PyCursor {
         }
     }
 
-    /// Execute a DML statement.
+    /// Execute a DML statement with optional batch parameters.
+    ///
+    /// For batch INSERT operations, accepts a sequence of parameter tuples/lists.
     #[pyo3(signature = (sql, seq_of_parameters=None))]
     fn executemany(
         &mut self,
         sql: &str,
         seq_of_parameters: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<()> {
-        if seq_of_parameters.is_some() {
-            return Err(
-                PyHdbError::not_supported("executemany parameters not yet supported").into(),
-            );
-        }
-
         let mut conn_guard = self.connection.lock();
         match &mut *conn_guard {
             ConnectionInner::Connected(conn) => {
-                let affected = conn.dml(sql).map_err(PyHdbError::from)?;
+                let affected = match seq_of_parameters {
+                    Some(seq) => {
+                        // Use prepared statement with batch execution
+                        let param_batches = convert_to_serializable_batch(seq)?;
+                        let mut stmt = conn.prepare(sql).map_err(PyHdbError::from)?;
+
+                        // Add all parameter sets to batch
+                        for params in &param_batches {
+                            stmt.add_batch(params).map_err(PyHdbError::from)?;
+                        }
+
+                        // Execute the batch
+                        let response = stmt.execute_batch().map_err(PyHdbError::from)?;
+                        response.count()
+                    }
+                    None => conn.dml(sql).map_err(PyHdbError::from)?,
+                };
                 drop(conn_guard);
 
                 let mut inner_guard = self.inner.lock();
@@ -282,4 +303,143 @@ fn row_to_python<'py>(py: Python<'py>, row: &hdbconnect::Row) -> PyResult<Vec<Bo
     }
 
     Ok(values)
+}
+
+/// Serializable parameter value for hdbconnect prepared statements.
+///
+/// hdbconnect uses serde for parameter binding, so we convert Python values
+/// to this enum which implements Serialize.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(untagged)]
+enum SerializableValue {
+    Null,
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    String(String),
+    Bytes(Vec<u8>),
+}
+
+/// Convert Python parameters (tuple/list) to serializable values.
+#[allow(deprecated)]
+fn convert_to_serializable(params: &Bound<'_, PyAny>) -> PyResult<Vec<SerializableValue>> {
+    let sequence: &Bound<'_, PySequence> = params.downcast()?;
+    let len = sequence.len()?;
+    let mut result = Vec::with_capacity(len);
+
+    for i in 0..len {
+        let item = sequence.get_item(i)?;
+        let value = python_to_serializable(&item)?;
+        result.push(value);
+    }
+
+    Ok(result)
+}
+
+/// Convert sequence of Python parameter tuples/lists to batch serializable values.
+#[allow(deprecated)]
+fn convert_to_serializable_batch(seq: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<SerializableValue>>> {
+    let sequence: &Bound<'_, PySequence> = seq.downcast()?;
+    let len = sequence.len()?;
+    let mut result = Vec::with_capacity(len);
+
+    for i in 0..len {
+        let params = sequence.get_item(i)?;
+        let values = convert_to_serializable(&params)?;
+        result.push(values);
+    }
+
+    Ok(result)
+}
+
+/// Convert a single Python value to a serializable value.
+fn python_to_serializable(obj: &Bound<'_, PyAny>) -> PyResult<SerializableValue> {
+    if obj.is_none() {
+        return Ok(SerializableValue::Null);
+    }
+
+    // Check for datetime types first (before generic checks)
+    let py = obj.py();
+    let datetime_mod = py.import("datetime")?;
+
+    // Check if it's a datetime.datetime (must check before date since datetime is a subclass)
+    let datetime_cls = datetime_mod.getattr("datetime")?;
+    if obj.is_instance(&datetime_cls)? {
+        let year: i32 = obj.getattr("year")?.extract()?;
+        let month: u32 = obj.getattr("month")?.extract()?;
+        let day: u32 = obj.getattr("day")?.extract()?;
+        let hour: u32 = obj.getattr("hour")?.extract()?;
+        let minute: u32 = obj.getattr("minute")?.extract()?;
+        let second: u32 = obj.getattr("second")?.extract()?;
+        let microsecond: u32 = obj.getattr("microsecond")?.extract()?;
+
+        let ts_str = if microsecond > 0 {
+            format!(
+                "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{microsecond:06}"
+            )
+        } else {
+            format!("{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}")
+        };
+        return Ok(SerializableValue::String(ts_str));
+    }
+
+    // Check if it's a datetime.date
+    let date_cls = datetime_mod.getattr("date")?;
+    if obj.is_instance(&date_cls)? {
+        let year: i32 = obj.getattr("year")?.extract()?;
+        let month: u32 = obj.getattr("month")?.extract()?;
+        let day: u32 = obj.getattr("day")?.extract()?;
+        let date_str = format!("{year:04}-{month:02}-{day:02}");
+        return Ok(SerializableValue::String(date_str));
+    }
+
+    // Check if it's a datetime.time
+    let time_cls = datetime_mod.getattr("time")?;
+    if obj.is_instance(&time_cls)? {
+        let hour: u32 = obj.getattr("hour")?.extract()?;
+        let minute: u32 = obj.getattr("minute")?.extract()?;
+        let second: u32 = obj.getattr("second")?.extract()?;
+        let time_str = format!("{hour:02}:{minute:02}:{second:02}");
+        return Ok(SerializableValue::String(time_str));
+    }
+
+    // Check for Python Decimal
+    let decimal_mod = py.import("decimal")?;
+    let decimal_cls = decimal_mod.getattr("Decimal")?;
+    if obj.is_instance(&decimal_cls)? {
+        let s: String = obj.str()?.extract()?;
+        return Ok(SerializableValue::String(s));
+    }
+
+    // Boolean must be checked before int (bool is subclass of int in Python)
+    if let Ok(b) = obj.extract::<bool>() {
+        return Ok(SerializableValue::Bool(b));
+    }
+
+    if obj.is_instance_of::<PyInt>() {
+        let v: i64 = obj.extract()?;
+        return Ok(SerializableValue::Int(v));
+    }
+
+    if obj.is_instance_of::<PyFloat>() {
+        let v: f64 = obj.extract()?;
+        return Ok(SerializableValue::Float(v));
+    }
+
+    if obj.is_instance_of::<PyString>() {
+        let s: String = obj.extract()?;
+        return Ok(SerializableValue::String(s));
+    }
+
+    if obj.is_instance_of::<PyBytes>() {
+        let b: Vec<u8> = obj.extract()?;
+        return Ok(SerializableValue::Bytes(b));
+    }
+
+    // Unsupported type
+    Err(PyHdbError::data(format!(
+        "cannot convert Python type {} to SQL parameter",
+        obj.get_type().name()?
+    ))
+    .into())
 }

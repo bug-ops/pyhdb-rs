@@ -700,6 +700,7 @@ dependencies = [
  "parking_lot",
  "pyo3",
  "pyo3-arrow",
+ "serde",
  "thiserror 2.0.17",
  "url",
 ]
