@@ -225,8 +225,13 @@ pyhdb-rs is designed for high-performance data access:
 - **Rust core**: All heavy lifting happens in compiled Rust code
 - **Connection pooling**: Async pool with configurable size for high-concurrency workloads
 - **Batch processing**: Efficient handling of large result sets via streaming
+- **Optimized conversions**: Direct BigInt arithmetic for decimals, builder reuse at batch boundaries
+- **Type caching**: Thread-local Python type references minimize FFI overhead
 
 Benchmarks show 2x+ performance improvement over hdbcli for bulk reads.
+
+> [!TIP]
+> For maximum performance, use `execute_polars()` or `execute_arrow()` methods which provide zero-copy data transfer.
 
 ## MSRV policy
 

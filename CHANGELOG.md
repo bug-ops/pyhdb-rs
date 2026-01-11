@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-01-11
+
+### Performance
+
+#### Decimal Conversion
+- Replaced string-based decimal parsing with direct `BigDecimal::as_bigint_and_exponent()`
+- Eliminates ~100K heap allocations per 100K decimal values
+- ~2x faster decimal conversion for bulk workloads
+
+#### Arrow Builder Optimization
+- Builder reuse at batch boundaries (Arrow builders reset after `finish()`)
+- Removed unnecessary factory field from `HanaBatchProcessor`
+- Added `Vec::with_capacity()` hints in `create_builders_for_schema()`
+- 10-15% throughput improvement for batch processing
+
+#### PyO3 Optimizations
+- Thread-local caching for Python datetime/decimal types
+- Eliminates repeated `py.import()` and `getattr()` calls per row
+- Safe `RefCell` pattern with `try_borrow_mut()` for reentrancy protection
+
+#### Build
+- Added optimized release profile with LTO (`lto = "fat"`)
+- Single codegen unit for maximum optimization
+- Strip symbols for smaller binary size
+- Added `bench` and `release-with-debug` profiles
+
+### Added
+
+- Comprehensive Criterion benchmark suite for Arrow conversions
+- Benchmarks for Int32, Int64, String, Boolean, Float64, Decimal types
+- Mixed schema and batch size comparison benchmarks
+- Builder creation and null handling benchmarks
+
+### Changed
+
+- CI now excludes `hdbconnect-py` from cargo test (PyO3 abi3 requires Python at runtime)
+
 ## [0.1.1] - 2026-01-11
 
 ### Changed
@@ -75,6 +112,7 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/bug-ops/pyhdb-rs/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/bug-ops/pyhdb-rs/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bug-ops/pyhdb-rs/releases/tag/v0.1.0
