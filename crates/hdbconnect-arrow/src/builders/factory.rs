@@ -48,9 +48,10 @@ impl BuilderFactory {
 
     /// Create from `BatchConfig`.
     #[must_use]
-    pub const fn from_config(config: &BatchConfig) -> Self {
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn from_config(config: &BatchConfig) -> Self {
         Self {
-            capacity: config.batch_size,
+            capacity: config.batch_size.get(),
             string_capacity: config.string_capacity,
             binary_capacity: config.binary_capacity,
         }

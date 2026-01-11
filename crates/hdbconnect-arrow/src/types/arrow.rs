@@ -140,48 +140,6 @@ pub trait FieldMetadataExt {
     fn arrow_data_type(&self) -> DataType;
 }
 
-impl FieldMetadataExt for hdbconnect::FieldMetadata {
-    fn to_arrow_field(&self) -> Field {
-        let name = {
-            let display = self.displayname();
-            if display.is_empty() {
-                self.columnname()
-            } else {
-                display
-            }
-        };
-        let precision = self.precision();
-        let scale = self.scale();
-        hana_field_to_arrow(
-            name,
-            self.type_id(),
-            self.is_nullable(),
-            // Safe: precision is checked to be in valid HANA range [0, 38]
-            #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-            (0..=255_i16)
-                .contains(&precision)
-                .then_some(precision as u8),
-            // Safe: scale is checked to be in valid HANA range [0, precision]
-            #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-            (0..=127_i16).contains(&scale).then_some(scale as i8),
-        )
-    }
-
-    fn arrow_data_type(&self) -> DataType {
-        let precision = self.precision();
-        let scale = self.scale();
-        hana_type_to_arrow(
-            self.type_id(),
-            #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-            (0..=255_i16)
-                .contains(&precision)
-                .then_some(precision as u8),
-            #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-            (0..=127_i16).contains(&scale).then_some(scale as i8),
-        )
-    }
-}
-
 /// Extension trait for `hdbconnect_async` `FieldMetadata`.
 ///
 /// Provides convenient conversion methods for async HANA metadata to Arrow types.
@@ -194,75 +152,75 @@ pub trait FieldMetadataExtAsync {
     fn arrow_data_type(&self) -> DataType;
 }
 
-#[cfg(feature = "async")]
-impl FieldMetadataExtAsync for hdbconnect_async::FieldMetadata {
-    fn to_arrow_field(&self) -> Field {
-        let name = {
-            let display = self.displayname();
-            if display.is_empty() {
-                self.columnname()
-            } else {
-                display
-            }
-        };
-        let precision = self.precision();
-        let scale = self.scale();
-        hana_field_to_arrow(
-            name,
-            self.type_id(),
-            self.is_nullable(),
-            #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-            (0..=255_i16)
-                .contains(&precision)
-                .then_some(precision as u8),
-            #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-            (0..=127_i16).contains(&scale).then_some(scale as i8),
-        )
-    }
+/// Internal macro to implement `FieldMetadataExt` for different `FieldMetadata` types.
+///
+/// Both `hdbconnect::FieldMetadata` and `hdbconnect_async::FieldMetadata` have
+/// identical interfaces, so we use a macro to avoid code duplication.
+macro_rules! impl_field_metadata_ext {
+    ($trait_name:ident for $type:ty) => {
+        impl $trait_name for $type {
+            fn to_arrow_field(&self) -> Field {
+                let name = {
+                    let display = self.displayname();
+                    if display.is_empty() {
+                        self.columnname()
+                    } else {
+                        display
+                    }
+                };
+                let precision = self.precision();
+                let scale = self.scale();
 
-    fn arrow_data_type(&self) -> DataType {
-        let precision = self.precision();
-        let scale = self.scale();
-        hana_type_to_arrow(
-            self.type_id(),
-            #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-            (0..=255_i16)
-                .contains(&precision)
-                .then_some(precision as u8),
-            #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-            (0..=127_i16).contains(&scale).then_some(scale as i8),
-        )
-    }
+                // Convert i16 precision to Option<u8> safely
+                #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+                let precision_u8 = (0..=255_i16)
+                    .contains(&precision)
+                    .then_some(precision as u8);
+
+                // Convert i16 scale to Option<i8> safely
+                #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+                let scale_i8 = (0..=127_i16).contains(&scale).then_some(scale as i8);
+
+                hana_field_to_arrow(
+                    name,
+                    self.type_id(),
+                    self.is_nullable(),
+                    precision_u8,
+                    scale_i8,
+                )
+            }
+
+            fn arrow_data_type(&self) -> DataType {
+                let precision = self.precision();
+                let scale = self.scale();
+
+                #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+                let precision_u8 = (0..=255_i16)
+                    .contains(&precision)
+                    .then_some(precision as u8);
+
+                #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+                let scale_i8 = (0..=127_i16).contains(&scale).then_some(scale as i8);
+
+                hana_type_to_arrow(self.type_id(), precision_u8, scale_i8)
+            }
+        }
+    };
 }
+
+// Apply macro for sync version
+impl_field_metadata_ext!(FieldMetadataExt for hdbconnect::FieldMetadata);
+
+// Apply macro for async version
+#[cfg(feature = "async")]
+impl_field_metadata_ext!(FieldMetadataExtAsync for hdbconnect_async::FieldMetadata);
 
 /// Get the HANA type category for a `TypeId`.
 ///
 /// Returns the category name as a static string.
 #[must_use]
 pub const fn type_category(type_id: TypeId) -> &'static str {
-    match type_id {
-        TypeId::TINYINT
-        | TypeId::SMALLINT
-        | TypeId::INT
-        | TypeId::BIGINT
-        | TypeId::REAL
-        | TypeId::DOUBLE => "Numeric",
-        TypeId::DECIMAL => "Decimal",
-        TypeId::CHAR
-        | TypeId::VARCHAR
-        | TypeId::NCHAR
-        | TypeId::NVARCHAR
-        | TypeId::SHORTTEXT
-        | TypeId::ALPHANUM
-        | TypeId::STRING => "String",
-        TypeId::BINARY | TypeId::VARBINARY | TypeId::FIXED8 | TypeId::FIXED12 | TypeId::FIXED16 => {
-            "Binary"
-        }
-        TypeId::CLOB | TypeId::NCLOB | TypeId::BLOB | TypeId::TEXT => "LOB",
-        TypeId::DAYDATE | TypeId::SECONDTIME | TypeId::SECONDDATE | TypeId::LONGDATE => "Temporal",
-        TypeId::GEOMETRY | TypeId::POINT => "Spatial",
-        _ => "Unknown",
-    }
+    super::conversion::TypeCategory::from_type_id(type_id).as_str()
 }
 
 #[cfg(test)]
@@ -660,7 +618,7 @@ mod tests {
     }
 
     #[test]
-    fn test_type_category_boolean_is_unknown() {
-        assert_eq!(type_category(TypeId::BOOLEAN), "Unknown");
+    fn test_type_category_boolean() {
+        assert_eq!(type_category(TypeId::BOOLEAN), "Boolean");
     }
 }

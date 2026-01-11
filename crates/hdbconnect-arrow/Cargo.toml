@@ -16,6 +16,7 @@ workspace = true
 [features]
 default = []
 async = ["dep:hdbconnect_async"]
+test-utils = []
 
 # Dependencies sorted ALPHABETICALLY
 [dependencies]

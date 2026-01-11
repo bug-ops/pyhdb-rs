@@ -47,19 +47,32 @@ pub(crate) enum ErrorKind {
 
     /// Value conversion failure for a specific column.
     #[error("value conversion failed for column '{column}': {message}")]
-    ValueConversion { column: String, message: String },
+    ValueConversion {
+        column: String,
+        message: String,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
 
     /// Decimal value exceeds Arrow Decimal128 capacity.
     #[error("decimal overflow: precision {precision}, scale {scale}")]
     DecimalOverflow { precision: u8, scale: i8 },
 
     /// Error from Arrow library operations.
-    #[error("arrow error: {0}")]
-    Arrow(#[from] arrow_schema::ArrowError),
+    #[error("arrow error")]
+    Arrow(
+        #[source]
+        #[from]
+        arrow_schema::ArrowError,
+    ),
 
     /// Error from hdbconnect library.
-    #[error("hdbconnect error: {0}")]
-    Hdbconnect(String),
+    #[error("hdbconnect error: {message}")]
+    Hdbconnect {
+        message: String,
+        #[source]
+        source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    },
 
     /// Error during LOB streaming operations.
     #[error("LOB streaming error: {message}")]
@@ -102,6 +115,26 @@ impl ArrowConversionError {
             kind: ErrorKind::ValueConversion {
                 column: column.into(),
                 message: message.into(),
+                source: None,
+            },
+        }
+    }
+
+    /// Create error for value conversion failure with source error.
+    #[must_use]
+    pub fn value_conversion_with_source<E>(
+        column: impl Into<String>,
+        message: impl Into<String>,
+        source: E,
+    ) -> Self
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        Self {
+            kind: ErrorKind::ValueConversion {
+                column: column.into(),
+                message: message.into(),
+                source: Some(Box::new(source)),
             },
         }
     }
@@ -177,7 +210,7 @@ impl ArrowConversionError {
     /// Returns true if this is an hdbconnect error.
     #[must_use]
     pub const fn is_hdbconnect_error(&self) -> bool {
-        matches!(self.kind, ErrorKind::Hdbconnect(_))
+        matches!(self.kind, ErrorKind::Hdbconnect { .. })
     }
 
     /// Returns true if this is a LOB streaming error.
@@ -197,12 +230,91 @@ impl ArrowConversionError {
     pub const fn is_invalid_scale(&self) -> bool {
         matches!(self.kind, ErrorKind::InvalidScale(_))
     }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Error Classification Methods
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Returns true if this error is potentially recoverable.
+    ///
+    /// Recoverable errors are typically transient issues that might
+    /// succeed if retried (e.g., network timeouts, temporary failures).
+    ///
+    /// Non-recoverable errors indicate permanent failures like schema
+    /// mismatches, unsupported types, or data corruption.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// fn process_with_retry<T>(f: impl Fn() -> Result<T>) -> Result<T> {
+    ///     for _ in 0..3 {
+    ///         match f() {
+    ///             Ok(v) => return Ok(v),
+    ///             Err(e) if e.is_recoverable() => continue,
+    ///             Err(e) => return Err(e),
+    ///         }
+    ///     }
+    ///     f() // Final attempt
+    /// }
+    /// ```
+    #[must_use]
+    #[allow(clippy::match_same_arms)]
+    pub const fn is_recoverable(&self) -> bool {
+        match &self.kind {
+            // Configuration/data errors - not recoverable
+            ErrorKind::UnsupportedType { .. } => false,
+            ErrorKind::SchemaMismatch { .. } => false,
+            ErrorKind::ValueConversion { .. } => false,
+            ErrorKind::DecimalOverflow { .. } => false,
+            ErrorKind::InvalidPrecision(_) => false,
+            ErrorKind::InvalidScale(_) => false,
+
+            // Arrow errors - generally not recoverable
+            ErrorKind::Arrow(_) => false,
+
+            // LOB streaming might be recoverable (network issues)
+            ErrorKind::LobStreaming { .. } => true,
+
+            // HANA errors need inspection - some might be transient
+            // Default to recoverable to allow retry logic
+            ErrorKind::Hdbconnect { .. } => true,
+        }
+    }
+
+    /// Returns true if this error is a configuration error.
+    ///
+    /// Configuration errors indicate incorrect setup that won't
+    /// be fixed by retrying.
+    #[must_use]
+    pub const fn is_configuration_error(&self) -> bool {
+        matches!(
+            &self.kind,
+            ErrorKind::UnsupportedType { .. }
+                | ErrorKind::SchemaMismatch { .. }
+                | ErrorKind::InvalidPrecision(_)
+                | ErrorKind::InvalidScale(_)
+        )
+    }
+
+    /// Returns true if this error is a data error.
+    ///
+    /// Data errors indicate issues with the data being processed.
+    #[must_use]
+    pub const fn is_data_error(&self) -> bool {
+        matches!(
+            &self.kind,
+            ErrorKind::ValueConversion { .. } | ErrorKind::DecimalOverflow { .. }
+        )
+    }
 }
 
 impl From<hdbconnect::HdbError> for ArrowConversionError {
     fn from(err: hdbconnect::HdbError) -> Self {
         Self {
-            kind: ErrorKind::Hdbconnect(err.to_string()),
+            kind: ErrorKind::Hdbconnect {
+                message: err.to_string(),
+                source: Some(Box::new(err)),
+            },
         }
     }
 }
@@ -437,5 +549,78 @@ mod tests {
         let err = ArrowConversionError::decimal_overflow(10, -5);
         assert!(err.is_decimal_overflow());
         assert!(err.to_string().contains("scale -5"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Error Classification Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_is_recoverable() {
+        // Non-recoverable errors
+        assert!(!ArrowConversionError::unsupported_type(42).is_recoverable());
+        assert!(!ArrowConversionError::schema_mismatch(1, 2).is_recoverable());
+        assert!(!ArrowConversionError::value_conversion("col", "msg").is_recoverable());
+        assert!(!ArrowConversionError::decimal_overflow(38, 10).is_recoverable());
+        assert!(!ArrowConversionError::invalid_precision("msg").is_recoverable());
+        assert!(!ArrowConversionError::invalid_scale("msg").is_recoverable());
+
+        // Recoverable errors
+        assert!(ArrowConversionError::lob_streaming("network timeout").is_recoverable());
+    }
+
+    #[test]
+    fn test_is_configuration_error() {
+        // Configuration errors
+        assert!(ArrowConversionError::unsupported_type(42).is_configuration_error());
+        assert!(ArrowConversionError::schema_mismatch(1, 2).is_configuration_error());
+        assert!(ArrowConversionError::invalid_precision("msg").is_configuration_error());
+        assert!(ArrowConversionError::invalid_scale("msg").is_configuration_error());
+
+        // Non-configuration errors
+        assert!(!ArrowConversionError::value_conversion("col", "msg").is_configuration_error());
+        assert!(!ArrowConversionError::decimal_overflow(38, 10).is_configuration_error());
+        assert!(!ArrowConversionError::lob_streaming("msg").is_configuration_error());
+    }
+
+    #[test]
+    fn test_is_data_error() {
+        // Data errors
+        assert!(ArrowConversionError::value_conversion("col", "msg").is_data_error());
+        assert!(ArrowConversionError::decimal_overflow(38, 10).is_data_error());
+
+        // Non-data errors
+        assert!(!ArrowConversionError::unsupported_type(42).is_data_error());
+        assert!(!ArrowConversionError::schema_mismatch(1, 2).is_data_error());
+        assert!(!ArrowConversionError::lob_streaming("msg").is_data_error());
+        assert!(!ArrowConversionError::invalid_precision("msg").is_data_error());
+    }
+
+    #[test]
+    fn test_error_classification_mutual_exclusivity() {
+        // Each error should be in exactly one classification category
+        let config_err = ArrowConversionError::unsupported_type(42);
+        assert!(config_err.is_configuration_error());
+        assert!(!config_err.is_data_error());
+        assert!(!config_err.is_recoverable());
+
+        let data_err = ArrowConversionError::value_conversion("col", "msg");
+        assert!(!data_err.is_configuration_error());
+        assert!(data_err.is_data_error());
+        assert!(!data_err.is_recoverable());
+
+        let recoverable = ArrowConversionError::lob_streaming("timeout");
+        assert!(!recoverable.is_configuration_error());
+        assert!(!recoverable.is_data_error());
+        assert!(recoverable.is_recoverable());
+    }
+
+    #[test]
+    fn test_value_conversion_with_source() {
+        let source = std::io::Error::new(std::io::ErrorKind::Other, "parse failed");
+        let err = ArrowConversionError::value_conversion_with_source("col1", "failed", source);
+        assert!(err.is_value_conversion());
+        assert!(err.is_data_error());
+        assert!(err.to_string().contains("col1"));
     }
 }

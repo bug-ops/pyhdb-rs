@@ -19,35 +19,14 @@ Example::
 from __future__ import annotations
 
 import contextlib
-import re
 from typing import TYPE_CHECKING, Any, Literal
+
+from pyhdb_rs._utils import iter_pandas_rows, validate_identifier
 
 if TYPE_CHECKING:
     import pandas as pd
 
 __all__ = ["read_hana", "to_hana"]
-
-
-# SQL identifier pattern: letter/underscore start, alphanumeric/underscore body
-# Supports schema.table notation
-_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$")
-
-
-def _validate_identifier(name: str) -> str:
-    """Validate SQL identifier to prevent injection.
-
-    Args:
-        name: Table or schema.table name to validate
-
-    Returns:
-        The validated name if valid
-
-    Raises:
-        ValueError: If name contains invalid characters
-    """
-    if not _IDENTIFIER_PATTERN.match(name):
-        raise ValueError(f"Invalid SQL identifier: {name!r}")
-    return name
 
 
 def read_hana(
@@ -133,11 +112,9 @@ def to_hana(
         df = pd.DataFrame({"id": [1, 2, 3], "value": [10, 20, 30]})
         hdb.to_hana(df, "MY_TABLE", uri, if_exists="replace")
     """
-    import numpy as np
-
     from pyhdb_rs import connect
 
-    validated_table = _validate_identifier(table)
+    validated_table = validate_identifier(table)
 
     with connect(connection_uri) as conn:
         cursor = conn.cursor()
@@ -151,12 +128,18 @@ def to_hana(
         placeholders = ", ".join(["?"] * len(df.columns))
         insert_sql = f"INSERT INTO {validated_table} ({columns}) VALUES ({placeholders})"
 
-        rows = df.replace({np.nan: None}).values.tolist()
+        # Streaming insert - never materializes full DataFrame in memory
         total = 0
+        batch = []
+        for row in iter_pandas_rows(df):
+            batch.append(row)
+            if len(batch) >= batch_size:
+                cursor.executemany(insert_sql, batch)
+                total += len(batch)
+                batch = []
 
-        for i in range(0, len(rows), batch_size):
-            batch = rows[i : i + batch_size]
-            cursor.executemany(insert_sql, [tuple(row) for row in batch])
+        if batch:
+            cursor.executemany(insert_sql, batch)
             total += len(batch)
 
         conn.commit()

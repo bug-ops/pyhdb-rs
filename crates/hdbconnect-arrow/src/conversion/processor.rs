@@ -10,6 +10,7 @@ use arrow_schema::SchemaRef;
 use crate::Result;
 use crate::builders::factory::BuilderFactory;
 use crate::traits::builder::HanaCompatibleBuilder;
+use crate::traits::row::RowLike;
 use crate::traits::streaming::BatchConfig;
 
 /// Processor that converts HANA rows into Arrow `RecordBatch`es.
@@ -41,6 +42,7 @@ use crate::traits::streaming::BatchConfig;
 pub struct HanaBatchProcessor {
     schema: SchemaRef,
     config: BatchConfig,
+    factory: BuilderFactory,
     builders: Vec<Box<dyn HanaCompatibleBuilder>>,
     row_count: usize,
 }
@@ -50,6 +52,7 @@ impl std::fmt::Debug for HanaBatchProcessor {
         f.debug_struct("HanaBatchProcessor")
             .field("schema", &self.schema)
             .field("config", &self.config)
+            .field("factory", &"BuilderFactory { ... }")
             .field("builders", &format!("[{} builders]", self.builders.len()))
             .field("row_count", &self.row_count)
             .finish()
@@ -71,6 +74,7 @@ impl HanaBatchProcessor {
         Self {
             schema,
             config,
+            factory,
             builders,
             row_count: 0,
         }
@@ -91,6 +95,30 @@ impl HanaBatchProcessor {
     ///
     /// Returns error if value conversion fails or schema mismatches.
     pub fn process_row(&mut self, row: &hdbconnect::Row) -> Result<Option<RecordBatch>> {
+        self.process_row_generic(row)
+    }
+
+    /// Process a single row using the generic `RowLike` trait.
+    ///
+    /// This method enables unit testing with `MockRow` instead of requiring
+    /// a HANA connection.
+    ///
+    /// Returns `Ok(Some(batch))` when a batch is ready, `Ok(None)` when more
+    /// rows are needed to fill a batch.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if value conversion fails or schema mismatches.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use hdbconnect_arrow::traits::row::{MockRow, MockRowBuilder};
+    ///
+    /// let row = MockRowBuilder::new().int(42).string("test").build();
+    /// let result = processor.process_row_generic(&row)?;
+    /// ```
+    pub fn process_row_generic<R: RowLike>(&mut self, row: &R) -> Result<Option<RecordBatch>> {
         // Validate column count
         if row.len() != self.builders.len() {
             return Err(crate::ArrowConversionError::schema_mismatch(
@@ -101,8 +129,7 @@ impl HanaBatchProcessor {
 
         // Append row to builders
         for (i, builder) in self.builders.iter_mut().enumerate() {
-            // Use index access for row values
-            let value = &row[i];
+            let value = row.get(i);
 
             match value {
                 hdbconnect::HdbValue::NULL => builder.append_null(),
@@ -113,7 +140,7 @@ impl HanaBatchProcessor {
         self.row_count += 1;
 
         // Check if we've reached batch size
-        if self.row_count >= self.config.batch_size {
+        if self.row_count >= self.config.batch_size.get() {
             return Ok(Some(self.finish_current_batch()?));
         }
 
@@ -158,9 +185,8 @@ impl HanaBatchProcessor {
         let batch = RecordBatch::try_new(Arc::clone(&self.schema), arrays)
             .map_err(|e| crate::ArrowConversionError::value_conversion("batch", e.to_string()))?;
 
-        // Reset builders for next batch
-        let factory = BuilderFactory::from_config(&self.config);
-        self.builders = factory.create_builders_for_schema(&self.schema);
+        // Use cached factory instead of creating new one
+        self.builders = self.factory.create_builders_for_schema(&self.schema);
         self.row_count = 0;
 
         Ok(batch)
@@ -365,5 +391,110 @@ mod tests {
         let schema2 = processor.schema();
 
         assert!(Arc::ptr_eq(&schema1, &schema2));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // MockRow Tests (unit testing without HANA connection)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_process_row_generic_with_mock_row() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("name", DataType::Utf8, true),
+        ]));
+        let config = BatchConfig::with_batch_size(10);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        let row = MockRowBuilder::new().int(42).string("test").build();
+
+        let result = processor.process_row_generic(&row);
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none()); // Not enough rows for batch
+        assert_eq!(processor.buffered_rows(), 1);
+    }
+
+    #[test]
+    fn test_process_row_generic_batch_ready() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+        let config = BatchConfig::with_batch_size(3);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        // Add rows until batch is ready
+        for i in 0..3 {
+            let row = MockRowBuilder::new().int(i).build();
+            let result = processor.process_row_generic(&row).unwrap();
+            if i < 2 {
+                assert!(result.is_none());
+            } else {
+                // Third row should trigger batch
+                let batch = result.expect("batch should be ready");
+                assert_eq!(batch.num_rows(), 3);
+            }
+        }
+    }
+
+    #[test]
+    fn test_process_row_generic_with_nulls() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, true),
+            Field::new("name", DataType::Utf8, true),
+        ]));
+        let config = BatchConfig::with_batch_size(2);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        // Row with null values
+        let row = MockRowBuilder::new().null().null().build();
+
+        let result = processor.process_row_generic(&row);
+        assert!(result.is_ok());
+        assert_eq!(processor.buffered_rows(), 1);
+    }
+
+    #[test]
+    fn test_process_row_generic_schema_mismatch() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+        let mut processor = HanaBatchProcessor::with_defaults(schema);
+
+        // Row with wrong number of columns
+        let row = MockRowBuilder::new().int(1).string("extra").build();
+
+        let result = processor.process_row_generic(&row);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.is_schema_mismatch());
+    }
+
+    #[test]
+    fn test_process_row_generic_flush() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+        let config = BatchConfig::with_batch_size(100);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        // Add some rows (less than batch size)
+        for i in 0..5 {
+            let row = MockRowBuilder::new().int(i).build();
+            processor.process_row_generic(&row).unwrap();
+        }
+
+        assert_eq!(processor.buffered_rows(), 5);
+
+        // Flush remaining rows
+        let batch = processor
+            .flush()
+            .unwrap()
+            .expect("should have remaining rows");
+        assert_eq!(batch.num_rows(), 5);
+        assert_eq!(processor.buffered_rows(), 0);
     }
 }

@@ -19,35 +19,14 @@ Example::
 from __future__ import annotations
 
 import contextlib
-import re
 from typing import TYPE_CHECKING, Any, Literal
+
+from pyhdb_rs._utils import validate_identifier
 
 if TYPE_CHECKING:
     import polars as pl
 
 __all__ = ["read_hana", "scan_hana", "write_hana"]
-
-
-# SQL identifier pattern: letter/underscore start, alphanumeric/underscore body
-# Supports schema.table notation
-_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$")
-
-
-def _validate_identifier(name: str) -> str:
-    """Validate SQL identifier to prevent injection.
-
-    Args:
-        name: Table or schema.table name to validate
-
-    Returns:
-        The validated name if valid
-
-    Raises:
-        ValueError: If name contains invalid characters
-    """
-    if not _IDENTIFIER_PATTERN.match(name):
-        raise ValueError(f"Invalid SQL identifier: {name!r}")
-    return name
 
 
 def read_hana(
@@ -157,7 +136,7 @@ def write_hana(
 
     from pyhdb_rs import connect
 
-    validated_table = _validate_identifier(table)
+    validated_table = validate_identifier(table)
 
     with connect(connection_uri) as conn:
         cursor = conn.cursor()

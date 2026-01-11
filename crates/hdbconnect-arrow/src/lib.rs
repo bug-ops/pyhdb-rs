@@ -40,6 +40,8 @@ pub mod builders;
 pub mod conversion;
 pub mod error;
 pub mod schema;
+#[cfg(test)]
+pub mod test_utils;
 pub mod traits;
 pub mod types;
 
@@ -49,11 +51,15 @@ pub use conversion::{HanaBatchProcessor, rows_to_record_batch};
 pub use error::{ArrowConversionError, Result};
 pub use schema::mapping::SchemaMapper;
 pub use traits::builder::HanaCompatibleBuilder;
+pub use traits::row::RowLike;
+#[cfg(any(test, feature = "test-utils"))]
+pub use traits::row::{MockRow, MockRowBuilder};
 pub use traits::sealed::FromHanaValue;
 pub use traits::streaming::{BatchConfig, BatchProcessor, LendingBatchIterator};
 #[cfg(feature = "async")]
 pub use types::arrow::FieldMetadataExtAsync;
 pub use types::arrow::{FieldMetadataExt, hana_field_to_arrow, hana_type_to_arrow};
+pub use types::conversion::TypeCategory;
 pub use types::hana::{
     Binary, Decimal, DecimalPrecision, DecimalScale, HanaTypeCategory, Lob, Numeric, Spatial,
     StringType, Temporal, TypedColumn,

@@ -23,6 +23,8 @@
 //! }
 //! ```
 
+use std::num::NonZeroUsize;
+
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 
@@ -99,9 +101,9 @@ pub trait BatchProcessor {
 pub struct BatchConfig {
     /// Maximum number of rows per batch.
     ///
-    /// Larger batches reduce overhead but use more memory.
+    /// Uses `NonZeroUsize` to prevent division-by-zero and infinite loops.
     /// Default: 65536 (64K rows).
-    pub batch_size: usize,
+    pub batch_size: NonZeroUsize,
 
     /// Initial capacity for string builders (bytes).
     ///
@@ -125,7 +127,8 @@ pub struct BatchConfig {
 impl Default for BatchConfig {
     fn default() -> Self {
         Self {
-            batch_size: 65536,
+            // SAFETY: 65536 is non-zero
+            batch_size: NonZeroUsize::new(65536).unwrap(),
             string_capacity: 1024 * 1024, // 1MB
             binary_capacity: 1024 * 1024, // 1MB
             coerce_types: false,
@@ -135,12 +138,33 @@ impl Default for BatchConfig {
 
 impl BatchConfig {
     /// Create a new configuration with the specified batch size.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `batch_size` is zero. Use `try_with_batch_size` for fallible construction.
     #[must_use]
     pub fn with_batch_size(batch_size: usize) -> Self {
         Self {
-            batch_size,
+            batch_size: NonZeroUsize::new(batch_size).expect("batch_size must be non-zero"),
             ..Default::default()
         }
+    }
+
+    /// Create a new configuration with the specified batch size.
+    ///
+    /// Returns `None` if `batch_size` is zero.
+    #[must_use]
+    pub fn try_with_batch_size(batch_size: usize) -> Option<Self> {
+        Some(Self {
+            batch_size: NonZeroUsize::new(batch_size)?,
+            ..Default::default()
+        })
+    }
+
+    /// Get batch size as usize for iteration.
+    #[must_use]
+    pub const fn batch_size_usize(&self) -> usize {
+        self.batch_size.get()
     }
 
     /// Set the string builder capacity.
@@ -167,10 +191,18 @@ impl BatchConfig {
     /// Create a configuration optimized for small result sets.
     ///
     /// Uses smaller batch size and buffer capacities.
+    ///
+    /// # Panics
+    ///
+    /// Never panics - the batch size is a compile-time constant.
     #[must_use]
     pub const fn small() -> Self {
         Self {
-            batch_size: 1024,
+            // SAFETY: 1024 is non-zero - unwrap() in const context panics at compile time if None
+            batch_size: match NonZeroUsize::new(1024) {
+                Some(v) => v,
+                None => panic!("batch_size must be non-zero"),
+            },
             string_capacity: 64 * 1024, // 64KB
             binary_capacity: 64 * 1024, // 64KB
             coerce_types: false,
@@ -180,10 +212,19 @@ impl BatchConfig {
     /// Create a configuration optimized for large result sets.
     ///
     /// Uses larger batch size and buffer capacities.
+    ///
+    /// # Panics
+    ///
+    /// Never panics - the batch size is a compile-time constant.
     #[must_use]
     pub const fn large() -> Self {
         Self {
-            batch_size: 131_072,              // 128K rows
+            // SAFETY: 131_072 is non-zero - unwrap() in const context panics at compile time if
+            // None
+            batch_size: match NonZeroUsize::new(131_072) {
+                Some(v) => v,
+                None => panic!("batch_size must be non-zero"),
+            },
             string_capacity: 8 * 1024 * 1024, // 8MB
             binary_capacity: 8 * 1024 * 1024, // 8MB
             coerce_types: false,
@@ -202,7 +243,7 @@ mod tests {
     #[test]
     fn test_batch_config_default() {
         let config = BatchConfig::default();
-        assert_eq!(config.batch_size, 65536);
+        assert_eq!(config.batch_size.get(), 65536);
         assert_eq!(config.string_capacity, 1024 * 1024);
         assert!(!config.coerce_types);
     }
@@ -223,7 +264,7 @@ mod tests {
             .string_capacity(500)
             .coerce_types(true);
 
-        assert_eq!(config.batch_size, 1000);
+        assert_eq!(config.batch_size.get(), 1000);
         assert_eq!(config.string_capacity, 500);
         assert!(config.coerce_types);
     }
@@ -231,7 +272,7 @@ mod tests {
     #[test]
     fn test_batch_config_with_batch_size() {
         let config = BatchConfig::with_batch_size(100);
-        assert_eq!(config.batch_size, 100);
+        assert_eq!(config.batch_size.get(), 100);
         assert_eq!(config.string_capacity, 1024 * 1024);
         assert_eq!(config.binary_capacity, 1024 * 1024);
         assert!(!config.coerce_types);
@@ -268,7 +309,7 @@ mod tests {
             .binary_capacity(20000)
             .coerce_types(true);
 
-        assert_eq!(config.batch_size, 5000);
+        assert_eq!(config.batch_size.get(), 5000);
         assert_eq!(config.string_capacity, 10000);
         assert_eq!(config.binary_capacity, 20000);
         assert!(config.coerce_types);
@@ -281,16 +322,16 @@ mod tests {
     #[test]
     fn test_batch_config_presets() {
         let small = BatchConfig::small();
-        assert_eq!(small.batch_size, 1024);
+        assert_eq!(small.batch_size.get(), 1024);
 
         let large = BatchConfig::large();
-        assert_eq!(large.batch_size, 131072);
+        assert_eq!(large.batch_size.get(), 131072);
     }
 
     #[test]
     fn test_batch_config_small() {
         let config = BatchConfig::small();
-        assert_eq!(config.batch_size, 1024);
+        assert_eq!(config.batch_size.get(), 1024);
         assert_eq!(config.string_capacity, 64 * 1024);
         assert_eq!(config.binary_capacity, 64 * 1024);
         assert!(!config.coerce_types);
@@ -299,7 +340,7 @@ mod tests {
     #[test]
     fn test_batch_config_large() {
         let config = BatchConfig::large();
-        assert_eq!(config.batch_size, 131_072);
+        assert_eq!(config.batch_size.get(), 131_072);
         assert_eq!(config.string_capacity, 8 * 1024 * 1024);
         assert_eq!(config.binary_capacity, 8 * 1024 * 1024);
         assert!(!config.coerce_types);
@@ -310,9 +351,21 @@ mod tests {
     // ═══════════════════════════════════════════════════════════════════════════
 
     #[test]
-    fn test_batch_config_zero_batch_size() {
-        let config = BatchConfig::with_batch_size(0);
-        assert_eq!(config.batch_size, 0);
+    #[should_panic(expected = "batch_size must be non-zero")]
+    fn test_batch_config_zero_batch_size_panics() {
+        let _ = BatchConfig::with_batch_size(0);
+    }
+
+    #[test]
+    fn test_batch_config_try_with_zero_returns_none() {
+        assert!(BatchConfig::try_with_batch_size(0).is_none());
+    }
+
+    #[test]
+    fn test_batch_config_try_with_nonzero_returns_some() {
+        let config = BatchConfig::try_with_batch_size(100);
+        assert!(config.is_some());
+        assert_eq!(config.unwrap().batch_size.get(), 100);
     }
 
     #[test]
@@ -333,9 +386,15 @@ mod tests {
             .string_capacity(100_000_000)
             .binary_capacity(100_000_000);
 
-        assert_eq!(config.batch_size, 1_000_000);
+        assert_eq!(config.batch_size.get(), 1_000_000);
         assert_eq!(config.string_capacity, 100_000_000);
         assert_eq!(config.binary_capacity, 100_000_000);
+    }
+
+    #[test]
+    fn test_batch_config_batch_size_usize() {
+        let config = BatchConfig::with_batch_size(42);
+        assert_eq!(config.batch_size_usize(), 42);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -371,7 +430,7 @@ mod tests {
             .string_capacity(1_000_000)
             .coerce_types(true);
 
-        assert_eq!(config.batch_size, 1024);
+        assert_eq!(config.batch_size.get(), 1024);
         assert_eq!(config.string_capacity, 1_000_000);
         assert!(config.coerce_types);
     }
