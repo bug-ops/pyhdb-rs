@@ -221,14 +221,14 @@ class TestExceptionCatchAsException:
         """Test that Error can be caught as Exception."""
         import pyhdb_rs
 
-        with pytest.raises(Exception):
+        with pytest.raises(pyhdb_rs.Error):
             raise pyhdb_rs.Error("test")
 
     def test_warning_caught_as_exception(self) -> None:
         """Test that Warning can be caught as Exception."""
         import pyhdb_rs
 
-        with pytest.raises(Exception):
+        with pytest.raises(pyhdb_rs.Warning):
             raise pyhdb_rs.Warning("test")
 
 

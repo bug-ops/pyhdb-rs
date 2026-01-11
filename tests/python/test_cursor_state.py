@@ -37,49 +37,49 @@ class TestCursorMethods:
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.Cursor, "execute")
-        assert callable(getattr(pyhdb_rs.Cursor, "execute"))
+        assert callable(pyhdb_rs.Cursor.execute)
 
     def test_cursor_has_executemany_method(self) -> None:
         """Test that Cursor class has executemany method."""
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.Cursor, "executemany")
-        assert callable(getattr(pyhdb_rs.Cursor, "executemany"))
+        assert callable(pyhdb_rs.Cursor.executemany)
 
     def test_cursor_has_fetchone_method(self) -> None:
         """Test that Cursor class has fetchone method."""
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.Cursor, "fetchone")
-        assert callable(getattr(pyhdb_rs.Cursor, "fetchone"))
+        assert callable(pyhdb_rs.Cursor.fetchone)
 
     def test_cursor_has_fetchmany_method(self) -> None:
         """Test that Cursor class has fetchmany method."""
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.Cursor, "fetchmany")
-        assert callable(getattr(pyhdb_rs.Cursor, "fetchmany"))
+        assert callable(pyhdb_rs.Cursor.fetchmany)
 
     def test_cursor_has_fetchall_method(self) -> None:
         """Test that Cursor class has fetchall method."""
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.Cursor, "fetchall")
-        assert callable(getattr(pyhdb_rs.Cursor, "fetchall"))
+        assert callable(pyhdb_rs.Cursor.fetchall)
 
     def test_cursor_has_close_method(self) -> None:
         """Test that Cursor class has close method."""
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.Cursor, "close")
-        assert callable(getattr(pyhdb_rs.Cursor, "close"))
+        assert callable(pyhdb_rs.Cursor.close)
 
     def test_cursor_has_fetch_arrow_method(self) -> None:
         """Test that Cursor class has fetch_arrow method."""
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.Cursor, "fetch_arrow")
-        assert callable(getattr(pyhdb_rs.Cursor, "fetch_arrow"))
+        assert callable(pyhdb_rs.Cursor.fetch_arrow)
 
 
 class TestCursorContextManager:
@@ -132,28 +132,28 @@ class TestConnectionAttributes:
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.Connection, "cursor")
-        assert callable(getattr(pyhdb_rs.Connection, "cursor"))
+        assert callable(pyhdb_rs.Connection.cursor)
 
     def test_connection_has_close_method(self) -> None:
         """Test that Connection class has close method."""
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.Connection, "close")
-        assert callable(getattr(pyhdb_rs.Connection, "close"))
+        assert callable(pyhdb_rs.Connection.close)
 
     def test_connection_has_commit_method(self) -> None:
         """Test that Connection class has commit method."""
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.Connection, "commit")
-        assert callable(getattr(pyhdb_rs.Connection, "commit"))
+        assert callable(pyhdb_rs.Connection.commit)
 
     def test_connection_has_rollback_method(self) -> None:
         """Test that Connection class has rollback method."""
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.Connection, "rollback")
-        assert callable(getattr(pyhdb_rs.Connection, "rollback"))
+        assert callable(pyhdb_rs.Connection.rollback)
 
     def test_connection_has_is_connected_property(self) -> None:
         """Test that Connection class has is_connected property."""
@@ -172,14 +172,14 @@ class TestConnectionAttributes:
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.Connection, "execute_arrow")
-        assert callable(getattr(pyhdb_rs.Connection, "execute_arrow"))
+        assert callable(pyhdb_rs.Connection.execute_arrow)
 
     def test_connection_has_execute_polars_method(self) -> None:
         """Test that Connection class has execute_polars method."""
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.Connection, "execute_polars")
-        assert callable(getattr(pyhdb_rs.Connection, "execute_polars"))
+        assert callable(pyhdb_rs.Connection.execute_polars)
 
 
 class TestConnectionContextManager:
@@ -216,14 +216,14 @@ class TestRecordBatchReaderAttributes:
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.RecordBatchReader, "to_pyarrow")
-        assert callable(getattr(pyhdb_rs.RecordBatchReader, "to_pyarrow"))
+        assert callable(pyhdb_rs.RecordBatchReader.to_pyarrow)
 
     def test_reader_has_schema_method(self) -> None:
         """Test that RecordBatchReader has schema method."""
         import pyhdb_rs
 
         assert hasattr(pyhdb_rs.RecordBatchReader, "schema")
-        assert callable(getattr(pyhdb_rs.RecordBatchReader, "schema"))
+        assert callable(pyhdb_rs.RecordBatchReader.schema)
 
     def test_reader_has_repr_method(self) -> None:
         """Test that RecordBatchReader has __repr__ method."""

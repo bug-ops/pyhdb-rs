@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+
 import pytest
 
 
@@ -28,7 +30,7 @@ class TestReadHana:
 
     def test_read_hana_multiple_columns(self, hana_uri: str) -> None:
         """Test read_hana with multiple columns."""
-        polars = pytest.importorskip("polars")
+        pytest.importorskip("polars")
         import pyhdb_rs.polars as hdb
 
         df = hdb.read_hana(
@@ -84,7 +86,7 @@ class TestWriteHana:
         return f"TEST_POLARS_{uuid.uuid4().hex[:8].upper()}"
 
     def test_write_hana_replace(
-        self, hana_uri: str, test_table_name: str, connection: object
+        self, hana_uri: str, test_table_name: str, connection: object  # noqa: ARG002
     ) -> None:
         """Test write_hana with if_table_exists='replace'."""
         polars = pytest.importorskip("polars")
@@ -108,10 +110,8 @@ class TestWriteHana:
             assert len(result) == 3
         finally:
             cursor = conn.cursor()
-            try:
+            with contextlib.suppress(Exception):
                 cursor.execute(f"DROP TABLE {test_table_name}")
-            except Exception:
-                pass
             conn.close()
 
     def test_write_hana_append(self, hana_uri: str, test_table_name: str) -> None:
@@ -144,8 +144,6 @@ class TestWriteHana:
             assert len(result) == 4
         finally:
             cursor = conn.cursor()
-            try:
+            with contextlib.suppress(Exception):
                 cursor.execute(f"DROP TABLE {test_table_name}")
-            except Exception:
-                pass
             conn.close()

@@ -230,7 +230,7 @@ class TestConnectFunction:
     """Tests for the connect function."""
 
     def test_connect_returns_connection(
-        self, hana_uri: str, connection: pyhdb_rs.Connection
+        self, hana_uri: str, connection: pyhdb_rs.Connection  # noqa: ARG002
     ) -> None:
         """Test that connect returns a Connection object."""
         import pyhdb_rs

@@ -33,7 +33,7 @@ class TestExecuteArrow:
 
     def test_arrow_schema(self, connection: pyhdb_rs.Connection) -> None:
         """Test Arrow schema access."""
-        pyarrow = pytest.importorskip("pyarrow")
+        pytest.importorskip("pyarrow")
 
         reader = connection.execute_arrow("SELECT 1 AS int_col, 'test' AS str_col FROM DUMMY")
         schema = reader.schema()
@@ -43,7 +43,7 @@ class TestExecuteArrow:
 
     def test_arrow_to_pyarrow(self, connection: pyhdb_rs.Connection) -> None:
         """Test conversion to PyArrow reader."""
-        pyarrow = pytest.importorskip("pyarrow")
+        pytest.importorskip("pyarrow")
 
         reader = connection.execute_arrow("SELECT 1 AS value FROM DUMMY")
         pa_reader = reader.to_pyarrow()
@@ -67,7 +67,7 @@ class TestExecuteArrow:
 
     def test_null_handling(self, connection: pyhdb_rs.Connection) -> None:
         """Test NULL values are handled correctly."""
-        pyarrow = pytest.importorskip("pyarrow")
+        pytest.importorskip("pyarrow")
 
         reader = connection.execute_arrow("SELECT NULL AS null_col FROM DUMMY")
         pa_reader = reader.to_pyarrow()
@@ -89,7 +89,7 @@ class TestExecutePolars:
 
     def test_execute_polars_multiple_columns(self, connection: pyhdb_rs.Connection) -> None:
         """Test execute_polars with multiple columns."""
-        polars = pytest.importorskip("polars")
+        pytest.importorskip("polars")
 
         df = connection.execute_polars(
             "SELECT 1 AS int_col, 'hello' AS str_col, 3.14 AS float_col FROM DUMMY"
@@ -111,7 +111,7 @@ class TestCursorFetchArrow:
 
     def test_fetch_arrow_batch_size(self, cursor: pyhdb_rs.Cursor) -> None:
         """Test fetch_arrow with custom batch size."""
-        pyarrow = pytest.importorskip("pyarrow")
+        pytest.importorskip("pyarrow")
 
         cursor.execute("SELECT 1 AS value FROM DUMMY")
         reader = cursor.fetch_arrow(batch_size=100)

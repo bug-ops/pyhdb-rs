@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import contextlib
+
 import pytest
 
 
@@ -30,7 +32,7 @@ class TestReadHana:
 
     def test_read_hana_multiple_columns(self, hana_uri: str) -> None:
         """Test read_hana with multiple columns."""
-        pandas = pytest.importorskip("pandas")
+        pytest.importorskip("pandas")
         pytest.importorskip("pyarrow")
         import pyhdb_rs.pandas as hdb
 
@@ -78,10 +80,8 @@ class TestToHana:
             assert len(result) == 3
         finally:
             cursor = conn.cursor()
-            try:
+            with contextlib.suppress(Exception):
                 cursor.execute(f"DROP TABLE {test_table_name}")
-            except Exception:
-                pass
             conn.close()
 
     def test_to_hana_append(self, hana_uri: str, test_table_name: str) -> None:
@@ -115,8 +115,6 @@ class TestToHana:
             assert len(result) == 4
         finally:
             cursor = conn.cursor()
-            try:
+            with contextlib.suppress(Exception):
                 cursor.execute(f"DROP TABLE {test_table_name}")
-            except Exception:
-                pass
             conn.close()
