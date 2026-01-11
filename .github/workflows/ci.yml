@@ -132,6 +132,7 @@ jobs:
           working-directory: python
           args: --release --out dist
           manylinux: auto
+          sccache: true
       - name: Upload wheels
         uses: actions/upload-artifact@v6
         with:
