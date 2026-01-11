@@ -220,6 +220,33 @@ impl MockRowBuilder {
         self
     }
 
+    /// Add a decimal value from string representation.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use hdbconnect_arrow::traits::row::MockRowBuilder;
+    ///
+    /// let row = MockRowBuilder::new()
+    ///     .decimal_str("123.45")
+    ///     .decimal_str("999.99")
+    ///     .build();
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if the string cannot be parsed as a decimal.
+    #[must_use]
+    #[cfg(feature = "test-utils")]
+    pub fn decimal_str(mut self, value: &str) -> Self {
+        use std::str::FromStr;
+
+        use bigdecimal::BigDecimal;
+        let bd = BigDecimal::from_str(value).unwrap_or_default();
+        self.values.push(HdbValue::DECIMAL(bd));
+        self
+    }
+
     /// Build the `MockRow`.
     #[must_use]
     pub fn build(self) -> MockRow {

@@ -32,10 +32,11 @@ multiple_crate_versions = "allow"
 
 # Dependencies sorted ALPHABETICALLY - versions only (features in crates)
 [workspace.dependencies]
-arrow = { version = "57.1", default-features = false }
-arrow-array = "57.1"
-arrow-buffer = "57.1"
-arrow-data = "57.1"
+arrow = { version = "57.0", default-features = false }
+bigdecimal = "0.4"
+arrow-array = "57.0"
+arrow-buffer = "57.0"
+arrow-data = "57.0"
 arrow-schema = "57.1"
 criterion = "0.8"
 deadpool = { version = "0.12", default-features = false }

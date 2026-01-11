@@ -16,7 +16,7 @@ workspace = true
 [features]
 default = []
 async = ["dep:hdbconnect_async"]
-test-utils = []
+test-utils = ["dep:bigdecimal"]
 
 # Dependencies sorted ALPHABETICALLY
 [dependencies]
@@ -25,6 +25,7 @@ arrow-array = { workspace = true }
 arrow-buffer = { workspace = true }
 arrow-data = { workspace = true }
 arrow-schema = { workspace = true }
+bigdecimal = { workspace = true, optional = true }
 hdbconnect = { workspace = true }
 hdbconnect_async = { workspace = true, optional = true }
 thiserror = { workspace = true }
@@ -35,3 +36,4 @@ criterion = { workspace = true }
 [[bench]]
 name = "conversion"
 harness = false
+required-features = ["test-utils"]
