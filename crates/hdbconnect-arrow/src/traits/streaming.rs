@@ -195,6 +195,10 @@ impl BatchConfig {
 mod tests {
     use super::*;
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // BatchConfig Default Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
     #[test]
     fn test_batch_config_default() {
         let config = BatchConfig::default();
@@ -202,6 +206,16 @@ mod tests {
         assert_eq!(config.string_capacity, 1024 * 1024);
         assert!(!config.coerce_types);
     }
+
+    #[test]
+    fn test_batch_config_default_binary_capacity() {
+        let config = BatchConfig::default();
+        assert_eq!(config.binary_capacity, 1024 * 1024);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // BatchConfig Builder Pattern Tests
+    // ═══════════════════════════════════════════════════════════════════════════
 
     #[test]
     fn test_batch_config_builder() {
@@ -215,11 +229,160 @@ mod tests {
     }
 
     #[test]
+    fn test_batch_config_with_batch_size() {
+        let config = BatchConfig::with_batch_size(100);
+        assert_eq!(config.batch_size, 100);
+        assert_eq!(config.string_capacity, 1024 * 1024);
+        assert_eq!(config.binary_capacity, 1024 * 1024);
+        assert!(!config.coerce_types);
+    }
+
+    #[test]
+    fn test_batch_config_string_capacity() {
+        let config = BatchConfig::default().string_capacity(2048);
+        assert_eq!(config.string_capacity, 2048);
+    }
+
+    #[test]
+    fn test_batch_config_binary_capacity() {
+        let config = BatchConfig::default().binary_capacity(4096);
+        assert_eq!(config.binary_capacity, 4096);
+    }
+
+    #[test]
+    fn test_batch_config_coerce_types_true() {
+        let config = BatchConfig::default().coerce_types(true);
+        assert!(config.coerce_types);
+    }
+
+    #[test]
+    fn test_batch_config_coerce_types_false() {
+        let config = BatchConfig::default().coerce_types(false);
+        assert!(!config.coerce_types);
+    }
+
+    #[test]
+    fn test_batch_config_builder_chaining() {
+        let config = BatchConfig::with_batch_size(5000)
+            .string_capacity(10000)
+            .binary_capacity(20000)
+            .coerce_types(true);
+
+        assert_eq!(config.batch_size, 5000);
+        assert_eq!(config.string_capacity, 10000);
+        assert_eq!(config.binary_capacity, 20000);
+        assert!(config.coerce_types);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // BatchConfig Preset Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
     fn test_batch_config_presets() {
         let small = BatchConfig::small();
         assert_eq!(small.batch_size, 1024);
 
         let large = BatchConfig::large();
         assert_eq!(large.batch_size, 131072);
+    }
+
+    #[test]
+    fn test_batch_config_small() {
+        let config = BatchConfig::small();
+        assert_eq!(config.batch_size, 1024);
+        assert_eq!(config.string_capacity, 64 * 1024);
+        assert_eq!(config.binary_capacity, 64 * 1024);
+        assert!(!config.coerce_types);
+    }
+
+    #[test]
+    fn test_batch_config_large() {
+        let config = BatchConfig::large();
+        assert_eq!(config.batch_size, 131_072);
+        assert_eq!(config.string_capacity, 8 * 1024 * 1024);
+        assert_eq!(config.binary_capacity, 8 * 1024 * 1024);
+        assert!(!config.coerce_types);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // BatchConfig Edge Cases
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_batch_config_zero_batch_size() {
+        let config = BatchConfig::with_batch_size(0);
+        assert_eq!(config.batch_size, 0);
+    }
+
+    #[test]
+    fn test_batch_config_zero_string_capacity() {
+        let config = BatchConfig::default().string_capacity(0);
+        assert_eq!(config.string_capacity, 0);
+    }
+
+    #[test]
+    fn test_batch_config_zero_binary_capacity() {
+        let config = BatchConfig::default().binary_capacity(0);
+        assert_eq!(config.binary_capacity, 0);
+    }
+
+    #[test]
+    fn test_batch_config_large_values() {
+        let config = BatchConfig::with_batch_size(1_000_000)
+            .string_capacity(100_000_000)
+            .binary_capacity(100_000_000);
+
+        assert_eq!(config.batch_size, 1_000_000);
+        assert_eq!(config.string_capacity, 100_000_000);
+        assert_eq!(config.binary_capacity, 100_000_000);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // BatchConfig Clone and Debug Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_batch_config_clone() {
+        let config1 = BatchConfig::with_batch_size(100).string_capacity(200);
+        let config2 = config1.clone();
+
+        assert_eq!(config1.batch_size, config2.batch_size);
+        assert_eq!(config1.string_capacity, config2.string_capacity);
+        assert_eq!(config1.binary_capacity, config2.binary_capacity);
+        assert_eq!(config1.coerce_types, config2.coerce_types);
+    }
+
+    #[test]
+    fn test_batch_config_debug() {
+        let config = BatchConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("BatchConfig"));
+        assert!(debug_str.contains("batch_size"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // BatchConfig Override Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_batch_config_override_after_preset() {
+        let config = BatchConfig::small()
+            .string_capacity(1_000_000)
+            .coerce_types(true);
+
+        assert_eq!(config.batch_size, 1024);
+        assert_eq!(config.string_capacity, 1_000_000);
+        assert!(config.coerce_types);
+    }
+
+    #[test]
+    fn test_batch_config_multiple_overrides() {
+        let config = BatchConfig::default()
+            .string_capacity(100)
+            .string_capacity(200)
+            .string_capacity(300);
+
+        assert_eq!(config.string_capacity, 300);
     }
 }

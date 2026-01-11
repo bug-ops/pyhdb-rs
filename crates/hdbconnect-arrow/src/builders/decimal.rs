@@ -214,7 +214,13 @@ impl HanaCompatibleBuilder for Decimal128BuilderWrapper {
 
 #[cfg(test)]
 mod tests {
+    use arrow_array::Array;
+
     use super::*;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // DecimalConfig Tests
+    // ═══════════════════════════════════════════════════════════════════════════
 
     #[test]
     fn test_decimal_config_valid() {
@@ -236,10 +242,201 @@ mod tests {
     }
 
     #[test]
+    fn test_decimal_config_min_precision() {
+        let config = DecimalConfig::new(1, 0).unwrap();
+        assert_eq!(config.precision(), 1);
+        assert_eq!(config.scale(), 0);
+    }
+
+    #[test]
+    fn test_decimal_config_max_precision() {
+        let config = DecimalConfig::new(38, 10).unwrap();
+        assert_eq!(config.precision(), 38);
+        assert_eq!(config.scale(), 10);
+    }
+
+    #[test]
+    fn test_decimal_config_scale_equals_precision() {
+        let config = DecimalConfig::new(5, 5).unwrap();
+        assert_eq!(config.precision(), 5);
+        assert_eq!(config.scale(), 5);
+    }
+
+    #[test]
+    fn test_decimal_config_zero_scale() {
+        let config = DecimalConfig::new(10, 0).unwrap();
+        assert_eq!(config.precision(), 10);
+        assert_eq!(config.scale(), 0);
+    }
+
+    #[test]
+    fn test_decimal_config_equality() {
+        let config1 = DecimalConfig::new(18, 2).unwrap();
+        let config2 = DecimalConfig::new(18, 2).unwrap();
+        let config3 = DecimalConfig::new(18, 3).unwrap();
+        assert_eq!(config1, config2);
+        assert_ne!(config1, config3);
+    }
+
+    #[test]
+    fn test_decimal_config_copy() {
+        let config1 = DecimalConfig::new(18, 2).unwrap();
+        let config2 = config1;
+        assert_eq!(config1, config2);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Decimal128BuilderWrapper Creation Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
     fn test_decimal_builder_creation() {
         let builder = Decimal128BuilderWrapper::new(100, 18, 2);
         assert_eq!(builder.len(), 0);
         assert_eq!(builder.config.precision(), 18);
         assert_eq!(builder.config.scale(), 2);
+    }
+
+    #[test]
+    fn test_decimal_builder_from_config() {
+        let config = DecimalConfig::new(10, 4).unwrap();
+        let builder = Decimal128BuilderWrapper::from_config(50, config);
+        assert_eq!(builder.len(), 0);
+        assert_eq!(builder.config.precision(), 10);
+        assert_eq!(builder.config.scale(), 4);
+    }
+
+    #[test]
+    fn test_decimal_builder_capacity() {
+        let builder = Decimal128BuilderWrapper::new(100, 18, 2);
+        assert!(builder.capacity().is_some());
+    }
+
+    #[test]
+    fn test_decimal_builder_is_empty() {
+        let builder = Decimal128BuilderWrapper::new(10, 18, 2);
+        assert!(builder.is_empty());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Null Handling Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_decimal_builder_append_null() {
+        let mut builder = Decimal128BuilderWrapper::new(10, 18, 2);
+        builder.append_null();
+        assert_eq!(builder.len(), 1);
+
+        let array = builder.finish();
+        assert!(array.is_null(0));
+    }
+
+    #[test]
+    fn test_decimal_builder_multiple_nulls() {
+        let mut builder = Decimal128BuilderWrapper::new(10, 18, 2);
+        builder.append_null();
+        builder.append_null();
+        builder.append_null();
+        assert_eq!(builder.len(), 3);
+
+        let array = builder.finish();
+        assert_eq!(array.len(), 3);
+        assert!(array.is_null(0));
+        assert!(array.is_null(1));
+        assert!(array.is_null(2));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Finish and Reset Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_decimal_builder_finish_resets_len() {
+        let mut builder = Decimal128BuilderWrapper::new(10, 18, 2);
+        builder.append_null();
+        builder.append_null();
+        assert_eq!(builder.len(), 2);
+
+        let _ = builder.finish();
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_decimal_builder_finish_empty() {
+        let mut builder = Decimal128BuilderWrapper::new(10, 18, 2);
+        let array = builder.finish();
+        assert_eq!(array.len(), 0);
+    }
+
+    #[test]
+    fn test_decimal_builder_reuse_after_finish() {
+        let mut builder = Decimal128BuilderWrapper::new(10, 18, 2);
+        builder.append_null();
+        let array1 = builder.finish();
+        assert_eq!(array1.len(), 1);
+
+        builder.append_null();
+        builder.append_null();
+        let array2 = builder.finish();
+        assert_eq!(array2.len(), 2);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Different Precision/Scale Combinations
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_decimal_builder_high_precision() {
+        let builder = Decimal128BuilderWrapper::new(10, 38, 10);
+        assert_eq!(builder.config.precision(), 38);
+        assert_eq!(builder.config.scale(), 10);
+    }
+
+    #[test]
+    fn test_decimal_builder_low_precision() {
+        let builder = Decimal128BuilderWrapper::new(10, 1, 0);
+        assert_eq!(builder.config.precision(), 1);
+        assert_eq!(builder.config.scale(), 0);
+    }
+
+    #[test]
+    fn test_decimal_builder_zero_scale() {
+        let builder = Decimal128BuilderWrapper::new(10, 10, 0);
+        assert_eq!(builder.config.precision(), 10);
+        assert_eq!(builder.config.scale(), 0);
+    }
+
+    #[test]
+    fn test_decimal_builder_scale_equals_precision() {
+        let builder = Decimal128BuilderWrapper::new(10, 5, 5);
+        assert_eq!(builder.config.precision(), 5);
+        assert_eq!(builder.config.scale(), 5);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // HanaCompatibleBuilder trait Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_decimal_builder_len_increments() {
+        let mut builder = Decimal128BuilderWrapper::new(10, 18, 2);
+        assert_eq!(builder.len(), 0);
+        builder.append_null();
+        assert_eq!(builder.len(), 1);
+        builder.append_null();
+        assert_eq!(builder.len(), 2);
+    }
+
+    #[test]
+    fn test_decimal_builder_reset() {
+        let mut builder = Decimal128BuilderWrapper::new(10, 18, 2);
+        builder.append_null();
+        builder.append_null();
+        assert_eq!(builder.len(), 2);
+
+        builder.reset();
+        assert_eq!(builder.len(), 0);
+        assert!(builder.is_empty());
     }
 }

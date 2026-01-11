@@ -164,9 +164,13 @@ impl Default for BuilderFactory {
 
 #[cfg(test)]
 mod tests {
-    use arrow_schema::{DataType, Field, Schema};
+    use arrow_schema::{DataType, Field, Schema, TimeUnit};
 
     use super::*;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Factory Creation Tests
+    // ═══════════════════════════════════════════════════════════════════════════
 
     #[test]
     fn test_factory_creation() {
@@ -174,6 +178,14 @@ mod tests {
         assert_eq!(factory.capacity, 100);
         assert_eq!(factory.string_capacity, 3200);
         assert_eq!(factory.binary_capacity, 6400);
+    }
+
+    #[test]
+    fn test_factory_default() {
+        let factory = BuilderFactory::default();
+        assert_eq!(factory.capacity, 1024);
+        assert_eq!(factory.string_capacity, 1024 * 32);
+        assert_eq!(factory.binary_capacity, 1024 * 64);
     }
 
     #[test]
@@ -189,6 +201,37 @@ mod tests {
     }
 
     #[test]
+    fn test_factory_with_string_capacity() {
+        let factory = BuilderFactory::new(100).with_string_capacity(5000);
+        assert_eq!(factory.capacity, 100);
+        assert_eq!(factory.string_capacity, 5000);
+        assert_eq!(factory.binary_capacity, 6400);
+    }
+
+    #[test]
+    fn test_factory_with_binary_capacity() {
+        let factory = BuilderFactory::new(100).with_binary_capacity(8000);
+        assert_eq!(factory.capacity, 100);
+        assert_eq!(factory.string_capacity, 3200);
+        assert_eq!(factory.binary_capacity, 8000);
+    }
+
+    #[test]
+    fn test_factory_builder_chaining() {
+        let factory = BuilderFactory::new(200)
+            .with_string_capacity(1000)
+            .with_binary_capacity(2000);
+
+        assert_eq!(factory.capacity, 200);
+        assert_eq!(factory.string_capacity, 1000);
+        assert_eq!(factory.binary_capacity, 2000);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Primitive Type Builder Creation Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
     fn test_create_primitive_builders() {
         let factory = BuilderFactory::new(100);
 
@@ -196,6 +239,177 @@ mod tests {
         let _ = factory.create_builder(&DataType::Float64);
         let _ = factory.create_builder(&DataType::Utf8);
     }
+
+    #[test]
+    fn test_create_uint8_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::UInt8);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_int16_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Int16);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_int32_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Int32);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_int64_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Int64);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_float32_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Float32);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_float64_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Float64);
+        assert_eq!(builder.len(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Decimal Builder Creation Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_create_decimal_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Decimal128(18, 2));
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_decimal_builder_high_precision() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Decimal128(38, 10));
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_decimal_builder_low_precision() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Decimal128(1, 0));
+        assert_eq!(builder.len(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // String/Binary Builder Creation Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_create_utf8_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Utf8);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_large_utf8_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::LargeUtf8);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_binary_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Binary);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_large_binary_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::LargeBinary);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_fixed_size_binary_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::FixedSizeBinary(8));
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_fixed_size_binary_builder_various_sizes() {
+        let factory = BuilderFactory::new(100);
+
+        let builder8 = factory.create_builder(&DataType::FixedSizeBinary(8));
+        assert_eq!(builder8.len(), 0);
+
+        let builder12 = factory.create_builder(&DataType::FixedSizeBinary(12));
+        assert_eq!(builder12.len(), 0);
+
+        let builder16 = factory.create_builder(&DataType::FixedSizeBinary(16));
+        assert_eq!(builder16.len(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Temporal Builder Creation Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_create_date32_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Date32);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_time64_nanosecond_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Time64(TimeUnit::Nanosecond));
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_timestamp_nanosecond_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Timestamp(TimeUnit::Nanosecond, None));
+        assert_eq!(builder.len(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Boolean Builder Creation Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_create_boolean_builder() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Boolean);
+        assert_eq!(builder.len(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Unsupported Type Fallback Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_create_builder_unsupported_falls_back_to_string() {
+        let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::Duration(TimeUnit::Second));
+        assert_eq!(builder.len(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Schema Builder Creation Tests
+    // ═══════════════════════════════════════════════════════════════════════════
 
     #[test]
     fn test_create_builders_for_schema() {
@@ -208,5 +422,88 @@ mod tests {
         let factory = BuilderFactory::new(100);
         let builders = factory.create_builders_for_schema(&schema);
         assert_eq!(builders.len(), 3);
+    }
+
+    #[test]
+    fn test_create_builders_for_empty_schema() {
+        let fields: Vec<Field> = vec![];
+        let schema = Schema::new(fields);
+        let factory = BuilderFactory::new(100);
+        let builders = factory.create_builders_for_schema(&schema);
+        assert_eq!(builders.len(), 0);
+    }
+
+    #[test]
+    fn test_create_builders_for_single_field_schema() {
+        let schema = Schema::new(vec![Field::new("id", DataType::Int32, false)]);
+        let factory = BuilderFactory::new(100);
+        let builders = factory.create_builders_for_schema(&schema);
+        assert_eq!(builders.len(), 1);
+    }
+
+    #[test]
+    fn test_create_builders_for_complex_schema() {
+        let schema = Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("name", DataType::Utf8, true),
+            Field::new("price", DataType::Decimal128(18, 2), false),
+            Field::new("is_active", DataType::Boolean, false),
+            Field::new("created_at", DataType::Date32, true),
+            Field::new(
+                "updated_at",
+                DataType::Timestamp(TimeUnit::Nanosecond, None),
+                true,
+            ),
+            Field::new("data", DataType::Binary, true),
+            Field::new("notes", DataType::LargeUtf8, true),
+        ]);
+
+        let factory = BuilderFactory::new(100);
+        let builders = factory.create_builders_for_schema(&schema);
+        assert_eq!(builders.len(), 8);
+    }
+
+    #[test]
+    fn test_create_builders_all_numeric_types() {
+        let schema = Schema::new(vec![
+            Field::new("tiny", DataType::UInt8, false),
+            Field::new("small", DataType::Int16, false),
+            Field::new("int", DataType::Int32, false),
+            Field::new("big", DataType::Int64, false),
+            Field::new("real", DataType::Float32, false),
+            Field::new("double", DataType::Float64, false),
+        ]);
+
+        let factory = BuilderFactory::new(100);
+        let builders = factory.create_builders_for_schema(&schema);
+        assert_eq!(builders.len(), 6);
+
+        for builder in &builders {
+            assert_eq!(builder.len(), 0);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Clone and Debug Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_factory_clone() {
+        let factory1 = BuilderFactory::new(100)
+            .with_string_capacity(5000)
+            .with_binary_capacity(10000);
+        let factory2 = factory1.clone();
+
+        assert_eq!(factory1.capacity, factory2.capacity);
+        assert_eq!(factory1.string_capacity, factory2.string_capacity);
+        assert_eq!(factory1.binary_capacity, factory2.binary_capacity);
+    }
+
+    #[test]
+    fn test_factory_debug() {
+        let factory = BuilderFactory::new(100);
+        let debug_str = format!("{:?}", factory);
+        assert!(debug_str.contains("BuilderFactory"));
+        assert!(debug_str.contains("capacity"));
     }
 }

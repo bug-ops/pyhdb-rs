@@ -173,6 +173,10 @@ mod tests {
 
     use super::*;
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Processor Creation Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
     #[test]
     fn test_processor_creation() {
         let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
@@ -183,18 +187,183 @@ mod tests {
     }
 
     #[test]
-    fn test_processor_buffering() {
-        // Note: Requires mock hdbconnect::Row implementation
-        // Would test that rows are buffered correctly
+    fn test_processor_with_defaults() {
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+        let processor = HanaBatchProcessor::with_defaults(schema);
+        assert_eq!(processor.buffered_rows(), 0);
     }
 
     #[test]
-    fn test_processor_batch_emission() {
-        // Test that batch is emitted when batch_size is reached
+    fn test_processor_schema() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("name", DataType::Utf8, true),
+        ]));
+        let processor = HanaBatchProcessor::with_defaults(Arc::clone(&schema));
+
+        let returned_schema = processor.schema();
+        assert_eq!(returned_schema.fields().len(), 2);
+        assert_eq!(returned_schema.field(0).name(), "id");
+        assert_eq!(returned_schema.field(1).name(), "name");
     }
 
     #[test]
-    fn test_processor_flush() {
-        // Test that flush emits remaining rows
+    fn test_processor_initial_buffered_rows() {
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+        let processor = HanaBatchProcessor::with_defaults(schema);
+        assert_eq!(processor.buffered_rows(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Processor with Different Configs
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_processor_with_small_batch_size() {
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+        let config = BatchConfig::with_batch_size(10);
+        let processor = HanaBatchProcessor::new(schema, config);
+        assert_eq!(processor.buffered_rows(), 0);
+    }
+
+    #[test]
+    fn test_processor_with_large_batch_size() {
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+        let config = BatchConfig::with_batch_size(100000);
+        let processor = HanaBatchProcessor::new(schema, config);
+        assert_eq!(processor.buffered_rows(), 0);
+    }
+
+    #[test]
+    fn test_processor_with_custom_config() {
+        let schema = Arc::new(Schema::new(vec![Field::new("data", DataType::Utf8, true)]));
+        let config = BatchConfig::with_batch_size(500)
+            .string_capacity(10000)
+            .binary_capacity(5000);
+        let processor = HanaBatchProcessor::new(schema, config);
+        assert_eq!(processor.buffered_rows(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Processor with Different Schema Types
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_processor_with_empty_schema() {
+        let fields: Vec<Field> = vec![];
+        let schema = Arc::new(Schema::new(fields));
+        let processor = HanaBatchProcessor::with_defaults(schema);
+        assert_eq!(processor.buffered_rows(), 0);
+    }
+
+    #[test]
+    fn test_processor_with_single_column_schema() {
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int64, false)]));
+        let processor = HanaBatchProcessor::with_defaults(schema);
+        assert_eq!(processor.buffered_rows(), 0);
+    }
+
+    #[test]
+    fn test_processor_with_multi_column_schema() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int64, false),
+            Field::new("name", DataType::Utf8, true),
+            Field::new("price", DataType::Decimal128(18, 2), false),
+            Field::new("is_active", DataType::Boolean, false),
+        ]));
+        let processor = HanaBatchProcessor::with_defaults(schema);
+        assert_eq!(processor.buffered_rows(), 0);
+    }
+
+    #[test]
+    fn test_processor_with_all_numeric_types() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("tiny", DataType::UInt8, false),
+            Field::new("small", DataType::Int16, false),
+            Field::new("int", DataType::Int32, false),
+            Field::new("big", DataType::Int64, false),
+            Field::new("real", DataType::Float32, false),
+            Field::new("double", DataType::Float64, false),
+        ]));
+        let processor = HanaBatchProcessor::with_defaults(schema);
+        assert_eq!(processor.buffered_rows(), 0);
+    }
+
+    #[test]
+    fn test_processor_with_string_types() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("small_str", DataType::Utf8, true),
+            Field::new("large_str", DataType::LargeUtf8, true),
+        ]));
+        let processor = HanaBatchProcessor::with_defaults(schema);
+        assert_eq!(processor.buffered_rows(), 0);
+    }
+
+    #[test]
+    fn test_processor_with_binary_types() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("bin", DataType::Binary, true),
+            Field::new("large_bin", DataType::LargeBinary, true),
+            Field::new("fixed_bin", DataType::FixedSizeBinary(16), true),
+        ]));
+        let processor = HanaBatchProcessor::with_defaults(schema);
+        assert_eq!(processor.buffered_rows(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Flush Tests (without rows - tests empty flush)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_processor_flush_empty() {
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+        let mut processor = HanaBatchProcessor::with_defaults(schema);
+
+        let result = processor.flush();
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
+    #[test]
+    fn test_processor_flush_multiple_times_when_empty() {
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+        let mut processor = HanaBatchProcessor::with_defaults(schema);
+
+        assert!(processor.flush().unwrap().is_none());
+        assert!(processor.flush().unwrap().is_none());
+        assert!(processor.flush().unwrap().is_none());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Debug Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_processor_debug() {
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+        let processor = HanaBatchProcessor::with_defaults(schema);
+
+        let debug_str = format!("{:?}", processor);
+        assert!(debug_str.contains("HanaBatchProcessor"));
+        assert!(debug_str.contains("row_count"));
+        assert!(debug_str.contains("builders"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Schema Ref Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_processor_schema_returns_same_schema() {
+        let original_schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("value", DataType::Float64, true),
+        ]));
+        let processor = HanaBatchProcessor::with_defaults(Arc::clone(&original_schema));
+
+        let schema1 = processor.schema();
+        let schema2 = processor.schema();
+
+        assert!(Arc::ptr_eq(&schema1, &schema2));
     }
 }
