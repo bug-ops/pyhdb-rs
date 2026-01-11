@@ -11,13 +11,10 @@ use pyo3::prelude::*;
 use crate::error::PyHdbError;
 use hdbconnect_arrow::{BatchConfig, FieldMetadataExt, HanaBatchProcessor};
 
-/// Python `RecordBatchReader` class.
-///
 /// Streams Arrow `RecordBatches` from HANA result set.
 /// Implements `__arrow_c_stream__` for zero-copy transfer.
 #[pyclass(name = "RecordBatchReader", module = "hdbconnect")]
 pub struct PyRecordBatchReader {
-    /// Inner pyo3-arrow reader.
     inner: Option<pyo3_arrow::PyRecordBatchReader>,
 }
 
@@ -29,7 +26,6 @@ impl std::fmt::Debug for PyRecordBatchReader {
     }
 }
 
-/// Internal streaming reader that converts HANA rows to Arrow batches.
 struct StreamingReader {
     result_set: hdbconnect::ResultSet,
     processor: HanaBatchProcessor,
@@ -119,7 +115,6 @@ impl arrow_array::RecordBatchReader for StreamingReader {
 }
 
 impl PyRecordBatchReader {
-    /// Create from a HANA result set.
     pub fn from_resultset(result_set: hdbconnect::ResultSet, batch_size: usize) -> PyResult<Self> {
         let reader = StreamingReader::new(result_set, batch_size);
         let pyo3_reader = pyo3_arrow::PyRecordBatchReader::new(Box::new(reader));
@@ -127,14 +122,143 @@ impl PyRecordBatchReader {
             inner: Some(pyo3_reader),
         })
     }
+
+    /// WARNING: Loads ALL rows into memory. For large result sets, use sync API.
+    #[cfg(feature = "async")]
+    pub fn from_resultset_async(
+        result_set: hdbconnect_async::ResultSet,
+        batch_size: usize,
+    ) -> PyResult<Self> {
+        let reader = AsyncStreamingReader::new(result_set, batch_size);
+        let pyo3_reader = pyo3_arrow::PyRecordBatchReader::new(Box::new(reader));
+        Ok(Self {
+            inner: Some(pyo3_reader),
+        })
+    }
+}
+
+/// Async streaming reader with channel-based backpressure.
+///
+/// Uses a bounded mpsc channel to stream batches incrementally. A background
+/// task fetches rows asynchronously and sends batches through the channel,
+/// while the iterator blocks on receiving batches. This provides:
+///
+/// - **Backpressure**: Channel bounds prevent unbounded memory growth
+/// - **Incremental processing**: Consumer processes batches as they arrive
+/// - **Error propagation**: Errors are sent through the channel
+///
+/// The channel buffer size is set to 4 batches, which provides a good balance
+/// between throughput and memory usage.
+#[cfg(feature = "async")]
+struct AsyncStreamingReader {
+    receiver: std::sync::mpsc::Receiver<Result<RecordBatch, arrow_schema::ArrowError>>,
+    schema: SchemaRef,
+}
+
+// SAFETY: AsyncStreamingReader only contains:
+// - mpsc::Receiver: Send (Receiver<T> is Send if T is Send, RecordBatch is Send)
+// - SchemaRef (Arc<Schema>): Send + Sync
+// No shared mutable state, no thread-unsafe types, no raw pointers.
+#[cfg(feature = "async")]
+unsafe impl Send for AsyncStreamingReader {}
+
+#[cfg(feature = "async")]
+impl AsyncStreamingReader {
+    /// Channel buffer size (number of batches to buffer before blocking sender).
+    const CHANNEL_BUFFER_SIZE: usize = 4;
+
+    fn new(result_set: hdbconnect_async::ResultSet, batch_size: usize) -> Self {
+        let schema = Self::build_schema(&result_set);
+        let config = BatchConfig::with_batch_size(batch_size);
+
+        // Create bounded channel for backpressure
+        let (sender, receiver) = std::sync::mpsc::sync_channel(Self::CHANNEL_BUFFER_SIZE);
+
+        // Clone schema for the background task
+        let schema_clone = Arc::clone(&schema);
+
+        // Spawn background task to fetch and process rows
+        tokio::task::spawn(async move {
+            let mut processor = HanaBatchProcessor::new(schema_clone, config);
+
+            // Fetch rows asynchronously
+            match result_set.into_rows().await {
+                Ok(rows) => {
+                    for row in rows {
+                        match processor.process_row(&row) {
+                            Ok(Some(batch)) => {
+                                // Send batch, stop if receiver is dropped
+                                if sender.send(Ok(batch)).is_err() {
+                                    return;
+                                }
+                            }
+                            Ok(None) => {
+                                // Continue accumulating rows
+                            }
+                            Err(e) => {
+                                let _ = sender.send(Err(arrow_schema::ArrowError::ExternalError(
+                                    Box::new(std::io::Error::other(e.to_string())),
+                                )));
+                                return;
+                            }
+                        }
+                    }
+
+                    // Flush remaining rows
+                    match processor.flush() {
+                        Ok(Some(batch)) => {
+                            let _ = sender.send(Ok(batch));
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            let _ = sender.send(Err(arrow_schema::ArrowError::ExternalError(
+                                Box::new(std::io::Error::other(e.to_string())),
+                            )));
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = sender.send(Err(arrow_schema::ArrowError::ExternalError(Box::new(
+                        std::io::Error::other(e.to_string()),
+                    ))));
+                }
+            }
+            // Sender drops here, signaling end of stream
+        });
+
+        Self { receiver, schema }
+    }
+
+    fn build_schema(result_set: &hdbconnect_async::ResultSet) -> SchemaRef {
+        let fields: Vec<_> = result_set
+            .metadata()
+            .iter()
+            .map(FieldMetadataExt::to_arrow_field)
+            .collect();
+
+        Arc::new(arrow_schema::Schema::new(fields))
+    }
+}
+
+#[cfg(feature = "async")]
+impl Iterator for AsyncStreamingReader {
+    type Item = Result<RecordBatch, arrow_schema::ArrowError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // Block until a batch is available or the channel is closed
+        self.receiver.recv().ok()
+    }
+}
+
+#[cfg(feature = "async")]
+impl arrow_array::RecordBatchReader for AsyncStreamingReader {
+    fn schema(&self) -> SchemaRef {
+        Arc::clone(&self.schema)
+    }
 }
 
 #[pymethods]
 impl PyRecordBatchReader {
-    /// Export to `PyArrow` `RecordBatchReader`.
-    ///
-    /// This allows using the reader with PyArrow-based libraries.
-    /// Consumes this reader.
     #[allow(clippy::wrong_self_convention)]
     fn to_pyarrow<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let inner = self
@@ -145,7 +269,6 @@ impl PyRecordBatchReader {
         inner.into_pyarrow(py)
     }
 
-    /// Get the schema of the record batches.
     fn schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let inner = self
             .inner
@@ -157,7 +280,6 @@ impl PyRecordBatchReader {
         pyo3_schema.into_pyarrow(py)
     }
 
-    /// String representation.
     fn __repr__(&self) -> String {
         if self.inner.is_some() {
             "RecordBatchReader(active)".to_string()

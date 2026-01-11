@@ -29,18 +29,23 @@ cast_possible_truncation = "allow"
 cast_sign_loss = "allow"
 multiple_crate_versions = "allow"
 
-# Dependencies sorted ALPHABETICALLY - versions only
+# Dependencies sorted ALPHABETICALLY - versions only (features in crates)
 [workspace.dependencies]
-arrow = { version = "57.1", default-features = false, features = ["ffi", "ipc"] }
+arrow = { version = "57.1", default-features = false }
 arrow-array = "57.1"
 arrow-buffer = "57.1"
 arrow-data = "57.1"
 arrow-schema = "57.1"
 criterion = "0.8"
+deadpool = { version = "0.12", default-features = false }
 hdbconnect = "0.32"
+hdbconnect_async = "0.32"
+lru = "0.12"
 parking_lot = "0.12.5"
-pyo3 = { version = "0.27", features = ["extension-module", "abi3-py311"] }
+pyo3 = "0.27"
 pyo3-arrow = "0.15"
-serde = { version = "1.0", features = ["derive"] }
+pyo3-async-runtimes = "0.27"
+serde = "1.0"
 thiserror = "2.0"
+tokio = "1.49"
 url = "2.5"

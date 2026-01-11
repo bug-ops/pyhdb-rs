@@ -138,6 +138,9 @@ impl From<hdbconnect::HdbError> for PyHdbError {
     }
 }
 
+// Note: hdbconnect_async::HdbError is the same type as hdbconnect::HdbError,
+// so the From impl above handles both sync and async cases.
+
 impl From<hdbconnect_arrow::ArrowConversionError> for PyHdbError {
     fn from(err: hdbconnect_arrow::ArrowConversionError) -> Self {
         Self::Arrow(err.to_string())
@@ -167,7 +170,11 @@ impl From<PyHdbError> for PyErr {
 /// Map HANA error codes to DB-API 2.0 exception types.
 fn map_hdbconnect_error(err: &hdbconnect::HdbError) -> PyHdbError {
     let msg = err.to_string();
+    categorize_hana_error(msg)
+}
 
+/// Categorize a HANA error message into the appropriate DB-API 2.0 exception type.
+fn categorize_hana_error(msg: String) -> PyHdbError {
     // Extract error code from message if available
     // HANA error format: "Error [code]: message"
     if let Some(code) = extract_hana_error_code(&msg) {

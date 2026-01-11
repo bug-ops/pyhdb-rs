@@ -182,6 +182,59 @@ impl FieldMetadataExt for hdbconnect::FieldMetadata {
     }
 }
 
+/// Extension trait for `hdbconnect_async` `FieldMetadata`.
+///
+/// Provides convenient conversion methods for async HANA metadata to Arrow types.
+#[cfg(feature = "async")]
+pub trait FieldMetadataExtAsync {
+    /// Convert to Arrow Field.
+    fn to_arrow_field(&self) -> Field;
+
+    /// Get the Arrow `DataType` for this field.
+    fn arrow_data_type(&self) -> DataType;
+}
+
+#[cfg(feature = "async")]
+impl FieldMetadataExtAsync for hdbconnect_async::FieldMetadata {
+    fn to_arrow_field(&self) -> Field {
+        let name = {
+            let display = self.displayname();
+            if display.is_empty() {
+                self.columnname()
+            } else {
+                display
+            }
+        };
+        let precision = self.precision();
+        let scale = self.scale();
+        hana_field_to_arrow(
+            name,
+            self.type_id(),
+            self.is_nullable(),
+            #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+            (0..=255_i16)
+                .contains(&precision)
+                .then_some(precision as u8),
+            #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+            (0..=127_i16).contains(&scale).then_some(scale as i8),
+        )
+    }
+
+    fn arrow_data_type(&self) -> DataType {
+        let precision = self.precision();
+        let scale = self.scale();
+        hana_type_to_arrow(
+            self.type_id(),
+            #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+            (0..=255_i16)
+                .contains(&precision)
+                .then_some(precision as u8),
+            #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+            (0..=127_i16).contains(&scale).then_some(scale as i8),
+        )
+    }
+}
+
 /// Get the HANA type category for a `TypeId`.
 ///
 /// Returns the category name as a static string.
