@@ -6,10 +6,10 @@ use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 use std::sync::Arc;
 
+use crate::Result;
 use crate::builders::factory::BuilderFactory;
 use crate::traits::builder::HanaCompatibleBuilder;
 use crate::traits::streaming::BatchConfig;
-use crate::Result;
 
 /// Processor that converts HANA rows into Arrow `RecordBatch`es.
 ///
@@ -173,9 +173,7 @@ mod tests {
 
     #[test]
     fn test_processor_creation() {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Int32, false),
-        ]));
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
         let config = BatchConfig::with_batch_size(100);
 
         let processor = HanaBatchProcessor::new(schema, config);

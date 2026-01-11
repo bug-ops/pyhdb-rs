@@ -10,13 +10,13 @@
 //! HANA temporal types expose their values via Display trait as ISO strings.
 //! We parse these strings to extract the numeric values for Arrow.
 
-use arrow_array::builder::{Date32Builder, Time64NanosecondBuilder, TimestampNanosecondBuilder};
 use arrow_array::ArrayRef;
+use arrow_array::builder::{Date32Builder, Time64NanosecondBuilder, TimestampNanosecondBuilder};
 use std::sync::Arc;
 
+use crate::Result;
 use crate::traits::builder::HanaCompatibleBuilder;
 use crate::traits::sealed::private::Sealed;
-use crate::Result;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Date32 Builder (Days since Unix epoch)
@@ -258,13 +258,22 @@ impl TimestampNanosecondBuilderWrapper {
         }
 
         let year: i32 = date_parts[0].parse().map_err(|_| {
-            crate::ArrowConversionError::value_conversion("timestamp", format!("invalid year in: {s}"))
+            crate::ArrowConversionError::value_conversion(
+                "timestamp",
+                format!("invalid year in: {s}"),
+            )
         })?;
         let month: u32 = date_parts[1].parse().map_err(|_| {
-            crate::ArrowConversionError::value_conversion("timestamp", format!("invalid month in: {s}"))
+            crate::ArrowConversionError::value_conversion(
+                "timestamp",
+                format!("invalid month in: {s}"),
+            )
         })?;
         let day: u32 = date_parts[2].parse().map_err(|_| {
-            crate::ArrowConversionError::value_conversion("timestamp", format!("invalid day in: {s}"))
+            crate::ArrowConversionError::value_conversion(
+                "timestamp",
+                format!("invalid day in: {s}"),
+            )
         })?;
 
         // Parse time part (may include fractional seconds)
@@ -287,13 +296,22 @@ impl TimestampNanosecondBuilderWrapper {
         }
 
         let hour: u32 = time_parts[0].parse().map_err(|_| {
-            crate::ArrowConversionError::value_conversion("timestamp", format!("invalid hour in: {s}"))
+            crate::ArrowConversionError::value_conversion(
+                "timestamp",
+                format!("invalid hour in: {s}"),
+            )
         })?;
         let minute: u32 = time_parts[1].parse().map_err(|_| {
-            crate::ArrowConversionError::value_conversion("timestamp", format!("invalid minute in: {s}"))
+            crate::ArrowConversionError::value_conversion(
+                "timestamp",
+                format!("invalid minute in: {s}"),
+            )
         })?;
         let second: u32 = time_parts[2].parse().map_err(|_| {
-            crate::ArrowConversionError::value_conversion("timestamp", format!("invalid second in: {s}"))
+            crate::ArrowConversionError::value_conversion(
+                "timestamp",
+                format!("invalid second in: {s}"),
+            )
         })?;
 
         // Calculate total nanoseconds since epoch
@@ -412,13 +430,22 @@ mod tests {
 
     #[test]
     fn test_parse_date_string() {
-        assert_eq!(Date32BuilderWrapper::parse_date_string("1970-01-01").unwrap(), 0);
-        assert_eq!(Date32BuilderWrapper::parse_date_string("2024-06-15").unwrap(), 19889);
+        assert_eq!(
+            Date32BuilderWrapper::parse_date_string("1970-01-01").unwrap(),
+            0
+        );
+        assert_eq!(
+            Date32BuilderWrapper::parse_date_string("2024-06-15").unwrap(),
+            19889
+        );
     }
 
     #[test]
     fn test_parse_time_string() {
-        assert_eq!(Time64NanosecondBuilderWrapper::parse_time_string("00:00:00").unwrap(), 0);
+        assert_eq!(
+            Time64NanosecondBuilderWrapper::parse_time_string("00:00:00").unwrap(),
+            0
+        );
         assert_eq!(
             Time64NanosecondBuilderWrapper::parse_time_string("12:30:45").unwrap(),
             (12 * 3600 + 30 * 60 + 45) * 1_000_000_000
@@ -429,7 +456,8 @@ mod tests {
     fn test_parse_datetime_string() {
         // Epoch
         assert_eq!(
-            TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-01T00:00:00").unwrap(),
+            TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-01T00:00:00")
+                .unwrap(),
             0
         );
         // With fractional seconds

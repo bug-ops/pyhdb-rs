@@ -6,9 +6,9 @@
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 
+use crate::Result;
 use crate::builders::factory::BuilderFactory;
 use crate::traits::builder::HanaCompatibleBuilder;
-use crate::Result;
 
 /// Convert a vector of HANA rows to an Arrow `RecordBatch`.
 ///
@@ -36,10 +36,7 @@ use crate::Result;
 /// let schema = Arc::new(/* Arrow schema */);
 /// let batch = rows_to_record_batch(&rows, schema)?;
 /// ```
-pub fn rows_to_record_batch(
-    rows: &[hdbconnect::Row],
-    schema: SchemaRef,
-) -> Result<RecordBatch> {
+pub fn rows_to_record_batch(rows: &[hdbconnect::Row], schema: SchemaRef) -> Result<RecordBatch> {
     if rows.is_empty() {
         // Return empty batch with correct schema
         return Ok(RecordBatch::new_empty(schema));
@@ -112,9 +109,7 @@ mod tests {
 
     #[test]
     fn test_empty_rows() {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Int32, false),
-        ]));
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
 
         let batch = rows_to_record_batch(&[], Arc::clone(&schema)).unwrap();
         assert_eq!(batch.num_rows(), 0);
@@ -139,9 +134,7 @@ mod tests {
 
     #[test]
     fn test_schema_mismatch() {
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("id", DataType::Int32, false),
-        ]));
+        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
 
         // Mock row with wrong column count
         // This test would verify error handling

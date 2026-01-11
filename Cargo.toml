@@ -38,4 +38,8 @@ arrow-data = "57.1"
 arrow-schema = "57.1"
 criterion = "0.8"
 hdbconnect = "0.32"
+parking_lot = "0.12.5"
+pyo3 = { version = "0.27", features = ["extension-module", "abi3-py311"] }
+pyo3-arrow = "0.15"
 thiserror = "2.0"
+url = "2.5"

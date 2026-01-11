@@ -8,15 +8,15 @@
 //! - `Float32` (HANA REAL)
 //! - `Float64` (HANA DOUBLE)
 
+use arrow_array::ArrayRef;
 use arrow_array::builder::{
     Float32Builder, Float64Builder, Int16Builder, Int32Builder, Int64Builder, UInt8Builder,
 };
-use arrow_array::ArrayRef;
 use std::sync::Arc;
 
+use crate::Result;
 use crate::traits::builder::HanaCompatibleBuilder;
 use crate::traits::sealed::private::Sealed;
-use crate::Result;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Macro for Primitive Builder Implementation

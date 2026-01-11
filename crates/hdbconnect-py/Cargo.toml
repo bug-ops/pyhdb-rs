@@ -1,0 +1,32 @@
+[package]
+name = "hdbconnect-py"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Python bindings for SAP HANA via hdbconnect"
+readme = "README.md"
+keywords = ["sap", "hana", "python", "database", "pyo3"]
+categories = ["database", "api-bindings"]
+
+[lib]
+name = "hdbconnect"
+crate-type = ["cdylib"]
+
+[lints]
+workspace = true
+
+[dependencies]
+arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
+hdbconnect = { workspace = true }
+hdbconnect-arrow = { path = "../hdbconnect-arrow" }
+parking_lot = { workspace = true }
+pyo3 = { workspace = true }
+pyo3-arrow = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }

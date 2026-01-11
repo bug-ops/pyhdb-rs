@@ -1,12 +1,12 @@
 //! Boolean type builder for Arrow boolean arrays.
 
-use arrow_array::builder::BooleanBuilder;
 use arrow_array::ArrayRef;
+use arrow_array::builder::BooleanBuilder;
 use std::sync::Arc;
 
+use crate::Result;
 use crate::traits::builder::HanaCompatibleBuilder;
 use crate::traits::sealed::private::Sealed;
-use crate::Result;
 
 /// Builder for Arrow Boolean arrays (HANA BOOLEAN).
 #[derive(Debug)]
@@ -83,7 +83,9 @@ mod tests {
 
         builder.append_hana_value(&HdbValue::BOOLEAN(true)).unwrap();
         builder.append_null();
-        builder.append_hana_value(&HdbValue::BOOLEAN(false)).unwrap();
+        builder
+            .append_hana_value(&HdbValue::BOOLEAN(false))
+            .unwrap();
 
         assert_eq!(builder.len(), 3);
         let array = builder.finish();

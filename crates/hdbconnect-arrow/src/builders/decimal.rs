@@ -3,14 +3,14 @@
 //! Handles HANA DECIMAL and SMALLDECIMAL types with proper precision/scale
 //! preservation using Arrow Decimal128 arrays.
 
-use arrow_array::builder::Decimal128Builder;
 use arrow_array::ArrayRef;
+use arrow_array::builder::Decimal128Builder;
 use std::sync::Arc;
 
+use crate::Result;
 use crate::traits::builder::HanaCompatibleBuilder;
 use crate::traits::sealed::private::Sealed;
 use crate::types::hana::{DecimalPrecision, DecimalScale};
-use crate::Result;
 
 /// Validated decimal configuration.
 ///
@@ -89,11 +89,9 @@ impl Decimal128BuilderWrapper {
     /// Create from validated config.
     #[must_use]
     pub fn from_config(capacity: usize, config: DecimalConfig) -> Self {
-        let builder = Decimal128Builder::with_capacity(capacity)
-            .with_data_type(arrow_schema::DataType::Decimal128(
-                config.precision(),
-                config.scale(),
-            ));
+        let builder = Decimal128Builder::with_capacity(capacity).with_data_type(
+            arrow_schema::DataType::Decimal128(config.precision(), config.scale()),
+        );
 
         Self {
             builder,
@@ -149,7 +147,10 @@ impl Decimal128BuilderWrapper {
                 let scaled_str = match frac_digits.cmp(&target_scale) {
                     std::cmp::Ordering::Less => {
                         // Pad with zeros
-                        format!("{int_part}{frac_part}{}", "0".repeat(target_scale - frac_digits))
+                        format!(
+                            "{int_part}{frac_part}{}",
+                            "0".repeat(target_scale - frac_digits)
+                        )
                     }
                     std::cmp::Ordering::Greater => {
                         // Truncate (or round - implementation choice)
@@ -186,8 +187,7 @@ impl Sealed for Decimal128BuilderWrapper {}
 impl HanaCompatibleBuilder for Decimal128BuilderWrapper {
     fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> Result<()> {
         let i128_val = self.convert_decimal(value)?;
-        self.builder
-            .append_value(i128_val);
+        self.builder.append_value(i128_val);
         self.len += 1;
         Ok(())
     }

@@ -5,7 +5,6 @@
 use arrow_schema::{Field, Schema, SchemaRef};
 use std::sync::Arc;
 
-
 /// Schema mapper for converting HANA metadata to Arrow schema.
 ///
 /// Provides utilities for building Arrow schemas from HANA `ResultSet` metadata.
@@ -52,7 +51,10 @@ impl SchemaMapper {
     /// * `metadata` - Slice of HANA field metadata
     #[must_use]
     pub fn from_field_metadata(metadata: &[hdbconnect::FieldMetadata]) -> Schema {
-        let fields: Vec<Field> = metadata.iter().map(super::super::types::arrow::FieldMetadataExt::to_arrow_field).collect();
+        let fields: Vec<Field> = metadata
+            .iter()
+            .map(super::super::types::arrow::FieldMetadataExt::to_arrow_field)
+            .collect();
 
         Schema::new(fields)
     }

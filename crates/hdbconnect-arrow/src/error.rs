@@ -92,7 +92,7 @@ impl ArrowConversionError {
     pub const fn schema_mismatch(expected: usize, actual: usize) -> Self {
         Self {
             kind: ErrorKind::SchemaMismatch { expected, actual },
-                    }
+        }
     }
 
     /// Create error for value conversion failure.
@@ -103,7 +103,7 @@ impl ArrowConversionError {
                 column: column.into(),
                 message: message.into(),
             },
-                    }
+        }
     }
 
     /// Create error for decimal overflow.
@@ -111,7 +111,7 @@ impl ArrowConversionError {
     pub const fn decimal_overflow(precision: u8, scale: i8) -> Self {
         Self {
             kind: ErrorKind::DecimalOverflow { precision, scale },
-                    }
+        }
     }
 
     /// Create error for LOB streaming failure.
@@ -121,7 +121,7 @@ impl ArrowConversionError {
             kind: ErrorKind::LobStreaming {
                 message: message.into(),
             },
-                    }
+        }
     }
 
     /// Create error for invalid precision.
@@ -129,7 +129,7 @@ impl ArrowConversionError {
     pub fn invalid_precision(message: impl Into<String>) -> Self {
         Self {
             kind: ErrorKind::InvalidPrecision(message.into()),
-                    }
+        }
     }
 
     /// Create error for invalid scale.
@@ -137,7 +137,7 @@ impl ArrowConversionError {
     pub fn invalid_scale(message: impl Into<String>) -> Self {
         Self {
             kind: ErrorKind::InvalidScale(message.into()),
-                    }
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -203,7 +203,7 @@ impl From<hdbconnect::HdbError> for ArrowConversionError {
     fn from(err: hdbconnect::HdbError) -> Self {
         Self {
             kind: ErrorKind::Hdbconnect(err.to_string()),
-                    }
+        }
     }
 }
 
@@ -211,7 +211,7 @@ impl From<arrow_schema::ArrowError> for ArrowConversionError {
     fn from(err: arrow_schema::ArrowError) -> Self {
         Self {
             kind: ErrorKind::Arrow(err),
-                    }
+        }
     }
 }
 

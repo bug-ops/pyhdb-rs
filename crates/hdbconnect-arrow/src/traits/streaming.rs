@@ -82,10 +82,7 @@ pub trait BatchProcessor {
     /// # Errors
     ///
     /// Returns an error if processing fails.
-    fn process<'a>(
-        &'a mut self,
-        rows: &[hdbconnect::Row],
-    ) -> Result<Self::Batch<'a>, Self::Error>;
+    fn process<'a>(&'a mut self, rows: &[hdbconnect::Row]) -> Result<Self::Batch<'a>, Self::Error>;
 
     /// Flush any buffered data and return the final batch.
     ///
@@ -174,8 +171,8 @@ impl BatchConfig {
     pub const fn small() -> Self {
         Self {
             batch_size: 1024,
-            string_capacity: 64 * 1024,  // 64KB
-            binary_capacity: 64 * 1024,  // 64KB
+            string_capacity: 64 * 1024, // 64KB
+            binary_capacity: 64 * 1024, // 64KB
             coerce_types: false,
         }
     }
@@ -186,7 +183,7 @@ impl BatchConfig {
     #[must_use]
     pub const fn large() -> Self {
         Self {
-            batch_size: 131_072,          // 128K rows
+            batch_size: 131_072,              // 128K rows
             string_capacity: 8 * 1024 * 1024, // 8MB
             binary_capacity: 8 * 1024 * 1024, // 8MB
             coerce_types: false,

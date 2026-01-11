@@ -7,15 +7,15 @@
 //! - `LargeBinary` (BLOB)
 //! - `FixedSizeBinary` (FIXED8, FIXED12, FIXED16)
 
+use arrow_array::ArrayRef;
 use arrow_array::builder::{
     BinaryBuilder, FixedSizeBinaryBuilder, LargeBinaryBuilder, LargeStringBuilder, StringBuilder,
 };
-use arrow_array::ArrayRef;
 use std::sync::Arc;
 
+use crate::Result;
 use crate::traits::builder::HanaCompatibleBuilder;
 use crate::traits::sealed::private::Sealed;
-use crate::Result;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // String Builders
@@ -188,9 +188,7 @@ impl HanaCompatibleBuilder for BinaryBuilderWrapper {
 
         match value {
             // Binary and spatial types as WKB
-            HdbValue::BINARY(bytes)
-            | HdbValue::GEOMETRY(bytes)
-            | HdbValue::POINT(bytes) => {
+            HdbValue::BINARY(bytes) | HdbValue::GEOMETRY(bytes) | HdbValue::POINT(bytes) => {
                 self.builder.append_value(bytes);
             }
             other => {
@@ -329,7 +327,10 @@ impl HanaCompatibleBuilder for FixedSizeBinaryBuilderWrapper {
                     ));
                 }
                 self.builder.append_value(bytes).map_err(|e| {
-                    crate::ArrowConversionError::value_conversion("fixed_size_binary", e.to_string())
+                    crate::ArrowConversionError::value_conversion(
+                        "fixed_size_binary",
+                        e.to_string(),
+                    )
                 })?;
             }
             other => {

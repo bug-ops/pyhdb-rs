@@ -1,0 +1,95 @@
+//! Python bindings for SAP HANA via hdbconnect.
+//!
+//! This crate provides Python bindings using `PyO3` with:
+//! - DB-API 2.0 compliant Connection and Cursor
+//! - Zero-copy Arrow data transfer via `PyCapsule` Interface
+//! - Native Polars/pandas integration
+//!
+//! # Example
+//!
+//! ```python
+//! import hdbconnect
+//!
+//! # Connect to HANA
+//! conn = hdbconnect.connect("hdbsql://user:pass@host:30015")
+//!
+//! # Execute query
+//! cursor = conn.cursor()
+//! cursor.execute("SELECT * FROM USERS")
+//!
+//! # Fetch rows
+//! for row in cursor:
+//!     print(row)
+//!
+//! # Or get as Polars DataFrame
+//! df = conn.execute_polars("SELECT * FROM USERS")
+//!
+//! conn.close()
+//! ```
+
+use pyo3::prelude::*;
+
+pub mod connection;
+pub mod cursor;
+pub mod error;
+mod private;
+pub mod reader;
+pub mod types;
+
+pub use connection::PyConnection;
+pub use cursor::PyCursor;
+pub use error::PyHdbError;
+pub use reader::PyRecordBatchReader;
+
+/// DB-API 2.0 API level.
+const APILEVEL: &str = "2.0";
+
+/// DB-API 2.0 thread safety level.
+/// 2 = Threads may share the module and connections.
+const THREADSAFETY: i32 = 2;
+
+/// DB-API 2.0 parameter style.
+/// "qmark" = Question mark style (SELECT * FROM t WHERE id = ?)
+const PARAMSTYLE: &str = "qmark";
+
+/// Connect to a HANA database.
+///
+/// Args:
+///     url: Connection URL (hdbsql://user:pass@host:port[/database])
+///
+/// Returns:
+///     Connection object
+///
+/// Raises:
+///     `InterfaceError`: If URL is invalid
+///     `OperationalError`: If connection fails
+#[pyfunction]
+#[pyo3(signature = (url))]
+fn connect(url: &str) -> PyResult<PyConnection> {
+    PyConnection::new(url)
+}
+
+/// HANA Python driver module.
+#[pymodule]
+fn hdbconnect(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // DB-API 2.0 module globals
+    m.add("apilevel", APILEVEL)?;
+    m.add("threadsafety", THREADSAFETY)?;
+    m.add("paramstyle", PARAMSTYLE)?;
+
+    // Version info
+    m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+
+    // Connection function
+    m.add_function(wrap_pyfunction!(connect, m)?)?;
+
+    // Classes
+    m.add_class::<PyConnection>()?;
+    m.add_class::<PyCursor>()?;
+    m.add_class::<PyRecordBatchReader>()?;
+
+    // Exceptions
+    error::register_exceptions(m.py(), m)?;
+
+    Ok(())
+}

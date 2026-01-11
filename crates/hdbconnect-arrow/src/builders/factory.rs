@@ -42,8 +42,8 @@ impl BuilderFactory {
     pub const fn new(capacity: usize) -> Self {
         Self {
             capacity,
-            string_capacity: capacity * 32,  // Estimate 32 bytes per string
-            binary_capacity: capacity * 64,  // Estimate 64 bytes per binary
+            string_capacity: capacity * 32, // Estimate 32 bytes per string
+            binary_capacity: capacity * 64, // Estimate 64 bytes per binary
         }
     }
 
@@ -92,9 +92,11 @@ impl BuilderFactory {
             DataType::Float64 => Box::new(Float64BuilderWrapper::new(self.capacity)),
 
             // Decimal
-            DataType::Decimal128(precision, scale) => {
-                Box::new(Decimal128BuilderWrapper::new(self.capacity, *precision, *scale))
-            }
+            DataType::Decimal128(precision, scale) => Box::new(Decimal128BuilderWrapper::new(
+                self.capacity,
+                *precision,
+                *scale,
+            )),
 
             // Strings
             DataType::Utf8 => Box::new(StringBuilderWrapper::new(

@@ -87,9 +87,7 @@ pub fn hana_type_to_arrow(type_id: TypeId, precision: Option<u8>, scale: Option<
         // Using DAYDATE, SECONDTIME, LONGDATE, SECONDDATE instead
         TypeId::DAYDATE => DataType::Date32,
         TypeId::SECONDTIME => DataType::Time64(TimeUnit::Nanosecond),
-        TypeId::SECONDDATE | TypeId::LONGDATE => {
-            DataType::Timestamp(TimeUnit::Nanosecond, None)
-        }
+        TypeId::SECONDDATE | TypeId::LONGDATE => DataType::Timestamp(TimeUnit::Nanosecond, None),
 
         // Boolean
         TypeId::BOOLEAN => DataType::Boolean,
@@ -124,7 +122,11 @@ pub fn hana_field_to_arrow(
     precision: Option<u8>,
     scale: Option<i8>,
 ) -> Field {
-    Field::new(name, hana_type_to_arrow(type_id, precision, scale), nullable)
+    Field::new(
+        name,
+        hana_type_to_arrow(type_id, precision, scale),
+        nullable,
+    )
 }
 
 /// Extension trait for hdbconnect `FieldMetadata`.
@@ -156,7 +158,9 @@ impl FieldMetadataExt for hdbconnect::FieldMetadata {
             self.is_nullable(),
             // Safe: precision is checked to be in valid HANA range [0, 38]
             #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-            (0..=255_i16).contains(&precision).then_some(precision as u8),
+            (0..=255_i16)
+                .contains(&precision)
+                .then_some(precision as u8),
             // Safe: scale is checked to be in valid HANA range [0, precision]
             #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
             (0..=127_i16).contains(&scale).then_some(scale as i8),
@@ -169,7 +173,9 @@ impl FieldMetadataExt for hdbconnect::FieldMetadata {
         hana_type_to_arrow(
             self.type_id(),
             #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
-            (0..=255_i16).contains(&precision).then_some(precision as u8),
+            (0..=255_i16)
+                .contains(&precision)
+                .then_some(precision as u8),
             #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
             (0..=127_i16).contains(&scale).then_some(scale as i8),
         )
@@ -182,10 +188,23 @@ impl FieldMetadataExt for hdbconnect::FieldMetadata {
 #[must_use]
 pub const fn type_category(type_id: TypeId) -> &'static str {
     match type_id {
-        TypeId::TINYINT | TypeId::SMALLINT | TypeId::INT | TypeId::BIGINT | TypeId::REAL | TypeId::DOUBLE => "Numeric",
+        TypeId::TINYINT
+        | TypeId::SMALLINT
+        | TypeId::INT
+        | TypeId::BIGINT
+        | TypeId::REAL
+        | TypeId::DOUBLE => "Numeric",
         TypeId::DECIMAL => "Decimal",
-        TypeId::CHAR | TypeId::VARCHAR | TypeId::NCHAR | TypeId::NVARCHAR | TypeId::SHORTTEXT | TypeId::ALPHANUM | TypeId::STRING => "String",
-        TypeId::BINARY | TypeId::VARBINARY | TypeId::FIXED8 | TypeId::FIXED12 | TypeId::FIXED16 => "Binary",
+        TypeId::CHAR
+        | TypeId::VARCHAR
+        | TypeId::NCHAR
+        | TypeId::NVARCHAR
+        | TypeId::SHORTTEXT
+        | TypeId::ALPHANUM
+        | TypeId::STRING => "String",
+        TypeId::BINARY | TypeId::VARBINARY | TypeId::FIXED8 | TypeId::FIXED12 | TypeId::FIXED16 => {
+            "Binary"
+        }
         TypeId::CLOB | TypeId::NCLOB | TypeId::BLOB | TypeId::TEXT => "LOB",
         TypeId::DAYDATE | TypeId::SECONDTIME | TypeId::SECONDDATE | TypeId::LONGDATE => "Temporal",
         TypeId::GEOMETRY | TypeId::POINT => "Spatial",
@@ -199,16 +218,31 @@ mod tests {
 
     #[test]
     fn test_integer_mappings() {
-        assert_eq!(hana_type_to_arrow(TypeId::TINYINT, None, None), DataType::UInt8);
-        assert_eq!(hana_type_to_arrow(TypeId::SMALLINT, None, None), DataType::Int16);
+        assert_eq!(
+            hana_type_to_arrow(TypeId::TINYINT, None, None),
+            DataType::UInt8
+        );
+        assert_eq!(
+            hana_type_to_arrow(TypeId::SMALLINT, None, None),
+            DataType::Int16
+        );
         assert_eq!(hana_type_to_arrow(TypeId::INT, None, None), DataType::Int32);
-        assert_eq!(hana_type_to_arrow(TypeId::BIGINT, None, None), DataType::Int64);
+        assert_eq!(
+            hana_type_to_arrow(TypeId::BIGINT, None, None),
+            DataType::Int64
+        );
     }
 
     #[test]
     fn test_float_mappings() {
-        assert_eq!(hana_type_to_arrow(TypeId::REAL, None, None), DataType::Float32);
-        assert_eq!(hana_type_to_arrow(TypeId::DOUBLE, None, None), DataType::Float64);
+        assert_eq!(
+            hana_type_to_arrow(TypeId::REAL, None, None),
+            DataType::Float32
+        );
+        assert_eq!(
+            hana_type_to_arrow(TypeId::DOUBLE, None, None),
+            DataType::Float64
+        );
     }
 
     #[test]
@@ -225,14 +259,26 @@ mod tests {
 
     #[test]
     fn test_string_mappings() {
-        assert_eq!(hana_type_to_arrow(TypeId::VARCHAR, None, None), DataType::Utf8);
-        assert_eq!(hana_type_to_arrow(TypeId::NVARCHAR, None, None), DataType::Utf8);
-        assert_eq!(hana_type_to_arrow(TypeId::CLOB, None, None), DataType::LargeUtf8);
+        assert_eq!(
+            hana_type_to_arrow(TypeId::VARCHAR, None, None),
+            DataType::Utf8
+        );
+        assert_eq!(
+            hana_type_to_arrow(TypeId::NVARCHAR, None, None),
+            DataType::Utf8
+        );
+        assert_eq!(
+            hana_type_to_arrow(TypeId::CLOB, None, None),
+            DataType::LargeUtf8
+        );
     }
 
     #[test]
     fn test_temporal_mappings() {
-        assert_eq!(hana_type_to_arrow(TypeId::DAYDATE, None, None), DataType::Date32);
+        assert_eq!(
+            hana_type_to_arrow(TypeId::DAYDATE, None, None),
+            DataType::Date32
+        );
         assert_eq!(
             hana_type_to_arrow(TypeId::SECONDTIME, None, None),
             DataType::Time64(TimeUnit::Nanosecond)

@@ -74,10 +74,7 @@ pub const fn is_temporal(type_id: hdbconnect::TypeId) -> bool {
     // Note: DATE/TIME/TIMESTAMP are deprecated in hdbconnect 0.32+
     matches!(
         type_id,
-        TypeId::DAYDATE
-            | TypeId::SECONDTIME
-            | TypeId::SECONDDATE
-            | TypeId::LONGDATE
+        TypeId::DAYDATE | TypeId::SECONDTIME | TypeId::SECONDDATE | TypeId::LONGDATE
     )
 }
 

@@ -45,13 +45,13 @@ pub mod types;
 
 // Re-export main types for convenience
 pub use builders::factory::BuilderFactory;
-pub use conversion::{rows_to_record_batch, HanaBatchProcessor};
+pub use conversion::{HanaBatchProcessor, rows_to_record_batch};
 pub use error::{ArrowConversionError, Result};
 pub use schema::mapping::SchemaMapper;
 pub use traits::builder::HanaCompatibleBuilder;
 pub use traits::sealed::FromHanaValue;
 pub use traits::streaming::{BatchConfig, BatchProcessor, LendingBatchIterator};
-pub use types::arrow::{hana_field_to_arrow, hana_type_to_arrow, FieldMetadataExt};
+pub use types::arrow::{FieldMetadataExt, hana_field_to_arrow, hana_type_to_arrow};
 pub use types::hana::{
     Binary, Decimal, DecimalPrecision, DecimalScale, HanaTypeCategory, Lob, Numeric, Spatial,
     StringType, Temporal, TypedColumn,
