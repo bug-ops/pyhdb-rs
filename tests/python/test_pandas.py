@@ -51,22 +51,25 @@ class TestToHana:
     def test_table_name(self) -> str:
         """Generate a unique test table name."""
         import uuid
+
         return f"TEST_PANDAS_{uuid.uuid4().hex[:8].upper()}"
 
     def test_to_hana_replace(self, hana_uri: str, test_table_name: str) -> None:
         """Test to_hana with if_exists='replace'."""
         pandas = pytest.importorskip("pandas")
         pytest.importorskip("pyarrow")
-        import pyhdb_rs.pandas as hdb
         import pyhdb_rs
+        import pyhdb_rs.pandas as hdb
 
         conn = pyhdb_rs.connect(hana_uri)
 
         try:
-            df = pandas.DataFrame({
-                "id": [1, 2, 3],
-                "value": [10, 20, 30],
-            })
+            df = pandas.DataFrame(
+                {
+                    "id": [1, 2, 3],
+                    "value": [10, 20, 30],
+                }
+            )
 
             rows = hdb.to_hana(df, test_table_name, hana_uri, if_exists="replace")
             assert rows == 3
@@ -85,22 +88,26 @@ class TestToHana:
         """Test to_hana with if_exists='append'."""
         pandas = pytest.importorskip("pandas")
         pytest.importorskip("pyarrow")
-        import pyhdb_rs.pandas as hdb
         import pyhdb_rs
+        import pyhdb_rs.pandas as hdb
 
         conn = pyhdb_rs.connect(hana_uri)
 
         try:
-            df1 = pandas.DataFrame({
-                "id": [1, 2],
-                "value": [10, 20],
-            })
+            df1 = pandas.DataFrame(
+                {
+                    "id": [1, 2],
+                    "value": [10, 20],
+                }
+            )
             hdb.to_hana(df1, test_table_name, hana_uri, if_exists="replace")
 
-            df2 = pandas.DataFrame({
-                "id": [3, 4],
-                "value": [30, 40],
-            })
+            df2 = pandas.DataFrame(
+                {
+                    "id": [3, 4],
+                    "value": [30, 40],
+                }
+            )
             rows = hdb.to_hana(df2, test_table_name, hana_uri, if_exists="append")
             assert rows == 2
 

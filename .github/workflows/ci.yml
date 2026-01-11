@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
-    name: Lint
+  lint-rust:
+    name: Lint Rust
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -32,9 +32,25 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-features -- -D warnings
 
+  lint-python:
+    name: Lint Python
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Ruff check
+        run: ruff check python/ tests/python/
+      - name: Ruff format check
+        run: ruff format --check python/ tests/python/
+
   test-rust:
     name: Test Rust (${{ matrix.os }})
-    needs: [lint]
+    needs: [lint-rust, lint-python]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -51,7 +67,7 @@ jobs:
 
   test-python:
     name: Test Python ${{ matrix.python-version }}
-    needs: [lint]
+    needs: [lint-rust, lint-python]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -72,10 +88,18 @@ jobs:
       - name: Build wheel
         run: maturin develop --manifest-path crates/hdbconnect-py/Cargo.toml -E dev
         working-directory: python
-      - name: Run tests
-        run: pytest tests/python/ -v --tb=short
+      - name: Run tests with coverage
+        run: pytest tests/python/ -v --tb=short --cov=pyhdb_rs --cov-report=xml
         env:
           PYTHONPATH: python
+      - name: Upload Python coverage
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          flags: python
+          fail_ci_if_error: false
 
   build-wheels:
     name: Build wheels (${{ matrix.os }})
@@ -104,9 +128,9 @@ jobs:
           name: wheels-${{ matrix.os }}
           path: python/dist/*.whl
 
-  coverage:
-    name: Coverage
-    needs: [lint]
+  coverage-rust:
+    name: Coverage Rust
+    needs: [lint-rust, lint-python]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -116,11 +140,12 @@ jobs:
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate coverage
         run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
-      - name: Upload to Codecov
+      - name: Upload Rust coverage
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
+          flags: rust
           fail_ci_if_error: false
 
   msrv:
