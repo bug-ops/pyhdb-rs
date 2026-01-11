@@ -72,7 +72,9 @@ jobs:
           python-version: "3.11"
       - uses: taiki-e/install-action@nextest
       - name: Run tests
-        run: cargo nextest run --workspace --all-features
+        # Exclude hdbconnect-py: PyO3 abi3 crates can't link Python standalone.
+        # hdbconnect-py is tested via Python tests (test-python job).
+        run: cargo nextest run --workspace --all-features --exclude hdbconnect-py
 
   test-python:
     name: Test Python ${{ matrix.python-version }}
@@ -153,7 +155,8 @@ jobs:
           python-version: "3.11"
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate coverage
-        run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
+        # Exclude hdbconnect-py: PyO3 abi3 crates can't link Python standalone.
+        run: cargo llvm-cov --workspace --all-features --exclude hdbconnect-py --lcov --output-path lcov.info
       - name: Upload coverage
         uses: codecov/codecov-action@v5
         with:
