@@ -10,10 +10,7 @@ This module provides the standard type constructors required by PEP 249:
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, Final
-
-if TYPE_CHECKING:
-    pass
+from typing import Final
 
 __all__ = [
     "Date",
