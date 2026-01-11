@@ -8,6 +8,7 @@ High-performance Python driver for SAP HANA with native Arrow support.
 [![Crates.io](https://img.shields.io/crates/v/hdbconnect-arrow.svg)](https://crates.io/crates/hdbconnect-arrow)
 [![docs.rs](https://img.shields.io/docsrs/hdbconnect-arrow)](https://docs.rs/hdbconnect-arrow)
 [![PyPI](https://img.shields.io/pypi/v/pyhdb_rs.svg)](https://pypi.org/project/pyhdb_rs/)
+[![Python](https://img.shields.io/pypi/pyversions/pyhdb_rs)](https://pypi.org/project/pyhdb_rs)
 [![MSRV](https://img.shields.io/badge/MSRV-1.85-blue)](https://github.com/bug-ops/pyhdb-rs)
 [![License](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue.svg)](LICENSE-APACHE)
 
@@ -21,26 +22,17 @@ High-performance Python driver for SAP HANA with native Arrow support.
 
 ## Installation
 
-### From PyPI
-
 ```bash
 pip install pyhdb_rs
 ```
 
-### With optional dependencies
+With optional dependencies:
 
 ```bash
-# For Polars integration
-pip install pyhdb_rs[polars]
-
-# For pandas integration
-pip install pyhdb_rs[pandas]
-
-# For async support
-pip install pyhdb_rs[async]
-
-# All optional dependencies
-pip install pyhdb_rs[all]
+pip install pyhdb_rs[polars]    # Polars integration
+pip install pyhdb_rs[pandas]    # pandas + PyArrow
+pip install pyhdb_rs[async]     # Async support
+pip install pyhdb_rs[all]       # All integrations
 ```
 
 > [!IMPORTANT]
@@ -50,13 +42,12 @@ pip install pyhdb_rs[all]
 
 ```bash
 git clone https://github.com/bug-ops/pyhdb-rs.git
-cd pyhdb-rs
+cd pyhdb-rs/python
 
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 pip install maturin
-cd python
 maturin develop
 ```
 
@@ -67,7 +58,7 @@ maturin develop
 ```python
 import pyhdb_rs
 
-conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015")
+conn = pyhdb_rs.connect("hdbsql://USER:PASSWORD@HOST:30015")
 
 with conn.cursor() as cursor:
     cursor.execute("SELECT * FROM USERS WHERE active = ?", [True])
@@ -88,10 +79,9 @@ conn.close()
 ```python
 import pyhdb_rs.polars as hdb
 
-# Read directly into Polars DataFrame (zero-copy)
 df = hdb.read_hana(
     "SELECT * FROM sales WHERE year = 2024",
-    "hdbsql://analyst:secret@hana.corp:39017"
+    "hdbsql://USER:PASSWORD@HOST:39017"
 )
 
 print(df.head())
@@ -105,7 +95,7 @@ Or using the connection object:
 ```python
 import pyhdb_rs
 
-conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015")
+conn = pyhdb_rs.connect("hdbsql://USER:PASSWORD@HOST:30015")
 
 # Get as Polars DataFrame
 df = conn.execute_polars("SELECT * FROM products")
@@ -125,7 +115,7 @@ import pyhdb_rs.pandas as hdb
 
 df = hdb.read_hana(
     "SELECT * FROM sales",
-    "hdbsql://user:pass@host:39017"
+    "hdbsql://USER:PASSWORD@HOST:39017"
 )
 
 print(df.head())
@@ -145,7 +135,7 @@ import asyncio
 from pyhdb_rs.aio import connect
 
 async def main():
-    async with await connect("hdbsql://user:pass@host:30015") as conn:
+    async with await connect("hdbsql://USER:PASSWORD@HOST:30015") as conn:
         df = await conn.execute_polars("SELECT * FROM sales")
         print(df)
 
@@ -160,7 +150,7 @@ from pyhdb_rs.aio import create_pool
 
 async def main():
     pool = create_pool(
-        "hdbsql://user:pass@host:30015",
+        "hdbsql://USER:PASSWORD@HOST:30015",
         max_size=10,
         connection_timeout=30
     )
@@ -186,7 +176,7 @@ async def fetch_data(pool, table: str):
         return await conn.execute_polars(f"SELECT * FROM {table}")
 
 async def main():
-    pool = create_pool("hdbsql://user:pass@host:30015", max_size=5)
+    pool = create_pool("hdbsql://USER:PASSWORD@HOST:30015", max_size=5)
 
     # Run multiple queries concurrently
     results = await asyncio.gather(
@@ -203,7 +193,7 @@ asyncio.run(main())
 ## Connection URL format
 
 ```
-hdbsql://[user[:password]@]host[:port][/database][?options]
+hdbsql://[USER[:PASSWORD]@]HOST[:PORT][/DATABASE][?OPTIONS]
 ```
 
 Examples:

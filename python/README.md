@@ -2,6 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/pyhdb_rs)](https://pypi.org/project/pyhdb_rs)
 [![Python](https://img.shields.io/pypi/pyversions/pyhdb_rs)](https://pypi.org/project/pyhdb_rs)
+[![Downloads](https://img.shields.io/pypi/dm/pyhdb_rs)](https://pypi.org/project/pyhdb_rs)
 [![CI](https://img.shields.io/github/actions/workflow/status/bug-ops/pyhdb-rs/ci.yml)](https://github.com/bug-ops/pyhdb-rs/actions)
 [![License](https://img.shields.io/pypi/l/pyhdb_rs)](https://github.com/bug-ops/pyhdb-rs/blob/main/LICENSE-MIT)
 
@@ -13,6 +14,7 @@ High-performance Python driver for SAP HANA with native Apache Arrow support.
 - **Zero-copy Arrow integration** — Direct data transfer to Polars and pandas
 - **Async support** — Native async/await with connection pooling
 - **Type-safe** — Full type hints and strict typing
+- **Fast** — Built with Rust for 2x+ performance over hdbcli
 
 ## Installation
 
@@ -20,23 +22,24 @@ High-performance Python driver for SAP HANA with native Apache Arrow support.
 pip install pyhdb_rs
 ```
 
-### With optional dependencies
+With optional dependencies:
 
 ```bash
 pip install pyhdb_rs[polars]    # Polars integration
 pip install pyhdb_rs[pandas]    # pandas + PyArrow
+pip install pyhdb_rs[async]     # Async support
 pip install pyhdb_rs[all]       # All integrations
 ```
 
 > [!TIP]
-> Use `uv pip install pyhdb_rs` for faster installation (10-100x faster than pip).
+> Use `uv pip install pyhdb_rs` for faster installation.
 
 ## Quick start
 
 ```python
 from pyhdb_rs import connect
 
-with connect("hdbsql://user:pass@host:39017") as conn:
+with connect("hdbsql://USER:PASSWORD@HOST:39017") as conn:
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM MY_TABLE")
     for row in cursor:
@@ -52,7 +55,7 @@ import pyhdb_rs.polars as hdb
 
 df = hdb.read_hana(
     "SELECT * FROM sales WHERE year = 2024",
-    "hdbsql://user:pass@host:39017"
+    "hdbsql://USER:PASSWORD@HOST:39017"
 )
 print(df.head())
 ```
@@ -64,7 +67,7 @@ import pyhdb_rs.pandas as hdb
 
 df = hdb.read_hana(
     "SELECT * FROM sales",
-    "hdbsql://user:pass@host:39017"
+    "hdbsql://USER:PASSWORD@HOST:39017"
 )
 ```
 
@@ -73,11 +76,9 @@ df = hdb.read_hana(
 ```python
 from pyhdb_rs.aio import connect
 
-async with connect("hdbsql://user:pass@host:39017") as conn:
-    cursor = await conn.cursor()
-    await cursor.execute("SELECT * FROM MY_TABLE")
-    async for row in cursor:
-        print(row)
+async with await connect("hdbsql://USER:PASSWORD@HOST:39017") as conn:
+    df = await conn.execute_polars("SELECT * FROM sales")
+    print(df)
 ```
 
 > [!NOTE]
@@ -86,17 +87,16 @@ async with connect("hdbsql://user:pass@host:39017") as conn:
 ### Connection pooling
 
 ```python
-from pyhdb_rs.aio import ConnectionPool
+from pyhdb_rs.aio import create_pool
 
-pool = ConnectionPool(
-    uri="hdbsql://user:pass@host:39017",
-    min_connections=2,
-    max_connections=10,
+pool = create_pool(
+    "hdbsql://USER:PASSWORD@HOST:39017",
+    max_size=10,
+    connection_timeout=30
 )
 
 async with pool.acquire() as conn:
-    cursor = await conn.cursor()
-    await cursor.execute("SELECT 1")
+    df = await conn.execute_polars("SELECT * FROM sales")
 ```
 
 ## Error handling
@@ -105,7 +105,7 @@ async with pool.acquire() as conn:
 from pyhdb_rs import connect, DatabaseError, InterfaceError
 
 try:
-    with connect("hdbsql://user:pass@host:39017") as conn:
+    with connect("hdbsql://USER:PASSWORD@HOST:39017") as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM nonexistent")
 except DatabaseError as e:

@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-01-11
+
+### Changed
+
+#### Architecture
+- Refactored Python utilities into shared `_utils.py` module for code deduplication
+- Introduced `TypeCategory` enum for centralized HANA type classification
+- Added `NonZeroUsize` for type-safe batch size configuration
+- Implemented `RowLike` trait abstraction for testing without HANA connection
+- Added `MockRow`/`MockRowBuilder` test utilities (behind `test-utils` feature flag)
+- Created `impl_field_metadata_ext!` macro for DRY trait implementations
+
+#### Testing
+- Added comprehensive unit tests for `_utils.py` module (25 tests)
+- Improved test coverage for PyO3 bindings
+- Added pytest tests for module imports, exceptions, and DB-API types
+
+#### CI/CD
+- Enabled sccache for maturin builds (faster CI compilation)
+- Added ruff format check to CI pipeline
+
+### Security
+- MockRow/MockRowBuilder now properly gated behind `test-utils` feature
+- Added SQL identifier length validation (127 char HANA limit)
+
 ## [0.1.0] - 2025-01-11
 
 Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
@@ -50,5 +75,6 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/bug-ops/pyhdb-rs/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bug-ops/pyhdb-rs/releases/tag/v0.1.0
