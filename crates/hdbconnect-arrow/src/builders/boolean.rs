@@ -1,8 +1,9 @@
 //! Boolean type builder for Arrow boolean arrays.
 
+use std::sync::Arc;
+
 use arrow_array::ArrayRef;
 use arrow_array::builder::BooleanBuilder;
-use std::sync::Arc;
 
 use crate::Result;
 use crate::traits::builder::HanaCompatibleBuilder;
@@ -74,8 +75,9 @@ impl HanaCompatibleBuilder for BooleanBuilderWrapper {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use hdbconnect::HdbValue;
+
+    use super::*;
 
     #[test]
     fn test_boolean_builder() {

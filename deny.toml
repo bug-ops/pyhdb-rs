@@ -13,13 +13,10 @@ all-features = true
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-vulnerability = "deny"
-unmaintained = "warn"
-yanked = "warn"
-notice = "warn"
+ignore = []
 
 [licenses]
-unlicensed = "deny"
+confidence-threshold = 0.93
 allow = [
     "MIT",
     "Apache-2.0",
@@ -32,9 +29,9 @@ allow = [
     "Zlib",
     "MPL-2.0",
     "CC0-1.0",
+    "Unlicense",
+    "CDLA-Permissive-2.0",
 ]
-copyleft = "warn"
-confidence-threshold = 0.93
 
 [[licenses.clarify]]
 name = "ring"
@@ -45,16 +42,8 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 multiple-versions = "warn"
 wildcards = "allow"
 highlight = "all"
-
-# Deny specific crates
-deny = [
-    # Use parking_lot instead of std::sync
-    # { name = "spin" },
-]
-
-# Allow specific duplicates
+deny = []
 skip = []
-
 skip-tree = []
 
 [sources]

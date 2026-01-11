@@ -8,11 +8,12 @@
 //! - `Float32` (HANA REAL)
 //! - `Float64` (HANA DOUBLE)
 
+use std::sync::Arc;
+
 use arrow_array::ArrayRef;
 use arrow_array::builder::{
     Float32Builder, Float64Builder, Int16Builder, Int32Builder, Int64Builder, UInt8Builder,
 };
-use std::sync::Arc;
 
 use crate::Result;
 use crate::traits::builder::HanaCompatibleBuilder;
@@ -119,8 +120,9 @@ impl_primitive_builder!(Float64BuilderWrapper, Float64Builder, f64, DOUBLE);
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use hdbconnect::HdbValue;
+
+    use super::*;
 
     #[test]
     fn test_int32_builder_wrapper() {

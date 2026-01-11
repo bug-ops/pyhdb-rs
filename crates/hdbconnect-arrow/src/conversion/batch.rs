@@ -103,9 +103,11 @@ fn append_row_to_builders(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use arrow_schema::{DataType, Field, Schema};
     use std::sync::Arc;
+
+    use arrow_schema::{DataType, Field, Schema};
+
+    use super::*;
 
     #[test]
     fn test_empty_rows() {

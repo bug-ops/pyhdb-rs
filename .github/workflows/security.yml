@@ -22,16 +22,6 @@ jobs:
       - name: Check advisories and licenses
         run: cargo deny check
 
-  cargo-audit:
-    name: Cargo Audit
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest

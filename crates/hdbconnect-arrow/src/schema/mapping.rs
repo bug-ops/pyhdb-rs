@@ -2,8 +2,9 @@
 //!
 //! Converts HANA `ResultSet` metadata to Arrow Schema.
 
-use arrow_schema::{Field, Schema, SchemaRef};
 use std::sync::Arc;
+
+use arrow_schema::{Field, Schema, SchemaRef};
 
 /// Schema mapper for converting HANA metadata to Arrow schema.
 ///

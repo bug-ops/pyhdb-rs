@@ -39,15 +39,14 @@ pub mod types;
 #[cfg(feature = "async")]
 pub mod async_support;
 
-pub use connection::PyConnection;
-pub use cursor::PyCursor;
-pub use error::PyHdbError;
-pub use reader::PyRecordBatchReader;
-
 #[cfg(feature = "async")]
 pub use async_support::{
     AsyncPyConnection, AsyncPyCursor, PooledConnection, PreparedStatementCache, PyConnectionPool,
 };
+pub use connection::PyConnection;
+pub use cursor::PyCursor;
+pub use error::PyHdbError;
+pub use reader::PyRecordBatchReader;
 
 /// DB-API 2.0 API level.
 const APILEVEL: &str = "2.0";
