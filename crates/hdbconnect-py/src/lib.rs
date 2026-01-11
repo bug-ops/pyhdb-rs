@@ -8,10 +8,10 @@
 //! # Example
 //!
 //! ```python
-//! import hdbconnect
+//! import pyhdb_rs
 //!
 //! # Connect to HANA
-//! conn = hdbconnect.connect("hdbsql://user:pass@host:30015")
+//! conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015")
 //!
 //! # Execute query
 //! cursor = conn.cursor()
@@ -70,8 +70,12 @@ fn connect(url: &str) -> PyResult<PyConnection> {
 }
 
 /// HANA Python driver module.
+///
+/// The module is named `_core` to support maturin's nested module structure:
+/// `pyhdb_rs._core` (Rust) + `pyhdb_rs/__init__.py` (Python re-exports).
 #[pymodule]
-fn hdbconnect(m: &Bound<'_, PyModule>) -> PyResult<()> {
+#[pyo3(name = "_core")]
+fn pyhdb_rs_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // DB-API 2.0 module globals
     m.add("apilevel", APILEVEL)?;
     m.add("threadsafety", THREADSAFETY)?;
