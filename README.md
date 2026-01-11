@@ -9,7 +9,7 @@ High-performance Python driver for SAP HANA with native Arrow support.
 [![docs.rs](https://img.shields.io/docsrs/hdbconnect-arrow)](https://docs.rs/hdbconnect-arrow)
 [![PyPI](https://img.shields.io/pypi/v/pyhdb_rs.svg)](https://pypi.org/project/pyhdb_rs/)
 [![Python](https://img.shields.io/pypi/pyversions/pyhdb_rs)](https://pypi.org/project/pyhdb_rs)
-[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue)](https://github.com/bug-ops/pyhdb-rs)
+[![MSRV](https://img.shields.io/badge/MSRV-1.88-blue)](https://github.com/bug-ops/pyhdb-rs)
 [![License](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue.svg)](LICENSE-APACHE)
 
 ## Features
@@ -236,7 +236,7 @@ Benchmarks show 2x+ performance improvement over hdbcli for bulk reads.
 ## MSRV policy
 
 > [!NOTE]
-> Minimum Supported Rust Version: **1.85**. MSRV increases are minor version bumps.
+> Minimum Supported Rust Version: **1.88**. MSRV increases are minor version bumps.
 
 ## Repository
 

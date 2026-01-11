@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING**: Minimum Supported Rust Version raised from 1.85 to 1.88
+- Refactored nested if-let patterns to use let chains (Rust 1.88 feature)
+
 ## [0.1.2] - 2026-01-11
 
 ### Performance

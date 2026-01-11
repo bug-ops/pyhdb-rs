@@ -45,14 +45,13 @@ pub fn rows_to_record_batch(rows: &[hdbconnect::Row], schema: SchemaRef) -> Resu
     let num_columns = schema.fields().len();
 
     // Validate first row has correct number of columns
-    if let Some(first_row) = rows.first() {
-        let row_len = first_row.len();
-        if row_len != num_columns {
-            return Err(crate::ArrowConversionError::schema_mismatch(
-                num_columns,
-                row_len,
-            ));
-        }
+    if let Some(first_row) = rows.first()
+        && first_row.len() != num_columns
+    {
+        return Err(crate::ArrowConversionError::schema_mismatch(
+            num_columns,
+            first_row.len(),
+        ));
     }
 
     // Create builders

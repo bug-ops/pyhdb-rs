@@ -148,13 +148,13 @@ impl PyConnectionPool {
         connection_timeout: u64,
     ) -> PyResult<Self> {
         // Validate min_idle doesn't exceed max_size
-        if let Some(min) = min_idle {
-            if min > max_size {
-                return Err(PyHdbError::programming(format!(
-                    "min_idle ({min}) cannot exceed max_size ({max_size})"
-                ))
-                .into());
-            }
+        if let Some(min) = min_idle
+            && min > max_size
+        {
+            return Err(PyHdbError::programming(format!(
+                "min_idle ({min}) cannot exceed max_size ({max_size})"
+            ))
+            .into());
         }
 
         let manager = HanaConnectionManager::new(&url);
