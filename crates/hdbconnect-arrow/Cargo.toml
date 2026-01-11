@@ -1,0 +1,30 @@
+[package]
+name = "hdbconnect-arrow"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Apache Arrow integration for hdbconnect SAP HANA driver"
+keywords = ["sap", "hana", "arrow", "database", "analytics"]
+categories = ["database", "api-bindings"]
+
+[lints]
+workspace = true
+
+# Dependencies sorted ALPHABETICALLY - features only
+[dependencies]
+arrow = { workspace = true }
+arrow-array = { workspace = true }
+arrow-buffer = { workspace = true }
+arrow-data = { workspace = true }
+arrow-schema = { workspace = true }
+hdbconnect = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "conversion"
+harness = false
