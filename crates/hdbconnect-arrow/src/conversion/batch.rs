@@ -103,9 +103,11 @@ fn append_row_to_builders(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use arrow_schema::{DataType, Field, Schema};
     use std::sync::Arc;
+
+    use arrow_schema::{DataType, Field, Schema};
+
+    use super::*;
 
     #[test]
     fn test_empty_rows() {
@@ -121,20 +123,20 @@ mod tests {
         // Note: This test requires mock hdbconnect::Row implementation
         // Actual implementation would use real HANA rows
 
-        let schema = Arc::new(Schema::new(vec![
+        let _schema = Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, false),
             Field::new("name", DataType::Utf8, true),
         ]));
 
         // Mock rows would go here
         // let rows = vec![...];
-        // let batch = rows_to_record_batch(&rows, schema).unwrap();
+        // let batch = rows_to_record_batch(&rows, _schema).unwrap();
         // assert_eq!(batch.num_rows(), rows.len());
     }
 
     #[test]
     fn test_schema_mismatch() {
-        let schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
+        let _schema = Arc::new(Schema::new(vec![Field::new("id", DataType::Int32, false)]));
 
         // Mock row with wrong column count
         // This test would verify error handling

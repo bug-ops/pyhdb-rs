@@ -1,6 +1,7 @@
 """Type stubs for async Rust extension module."""
 
-from typing import Any, AsyncIterator, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 # Feature flag
 ASYNC_AVAILABLE: bool
@@ -22,11 +23,11 @@ class AsyncConnection:
         *,
         autocommit: bool = True,
         statement_cache_size: int = 0,
-    ) -> "AsyncConnection":
+    ) -> AsyncConnection:
         """Connect to HANA database asynchronously."""
         ...
 
-    def cursor(self) -> "AsyncCursor":
+    def cursor(self) -> AsyncCursor:
         """Create a new cursor."""
         ...
 
@@ -64,15 +65,15 @@ class AsyncConnection:
         """Execute query and return Polars DataFrame."""
         ...
 
-    async def __aenter__(self) -> "AsyncConnection":
+    async def __aenter__(self) -> AsyncConnection:
         """Async context manager entry."""
         ...
 
     async def __aexit__(
         self,
-        exc_type: Optional[type],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[Any],
+        exc_type: type | None,
+        exc_val: BaseException | None,
+        exc_tb: Any | None,
     ) -> bool:
         """Async context manager exit."""
         ...
@@ -95,7 +96,7 @@ class AsyncCursor:
     async def execute(
         self,
         sql: str,
-        parameters: Optional[Sequence[Any]] = None,
+        parameters: Sequence[Any] | None = None,
     ) -> None:
         """Execute a SQL query.
 
@@ -111,7 +112,7 @@ class AsyncCursor:
         """
         ...
 
-    def fetchmany(self, size: Optional[int] = None) -> None:
+    def fetchmany(self, size: int | None = None) -> None:
         """Fetch multiple rows.
 
         Raises:
@@ -131,23 +132,23 @@ class AsyncCursor:
         """Close the cursor."""
         ...
 
-    def __aiter__(self) -> "AsyncCursor":
+    def __aiter__(self) -> AsyncCursor:
         """Async iterator protocol."""
         ...
 
-    def __anext__(self) -> Optional[tuple[Any, ...]]:
+    def __anext__(self) -> tuple[Any, ...] | None:
         """Fetch next row - always returns None (StopAsyncIteration)."""
         ...
 
-    def __aenter__(self) -> "AsyncCursor":
+    def __aenter__(self) -> AsyncCursor:
         """Async context manager entry."""
         ...
 
     async def __aexit__(
         self,
-        exc_type: Optional[type],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[Any],
+        exc_type: type | None,
+        exc_val: BaseException | None,
+        exc_tb: Any | None,
     ) -> bool:
         """Async context manager exit."""
         ...
@@ -165,7 +166,7 @@ class ConnectionPool:
         """Create a new connection pool."""
         ...
 
-    async def acquire(self) -> "PooledConnection":
+    async def acquire(self) -> PooledConnection:
         """Acquire a connection from the pool."""
         ...
 
@@ -218,15 +219,15 @@ class PooledConnection:
         """Rollback the current transaction."""
         ...
 
-    def __aenter__(self) -> "PooledConnection":
+    def __aenter__(self) -> PooledConnection:
         """Async context manager entry."""
         ...
 
     async def __aexit__(
         self,
-        exc_type: Optional[type],
-        exc_val: Optional[BaseException],
-        exc_tb: Optional[Any],
+        exc_type: type | None,
+        exc_val: BaseException | None,
+        exc_tb: Any | None,
     ) -> bool:
         """Async context manager exit - returns connection to pool."""
         ...

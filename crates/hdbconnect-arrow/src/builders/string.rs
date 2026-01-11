@@ -7,11 +7,12 @@
 //! - `LargeBinary` (BLOB)
 //! - `FixedSizeBinary` (FIXED8, FIXED12, FIXED16)
 
+use std::sync::Arc;
+
 use arrow_array::ArrayRef;
 use arrow_array::builder::{
     BinaryBuilder, FixedSizeBinaryBuilder, LargeBinaryBuilder, LargeStringBuilder, StringBuilder,
 };
-use std::sync::Arc;
 
 use crate::Result;
 use crate::traits::builder::HanaCompatibleBuilder;
@@ -365,8 +366,9 @@ impl HanaCompatibleBuilder for FixedSizeBinaryBuilderWrapper {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use hdbconnect::HdbValue;
+
+    use super::*;
 
     #[test]
     fn test_string_builder() {

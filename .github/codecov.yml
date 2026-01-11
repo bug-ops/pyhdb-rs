@@ -1,0 +1,52 @@
+# Codecov configuration
+# https://docs.codecov.io/docs/codecovyml-reference
+
+coverage:
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 2%
+    patch:
+      default:
+        target: 80%
+
+  # Per-flag coverage requirements
+  flags:
+    hdbconnect-arrow:
+      paths:
+        - crates/hdbconnect-arrow/
+      carryforward: true
+    hdbconnect-py:
+      paths:
+        - crates/hdbconnect-py/
+      carryforward: true
+    python:
+      paths:
+        - python/pyhdb_rs/
+      carryforward: true
+
+flag_management:
+  default_rules:
+    carryforward: true
+  individual_flags:
+    - name: hdbconnect-arrow
+      paths:
+        - crates/hdbconnect-arrow/
+    - name: hdbconnect-py
+      paths:
+        - crates/hdbconnect-py/
+    - name: python
+      paths:
+        - python/pyhdb_rs/
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
+
+ignore:
+  - "tests/**/*"
+  - "benches/**/*"
+  - "**/*_test.rs"
+  - "**/tests.rs"

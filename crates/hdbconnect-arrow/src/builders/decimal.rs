@@ -3,9 +3,10 @@
 //! Handles HANA DECIMAL and SMALLDECIMAL types with proper precision/scale
 //! preservation using Arrow Decimal128 arrays.
 
+use std::sync::Arc;
+
 use arrow_array::ArrayRef;
 use arrow_array::builder::Decimal128Builder;
-use std::sync::Arc;
 
 use crate::Result;
 use crate::traits::builder::HanaCompatibleBuilder;

@@ -1,19 +1,25 @@
 # Build artifacts
 /target/
+*.so
+*.dylib
+*.dll
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+*.sublime-*
 
 # OS
 .DS_Store
 Thumbs.db
+*~
 
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
 .eggs/
 dist/
@@ -21,16 +27,33 @@ build/
 *.whl
 .venv/
 venv/
+.python-version
 
 # Testing
 .coverage
+coverage.xml
+lcov.info
 htmlcov/
 .pytest_cache/
 .tox/
+.nox/
+
+# Rust
+Cargo.lock.bak
 
 # Local working files
 .local/
 
 # Claude Code
 .claude/
-*.so
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Secrets (never commit!)
+credentials.json
+secrets.yaml
+*.pem
+*.key

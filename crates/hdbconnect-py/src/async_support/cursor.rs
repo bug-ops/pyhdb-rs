@@ -7,10 +7,9 @@ use std::sync::Arc;
 use pyo3::prelude::*;
 use tokio::sync::Mutex as TokioMutex;
 
-use crate::error::PyHdbError;
-
 use super::connection::{AsyncConnectionInner, SharedAsyncConnection};
 use super::pool::PooledObject;
+use crate::error::PyHdbError;
 
 enum CursorConnection {
     Direct(SharedAsyncConnection),

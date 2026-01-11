@@ -13,9 +13,7 @@ if TYPE_CHECKING:
 class TestExecuteArrow:
     """Tests for Arrow data transfer."""
 
-    def test_execute_arrow_returns_reader(
-        self, connection: pyhdb_rs.Connection
-    ) -> None:
+    def test_execute_arrow_returns_reader(self, connection: pyhdb_rs.Connection) -> None:
         """Test that execute_arrow returns a RecordBatchReader."""
         import pyhdb_rs
 
@@ -82,18 +80,14 @@ class TestExecuteArrow:
 class TestExecutePolars:
     """Tests for direct Polars integration."""
 
-    def test_execute_polars_returns_dataframe(
-        self, connection: pyhdb_rs.Connection
-    ) -> None:
+    def test_execute_polars_returns_dataframe(self, connection: pyhdb_rs.Connection) -> None:
         """Test that execute_polars returns a Polars DataFrame."""
         polars = pytest.importorskip("polars")
 
         df = connection.execute_polars("SELECT 1 AS value FROM DUMMY")
         assert isinstance(df, polars.DataFrame)
 
-    def test_execute_polars_multiple_columns(
-        self, connection: pyhdb_rs.Connection
-    ) -> None:
+    def test_execute_polars_multiple_columns(self, connection: pyhdb_rs.Connection) -> None:
         """Test execute_polars with multiple columns."""
         polars = pytest.importorskip("polars")
 

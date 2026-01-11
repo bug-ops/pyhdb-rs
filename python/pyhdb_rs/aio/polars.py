@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from . import ASYNC_AVAILABLE, connect, create_pool
+from . import ASYNC_AVAILABLE, connect
 
 if TYPE_CHECKING:
     import polars as pl
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 async def read_hana_async(
     url: str,
     sql: str,
-) -> "pl.DataFrame":
+) -> pl.DataFrame:
     """Read HANA query results into a Polars DataFrame.
 
     Creates a temporary connection for the query.
@@ -42,8 +42,7 @@ async def read_hana_async(
     """
     if not ASYNC_AVAILABLE:
         raise RuntimeError(
-            "Async support is not available. "
-            "Rebuild the package with the 'async' feature enabled."
+            "Async support is not available. Rebuild the package with the 'async' feature enabled."
         )
 
     async with await connect(url) as conn:
@@ -51,9 +50,9 @@ async def read_hana_async(
 
 
 async def read_hana_pooled(
-    pool: "ConnectionPool",
+    pool: ConnectionPool,
     sql: str,
-) -> "pl.DataFrame":
+) -> pl.DataFrame:
     """Read HANA query results into a Polars DataFrame using a pool.
 
     Uses a connection from the provided pool.

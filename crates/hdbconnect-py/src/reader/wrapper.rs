@@ -6,10 +6,10 @@ use std::sync::Arc;
 
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
+use hdbconnect_arrow::{BatchConfig, FieldMetadataExt, HanaBatchProcessor};
 use pyo3::prelude::*;
 
 use crate::error::PyHdbError;
-use hdbconnect_arrow::{BatchConfig, FieldMetadataExt, HanaBatchProcessor};
 
 /// Streams Arrow `RecordBatches` from HANA result set.
 /// Implements `__arrow_c_stream__` for zero-copy transfer.

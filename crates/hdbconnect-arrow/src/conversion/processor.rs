@@ -2,9 +2,10 @@
 //!
 //! Implements buffered batch creation with configurable batch size.
 
+use std::sync::Arc;
+
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
-use std::sync::Arc;
 
 use crate::Result;
 use crate::builders::factory::BuilderFactory;
@@ -168,8 +169,9 @@ impl HanaBatchProcessor {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use arrow_schema::{DataType, Field, Schema};
+
+    use super::*;
 
     #[test]
     fn test_processor_creation() {

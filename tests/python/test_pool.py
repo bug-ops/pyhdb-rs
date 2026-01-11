@@ -21,6 +21,7 @@ TODO(TEST): Add integration tests (require HANA):
 """
 
 import os
+
 import pytest
 
 # Check if async is available

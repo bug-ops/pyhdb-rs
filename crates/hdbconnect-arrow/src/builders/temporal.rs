@@ -10,9 +10,10 @@
 //! HANA temporal types expose their values via Display trait as ISO strings.
 //! We parse these strings to extract the numeric values for Arrow.
 
+use std::sync::Arc;
+
 use arrow_array::ArrayRef;
 use arrow_array::builder::{Date32Builder, Time64NanosecondBuilder, TimestampNanosecondBuilder};
-use std::sync::Arc;
 
 use crate::Result;
 use crate::traits::builder::HanaCompatibleBuilder;

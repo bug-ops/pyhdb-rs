@@ -56,7 +56,7 @@ async def connect(
     *,
     autocommit: bool = True,
     statement_cache_size: int = 0,
-) -> "AsyncConnection":
+) -> AsyncConnection:
     """Connect to a HANA database asynchronously.
 
     Args:
@@ -78,8 +78,7 @@ async def connect(
     """
     if not ASYNC_AVAILABLE:
         raise RuntimeError(
-            "Async support is not available. "
-            "Rebuild the package with the 'async' feature enabled."
+            "Async support is not available. Rebuild the package with the 'async' feature enabled."
         )
 
     return await AsyncConnection.connect(
@@ -94,7 +93,7 @@ def create_pool(
     *,
     max_size: int = 10,
     connection_timeout: int = 30,
-) -> "ConnectionPool":
+) -> ConnectionPool:
     """Create a connection pool.
 
     Args:
@@ -117,8 +116,7 @@ def create_pool(
     """
     if not ASYNC_AVAILABLE:
         raise RuntimeError(
-            "Async support is not available. "
-            "Rebuild the package with the 'async' feature enabled."
+            "Async support is not available. Rebuild the package with the 'async' feature enabled."
         )
 
     return ConnectionPool(
