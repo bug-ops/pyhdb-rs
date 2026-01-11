@@ -18,6 +18,7 @@ Example::
 
 from __future__ import annotations
 
+import contextlib
 import re
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -162,10 +163,8 @@ def write_hana(
         cursor = conn.cursor()
 
         if if_table_exists == "replace":
-            try:
+            with contextlib.suppress(Exception):
                 cursor.execute(f"DROP TABLE {validated_table}")
-            except Exception:
-                pass
             _create_table_from_df(cursor, validated_table, df)
 
         columns = ", ".join(f'"{col}"' for col in df.columns)

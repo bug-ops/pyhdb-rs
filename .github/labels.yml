@@ -1,0 +1,141 @@
+# Repository labels configuration
+# Use with: gh label import .github/labels.yml
+# Or manually create via GitHub UI
+
+# Type labels (from PR title prefixes)
+- name: enhancement
+  color: "a2eeef"
+  description: "New feature or request"
+
+- name: bug
+  color: "d73a4a"
+  description: "Something isn't working"
+
+- name: documentation
+  color: "0075ca"
+  description: "Improvements or additions to documentation"
+
+- name: refactor
+  color: "fbca04"
+  description: "Code refactoring without functional changes"
+
+- name: performance
+  color: "5319e7"
+  description: "Performance improvements"
+
+- name: chore
+  color: "fef2c0"
+  description: "Maintenance tasks"
+
+- name: build
+  color: "bfdadc"
+  description: "Build system or external dependencies"
+
+- name: style
+  color: "c5def5"
+  description: "Code style/formatting changes"
+
+- name: revert
+  color: "d4c5f9"
+  description: "Reverts a previous change"
+
+- name: breaking-change
+  color: "b60205"
+  description: "Introduces breaking changes"
+
+# Technology labels (from file paths)
+- name: rust
+  color: "dea584"
+  description: "Rust code changes"
+
+- name: python
+  color: "3572A5"
+  description: "Python code changes"
+
+- name: arrow
+  color: "e99695"
+  description: "Apache Arrow integration"
+
+- name: pyo3
+  color: "ffd700"
+  description: "PyO3 bindings"
+
+# Category labels (from file paths)
+- name: tests
+  color: "bfd4f2"
+  description: "Test-related changes"
+
+- name: ci
+  color: "c2e0c6"
+  description: "CI/CD configuration"
+
+- name: dependencies
+  color: "0366d6"
+  description: "Dependency updates"
+
+- name: config
+  color: "ededed"
+  description: "Configuration file changes"
+
+# Size labels (from PR size)
+- name: size/XS
+  color: "3cbf00"
+  description: "Extra small PR (1-10 lines)"
+
+- name: size/S
+  color: "5d9801"
+  description: "Small PR (11-50 lines)"
+
+- name: size/M
+  color: "7f7203"
+  description: "Medium PR (51-200 lines)"
+
+- name: size/L
+  color: "a14c05"
+  description: "Large PR (201-500 lines)"
+
+- name: size/XL
+  color: "c32607"
+  description: "Extra large PR (500+ lines)"
+
+# Issue-specific labels
+- name: triage
+  color: "d876e3"
+  description: "Needs triage"
+
+- name: question
+  color: "d876e3"
+  description: "Further information requested"
+
+- name: help wanted
+  color: "008672"
+  description: "Extra attention needed"
+
+- name: good first issue
+  color: "7057ff"
+  description: "Good for newcomers"
+
+- name: security
+  color: "ee0701"
+  description: "Security-related issue"
+
+# Component labels (from issue content)
+- name: polars
+  color: "2e4a62"
+  description: "Polars integration"
+
+- name: pandas
+  color: "130654"
+  description: "pandas integration"
+
+- name: async
+  color: "1d76db"
+  description: "Async/await support"
+
+- name: connection-pool
+  color: "0e8a16"
+  description: "Connection pooling"
+
+- name: db-api
+  color: "006b75"
+  description: "DB-API 2.0 (PEP 249)"

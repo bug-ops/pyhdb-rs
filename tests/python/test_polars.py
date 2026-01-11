@@ -80,6 +80,7 @@ class TestWriteHana:
     def test_table_name(self) -> str:
         """Generate a unique test table name."""
         import uuid
+
         return f"TEST_POLARS_{uuid.uuid4().hex[:8].upper()}"
 
     def test_write_hana_replace(
@@ -87,16 +88,18 @@ class TestWriteHana:
     ) -> None:
         """Test write_hana with if_table_exists='replace'."""
         polars = pytest.importorskip("polars")
-        import pyhdb_rs.polars as hdb
         import pyhdb_rs
+        import pyhdb_rs.polars as hdb
 
         conn = pyhdb_rs.connect(hana_uri)
 
         try:
-            df = polars.DataFrame({
-                "id": [1, 2, 3],
-                "value": [10, 20, 30],
-            })
+            df = polars.DataFrame(
+                {
+                    "id": [1, 2, 3],
+                    "value": [10, 20, 30],
+                }
+            )
 
             rows = hdb.write_hana(df, test_table_name, hana_uri, if_table_exists="replace")
             assert rows == 3
@@ -111,27 +114,29 @@ class TestWriteHana:
                 pass
             conn.close()
 
-    def test_write_hana_append(
-        self, hana_uri: str, test_table_name: str
-    ) -> None:
+    def test_write_hana_append(self, hana_uri: str, test_table_name: str) -> None:
         """Test write_hana with if_table_exists='append'."""
         polars = pytest.importorskip("polars")
-        import pyhdb_rs.polars as hdb
         import pyhdb_rs
+        import pyhdb_rs.polars as hdb
 
         conn = pyhdb_rs.connect(hana_uri)
 
         try:
-            df1 = polars.DataFrame({
-                "id": [1, 2],
-                "value": [10, 20],
-            })
+            df1 = polars.DataFrame(
+                {
+                    "id": [1, 2],
+                    "value": [10, 20],
+                }
+            )
             hdb.write_hana(df1, test_table_name, hana_uri, if_table_exists="replace")
 
-            df2 = polars.DataFrame({
-                "id": [3, 4],
-                "value": [30, 40],
-            })
+            df2 = polars.DataFrame(
+                {
+                    "id": [3, 4],
+                    "value": [30, 40],
+                }
+            )
             rows = hdb.write_hana(df2, test_table_name, hana_uri, if_table_exists="append")
             assert rows == 2
 

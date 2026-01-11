@@ -86,8 +86,9 @@ pub const fn requires_streaming(type_id: hdbconnect::TypeId) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use hdbconnect::TypeId;
+
+    use super::*;
 
     #[test]
     fn test_is_numeric() {

@@ -5,9 +5,6 @@
 
 use arrow_schema::{DataType, TimeUnit};
 
-use crate::traits::builder::HanaCompatibleBuilder;
-use crate::traits::streaming::BatchConfig;
-
 use super::boolean::BooleanBuilderWrapper;
 use super::decimal::Decimal128BuilderWrapper;
 use super::primitive::{
@@ -21,6 +18,8 @@ use super::string::{
 use super::temporal::{
     Date32BuilderWrapper, Time64NanosecondBuilderWrapper, TimestampNanosecondBuilderWrapper,
 };
+use crate::traits::builder::HanaCompatibleBuilder;
+use crate::traits::streaming::BatchConfig;
 
 /// Factory for creating type-safe Arrow builders.
 ///
@@ -165,8 +164,9 @@ impl Default for BuilderFactory {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use arrow_schema::{DataType, Field, Schema};
+
+    use super::*;
 
     #[test]
     fn test_factory_creation() {

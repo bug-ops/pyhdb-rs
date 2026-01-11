@@ -1,0 +1,74 @@
+# Configuration for actions/labeler
+# Labels PRs based on changed file paths
+# Docs: https://github.com/actions/labeler
+
+# Language/Technology labels
+rust:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "crates/**/*.rs"
+          - "Cargo.toml"
+          - "Cargo.lock"
+          - "rustfmt.toml"
+          - "deny.toml"
+
+python:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "python/**/*.py"
+          - "python/pyproject.toml"
+          - "python/ruff.toml"
+          - "tests/python/**/*.py"
+
+# Component labels
+arrow:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "crates/hdbconnect-arrow/**"
+
+pyo3:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "crates/hdbconnect-py/**"
+
+# Category labels
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+          - "*.md"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "tests/**"
+          - "**/*_test.rs"
+          - "**/*_tests.rs"
+          - "**/test_*.py"
+          - "**/tests.py"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "Cargo.toml"
+          - "Cargo.lock"
+          - "**/Cargo.toml"
+          - "python/pyproject.toml"
+          - "python/uv.lock"
+
+config:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".editorconfig"
+          - ".gitignore"
+          - "rustfmt.toml"
+          - "deny.toml"
+          - "python/ruff.toml"
+          - ".github/codecov.yml"
+          - ".github/dependabot.yml"

@@ -133,7 +133,10 @@ fn test_pool_config_clone() {
 
     assert_eq!(config.max_size, cloned.max_size);
     assert_eq!(config.min_idle, cloned.min_idle);
-    assert_eq!(config.connection_timeout_secs, cloned.connection_timeout_secs);
+    assert_eq!(
+        config.connection_timeout_secs,
+        cloned.connection_timeout_secs
+    );
     assert_eq!(config.statement_cache_size, cloned.statement_cache_size);
 }
 

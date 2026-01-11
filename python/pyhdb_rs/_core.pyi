@@ -25,7 +25,6 @@ paramstyle: Literal["qmark"]
 __version__: str
 """Package version string."""
 
-
 # =====================================================================
 # Connection
 # =====================================================================
@@ -52,7 +51,6 @@ class Connection:
 
     @autocommit.setter
     def autocommit(self, value: bool) -> None: ...
-
     @property
     def is_connected(self) -> bool:
         """Check if connection is open."""
@@ -126,16 +124,13 @@ class Connection:
         ...
 
     def __enter__(self) -> Connection: ...
-
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> Literal[False]: ...
-
     def __repr__(self) -> str: ...
-
 
 # =====================================================================
 # Cursor
@@ -180,7 +175,6 @@ class Cursor:
 
     @arraysize.setter
     def arraysize(self, value: int) -> None: ...
-
     def execute(
         self,
         sql: str,
@@ -263,20 +257,15 @@ class Cursor:
         ...
 
     def __iter__(self) -> Iterator[tuple[Any, ...]]: ...
-
     def __next__(self) -> tuple[Any, ...]: ...
-
     def __enter__(self) -> Cursor: ...
-
     def __exit__(
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> Literal[False]: ...
-
     def __repr__(self) -> str: ...
-
 
 # =====================================================================
 # RecordBatchReader
@@ -316,7 +305,6 @@ class RecordBatchReader:
 
     def __repr__(self) -> str: ...
 
-
 # =====================================================================
 # Module-level connect function
 # =====================================================================
@@ -340,80 +328,80 @@ def connect(url: str) -> Connection:
     """
     ...
 
-
 # =====================================================================
 # Exceptions (DB-API 2.0)
 # =====================================================================
 
 class Error(Exception):
     """Base class for all database errors."""
-    ...
 
+    ...
 
 class Warning(Exception):
     """Database warning."""
-    ...
 
+    ...
 
 class InterfaceError(Error):
     """Error related to the database interface.
 
     Raised for connection parameter issues, driver problems, etc.
     """
-    ...
 
+    ...
 
 class DatabaseError(Error):
     """Error related to the database.
 
     Base class for data-related errors.
     """
-    ...
 
+    ...
 
 class DataError(DatabaseError):
     """Error due to problems with processed data.
 
     Raised for type conversion issues, value overflow, etc.
     """
-    ...
 
+    ...
 
 class OperationalError(DatabaseError):
     """Error related to database operation.
 
     Raised for connection loss, timeout, authentication failure, etc.
     """
-    ...
 
+    ...
 
 class IntegrityError(DatabaseError):
     """Error when relational integrity is affected.
 
     Raised for constraint violations, duplicate keys, etc.
     """
-    ...
 
+    ...
 
 class InternalError(DatabaseError):
     """Internal database error.
 
     Raised for unexpected internal errors.
     """
-    ...
 
+    ...
 
 class ProgrammingError(DatabaseError):
     """Error in programming logic.
 
     Raised for SQL syntax errors, missing tables, etc.
     """
-    ...
 
+    ...
 
 class NotSupportedError(DatabaseError):
     """Feature not supported by database.
 
     Raised when using features not implemented or supported.
     """
+
     ...

@@ -6,12 +6,11 @@ use pyo3::prelude::*;
 use pyo3::types::PyType;
 use tokio::sync::Mutex as TokioMutex;
 
+use super::cursor::AsyncPyCursor;
+use super::statement_cache::PreparedStatementCache;
 use crate::connection::ConnectionBuilder;
 use crate::error::PyHdbError;
 use crate::reader::PyRecordBatchReader;
-
-use super::cursor::AsyncPyCursor;
-use super::statement_cache::PreparedStatementCache;
 
 pub type SharedAsyncConnection = Arc<TokioMutex<AsyncConnectionInner>>;
 
@@ -229,23 +228,23 @@ impl AsyncPyConnection {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let guard = inner.lock().await;
             match &*guard {
-                AsyncConnectionInner::Connected { statement_cache, .. } => {
-                    statement_cache.as_ref().map_or_else(
-                        || Python::attach(|py| Ok(py.None().into_any())),
-                        |cache| {
-                            let stats = cache.stats();
-                            Python::attach(|py| {
-                                let dict = pyo3::types::PyDict::new(py);
-                                dict.set_item("hits", stats.hits)?;
-                                dict.set_item("misses", stats.misses)?;
-                                dict.set_item("hit_rate", stats.hit_rate)?;
-                                dict.set_item("size", stats.size)?;
-                                dict.set_item("capacity", stats.capacity)?;
-                                Ok(dict.unbind().into_any())
-                            })
-                        },
-                    )
-                }
+                AsyncConnectionInner::Connected {
+                    statement_cache, ..
+                } => statement_cache.as_ref().map_or_else(
+                    || Python::attach(|py| Ok(py.None().into_any())),
+                    |cache| {
+                        let stats = cache.stats();
+                        Python::attach(|py| {
+                            let dict = pyo3::types::PyDict::new(py);
+                            dict.set_item("hits", stats.hits)?;
+                            dict.set_item("misses", stats.misses)?;
+                            dict.set_item("hit_rate", stats.hit_rate)?;
+                            dict.set_item("size", stats.size)?;
+                            dict.set_item("capacity", stats.capacity)?;
+                            Ok(dict.unbind().into_any())
+                        })
+                    },
+                ),
                 AsyncConnectionInner::Disconnected => {
                     Err(PyHdbError::operational("connection is closed").into())
                 }
