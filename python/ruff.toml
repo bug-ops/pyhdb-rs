@@ -33,6 +33,12 @@ ignore = [
     "F841",   # unused variables (importorskip pattern)
     "SIM105", # contextlib.suppress (explicit try-except is clearer)
 ]
+"**/test_*.py" = [
+    "ARG",    # unused arguments in tests
+    "S101",   # assert in tests
+    "F841",   # unused variables (importorskip pattern)
+    "SIM105", # contextlib.suppress (explicit try-except is clearer)
+]
 
 [format]
 quote-style = "double"
