@@ -210,23 +210,20 @@ fn categorize_hana_error(msg: String) -> PyHdbError {
 
 /// Extract HANA error code from error message.
 fn extract_hana_error_code(msg: &str) -> Option<i32> {
-    // Try to find pattern like "[123]" or "Error 123:"
-    if let Some(start) = msg.find('[') {
-        if let Some(end) = msg[start..].find(']') {
-            if let Ok(code) = msg[start + 1..start + end].parse::<i32>() {
-                return Some(code);
-            }
-        }
+    // Pattern: "[123]"
+    if let Some(start) = msg.find('[')
+        && let Some(end) = msg[start..].find(']')
+        && let Ok(code) = msg[start + 1..start + end].parse::<i32>()
+    {
+        return Some(code);
     }
 
-    // Try "Error 123:" pattern
-    if let Some(pos) = msg.find("Error ") {
-        let rest = &msg[pos + 6..];
-        if let Some(colon) = rest.find(':') {
-            if let Ok(code) = rest[..colon].trim().parse::<i32>() {
-                return Some(code);
-            }
-        }
+    // Pattern: "Error 123:"
+    if let Some(pos) = msg.find("Error ")
+        && let Some(colon) = msg[pos + 6..].find(':')
+        && let Ok(code) = msg[pos + 6..pos + 6 + colon].trim().parse::<i32>()
+    {
+        return Some(code);
     }
 
     None
