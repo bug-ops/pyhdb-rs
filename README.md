@@ -11,14 +11,6 @@ High-performance Python driver for SAP HANA with native Arrow support.
 [![MSRV](https://img.shields.io/badge/MSRV-1.85-blue)](https://github.com/bug-ops/pyhdb-rs)
 [![License](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue.svg)](LICENSE-APACHE)
 
-**Coverage by component:**
-
-| Component | Coverage |
-|-----------|----------|
-| hdbconnect-arrow | [![codecov](https://codecov.io/gh/bug-ops/pyhdb-rs/graph/badge.svg?token=75RR61N6FI&flag=hdbconnect-arrow)](https://codecov.io/gh/bug-ops/pyhdb-rs) |
-| hdbconnect-py | [![codecov](https://codecov.io/gh/bug-ops/pyhdb-rs/graph/badge.svg?token=75RR61N6FI&flag=hdbconnect-py)](https://codecov.io/gh/bug-ops/pyhdb-rs) |
-| python | [![codecov](https://codecov.io/gh/bug-ops/pyhdb-rs/graph/badge.svg?token=75RR61N6FI&flag=python)](https://codecov.io/gh/bug-ops/pyhdb-rs) |
-
 ## Features
 
 - Full DB-API 2.0 (PEP 249) compliance

@@ -91,18 +91,20 @@ impl SchemaFromHana for Schema {
 
 #[cfg(test)]
 mod tests {
+    use std::mem::size_of_val;
+
     use super::*;
 
     #[test]
     fn test_schema_mapper_new() {
         let mapper = SchemaMapper::new();
         // Just verify it can be created
-        assert!(std::mem::size_of_val(&mapper) == 0); // Zero-sized type
+        assert!(size_of_val(&mapper) == 0); // Zero-sized type
     }
 
     #[test]
     fn test_schema_mapper_default() {
         let mapper = SchemaMapper::default();
-        assert!(std::mem::size_of_val(&mapper) == 0);
+        assert!(size_of_val(&mapper) == 0);
     }
 }

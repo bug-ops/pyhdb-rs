@@ -5,6 +5,7 @@ resolver = "3"
 [workspace.package]
 edition = "2024"
 rust-version = "1.85"
+version = "0.1.0"
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/bug-ops/pyhdb-rs"
 authors = ["Andrei G <andrei.g@my.com>"]
@@ -40,6 +41,7 @@ criterion = "0.8"
 deadpool = { version = "0.12", default-features = false }
 hdbconnect = "0.32"
 hdbconnect_async = "0.32"
+hdbconnect-arrow = { path = "../hdbconnect-arrow", version = "0.1.0" }
 lru = "0.12"
 parking_lot = "0.12.5"
 pyo3 = "0.27"

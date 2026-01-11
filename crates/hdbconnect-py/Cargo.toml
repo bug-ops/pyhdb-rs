@@ -1,6 +1,6 @@
 [package]
 name = "hdbconnect-py"
-version = "0.1.0"
+version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -32,7 +32,7 @@ async = [
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 hdbconnect = { workspace = true }
-hdbconnect-arrow = { path = "../hdbconnect-arrow" }
+hdbconnect-arrow = { workspace = true }
 parking_lot = { workspace = true }
 pyo3 = { workspace = true, features = ["extension-module", "abi3-py311"] }
 pyo3-arrow = { workspace = true }
