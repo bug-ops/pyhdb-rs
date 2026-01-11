@@ -267,11 +267,47 @@ impl FromHanaValue for Vec<u8> {
 
 #[cfg(test)]
 mod tests {
+    use hdbconnect::HdbValue;
+
     use super::*;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Arrow Type Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_i8_arrow_type() {
+        assert_eq!(i8::arrow_type(), DataType::Int8);
+    }
+
+    #[test]
+    fn test_i16_arrow_type() {
+        assert_eq!(i16::arrow_type(), DataType::Int16);
+    }
 
     #[test]
     fn test_i32_arrow_type() {
         assert_eq!(i32::arrow_type(), DataType::Int32);
+    }
+
+    #[test]
+    fn test_i64_arrow_type() {
+        assert_eq!(i64::arrow_type(), DataType::Int64);
+    }
+
+    #[test]
+    fn test_f32_arrow_type() {
+        assert_eq!(f32::arrow_type(), DataType::Float32);
+    }
+
+    #[test]
+    fn test_f64_arrow_type() {
+        assert_eq!(f64::arrow_type(), DataType::Float64);
+    }
+
+    #[test]
+    fn test_bool_arrow_type() {
+        assert_eq!(bool::arrow_type(), DataType::Boolean);
     }
 
     #[test]
@@ -280,7 +316,302 @@ mod tests {
     }
 
     #[test]
-    fn test_f64_arrow_type() {
-        assert_eq!(f64::arrow_type(), DataType::Float64);
+    fn test_vec_u8_arrow_type() {
+        assert_eq!(Vec::<u8>::arrow_type(), DataType::Binary);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // i8 Conversion Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_i8_from_tinyint() {
+        let value = HdbValue::TINYINT(42);
+        let result = i8::from_hana(&value).unwrap();
+        assert_eq!(result, 42);
+    }
+
+    #[test]
+    fn test_i8_from_smallint() {
+        let value = HdbValue::SMALLINT(100);
+        let result = i8::from_hana(&value).unwrap();
+        assert_eq!(result, 100);
+    }
+
+    #[test]
+    fn test_i8_from_smallint_out_of_range() {
+        let value = HdbValue::SMALLINT(1000);
+        let result = i8::from_hana(&value);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_i8_from_int() {
+        let value = HdbValue::INT(50);
+        let result = i8::from_hana(&value).unwrap();
+        assert_eq!(result, 50);
+    }
+
+    #[test]
+    fn test_i8_from_int_out_of_range() {
+        let value = HdbValue::INT(500);
+        let result = i8::from_hana(&value);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_i8_from_unexpected_type() {
+        let value = HdbValue::STRING("hello".to_string());
+        let result = i8::from_hana(&value);
+        assert!(result.is_err());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // i16 Conversion Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_i16_from_tinyint() {
+        let value = HdbValue::TINYINT(255);
+        let result = i16::from_hana(&value).unwrap();
+        assert_eq!(result, 255);
+    }
+
+    #[test]
+    fn test_i16_from_smallint() {
+        let value = HdbValue::SMALLINT(1000);
+        let result = i16::from_hana(&value).unwrap();
+        assert_eq!(result, 1000);
+    }
+
+    #[test]
+    fn test_i16_from_int() {
+        let value = HdbValue::INT(100);
+        let result = i16::from_hana(&value).unwrap();
+        assert_eq!(result, 100);
+    }
+
+    #[test]
+    fn test_i16_from_int_out_of_range() {
+        let value = HdbValue::INT(100_000);
+        let result = i16::from_hana(&value);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_i16_from_unexpected_type() {
+        let value = HdbValue::DOUBLE(3.14);
+        let result = i16::from_hana(&value);
+        assert!(result.is_err());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // i32 Conversion Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_i32_from_tinyint() {
+        let value = HdbValue::TINYINT(128);
+        let result = i32::from_hana(&value).unwrap();
+        assert_eq!(result, 128);
+    }
+
+    #[test]
+    fn test_i32_from_smallint() {
+        let value = HdbValue::SMALLINT(-1000);
+        let result = i32::from_hana(&value).unwrap();
+        assert_eq!(result, -1000);
+    }
+
+    #[test]
+    fn test_i32_from_int() {
+        let value = HdbValue::INT(2_000_000);
+        let result = i32::from_hana(&value).unwrap();
+        assert_eq!(result, 2_000_000);
+    }
+
+    #[test]
+    fn test_i32_from_bigint() {
+        let value = HdbValue::BIGINT(1_000_000);
+        let result = i32::from_hana(&value).unwrap();
+        assert_eq!(result, 1_000_000);
+    }
+
+    #[test]
+    fn test_i32_from_bigint_out_of_range() {
+        let value = HdbValue::BIGINT(i64::MAX);
+        let result = i32::from_hana(&value);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_i32_from_unexpected_type() {
+        let value = HdbValue::BOOLEAN(true);
+        let result = i32::from_hana(&value);
+        assert!(result.is_err());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // i64 Conversion Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_i64_from_tinyint() {
+        let value = HdbValue::TINYINT(200);
+        let result = i64::from_hana(&value).unwrap();
+        assert_eq!(result, 200);
+    }
+
+    #[test]
+    fn test_i64_from_smallint() {
+        let value = HdbValue::SMALLINT(30000);
+        let result = i64::from_hana(&value).unwrap();
+        assert_eq!(result, 30000);
+    }
+
+    #[test]
+    fn test_i64_from_int() {
+        let value = HdbValue::INT(-2_000_000);
+        let result = i64::from_hana(&value).unwrap();
+        assert_eq!(result, -2_000_000);
+    }
+
+    #[test]
+    fn test_i64_from_bigint() {
+        let value = HdbValue::BIGINT(9_000_000_000_000);
+        let result = i64::from_hana(&value).unwrap();
+        assert_eq!(result, 9_000_000_000_000);
+    }
+
+    #[test]
+    fn test_i64_from_unexpected_type() {
+        let value = HdbValue::REAL(1.5);
+        let result = i64::from_hana(&value);
+        assert!(result.is_err());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // f32 Conversion Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_f32_from_real() {
+        let value = HdbValue::REAL(3.14);
+        let result = f32::from_hana(&value).unwrap();
+        assert!((result - 3.14).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_f32_from_double() {
+        let value = HdbValue::DOUBLE(2.718);
+        let result = f32::from_hana(&value).unwrap();
+        assert!((result - 2.718).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_f32_from_unexpected_type() {
+        let value = HdbValue::INT(42);
+        let result = f32::from_hana(&value);
+        assert!(result.is_err());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // f64 Conversion Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_f64_from_real() {
+        let value = HdbValue::REAL(1.5);
+        let result = f64::from_hana(&value).unwrap();
+        assert!((result - 1.5).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_f64_from_double() {
+        let value = HdbValue::DOUBLE(std::f64::consts::PI);
+        let result = f64::from_hana(&value).unwrap();
+        assert!((result - std::f64::consts::PI).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_f64_from_unexpected_type() {
+        let value = HdbValue::BIGINT(100);
+        let result = f64::from_hana(&value);
+        assert!(result.is_err());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // bool Conversion Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_bool_from_true() {
+        let value = HdbValue::BOOLEAN(true);
+        let result = bool::from_hana(&value).unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn test_bool_from_false() {
+        let value = HdbValue::BOOLEAN(false);
+        let result = bool::from_hana(&value).unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_bool_from_unexpected_type() {
+        let value = HdbValue::INT(1);
+        let result = bool::from_hana(&value);
+        assert!(result.is_err());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // String Conversion Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_string_from_string() {
+        let value = HdbValue::STRING("hello world".to_string());
+        let result = String::from_hana(&value).unwrap();
+        assert_eq!(result, "hello world");
+    }
+
+    #[test]
+    fn test_string_from_empty() {
+        let value = HdbValue::STRING(String::new());
+        let result = String::from_hana(&value).unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_string_from_other_type() {
+        let value = HdbValue::INT(42);
+        let result = String::from_hana(&value).unwrap();
+        assert!(result.contains("INT"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Vec<u8> Conversion Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_vec_u8_from_binary() {
+        let value = HdbValue::BINARY(vec![0x01, 0x02, 0x03]);
+        let result = Vec::<u8>::from_hana(&value).unwrap();
+        assert_eq!(result, vec![0x01, 0x02, 0x03]);
+    }
+
+    #[test]
+    fn test_vec_u8_from_empty_binary() {
+        let value = HdbValue::BINARY(vec![]);
+        let result = Vec::<u8>::from_hana(&value).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_vec_u8_from_unexpected_type() {
+        let value = HdbValue::STRING("hello".to_string());
+        let result = Vec::<u8>::from_hana(&value);
+        assert!(result.is_err());
     }
 }

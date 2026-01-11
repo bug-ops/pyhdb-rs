@@ -366,51 +366,319 @@ impl HanaCompatibleBuilder for FixedSizeBinaryBuilderWrapper {
 
 #[cfg(test)]
 mod tests {
+    use arrow_array::{Array, BinaryArray, FixedSizeBinaryArray, LargeBinaryArray, LargeStringArray, StringArray};
     use hdbconnect::HdbValue;
 
     use super::*;
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // StringBuilderWrapper Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
     #[test]
-    fn test_string_builder() {
+    fn test_string_builder_new() {
+        let builder = StringBuilderWrapper::new(10, 100);
+        assert_eq!(builder.len(), 0);
+        assert!(builder.capacity().is_none());
+    }
+
+    #[test]
+    fn test_string_builder_default_capacity() {
+        let builder = StringBuilderWrapper::default_capacity();
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_string_builder_append_string() {
         let mut builder = StringBuilderWrapper::new(10, 100);
-
-        builder
-            .append_hana_value(&HdbValue::STRING("hello".to_string()))
-            .unwrap();
-        builder.append_null();
-        builder
-            .append_hana_value(&HdbValue::STRING("world".to_string()))
-            .unwrap();
-
-        assert_eq!(builder.len(), 3);
-        let array = builder.finish();
-        assert_eq!(array.len(), 3);
+        builder.append_hana_value(&HdbValue::STRING("hello".to_string())).unwrap();
+        assert_eq!(builder.len(), 1);
     }
 
     #[test]
-    fn test_binary_builder() {
+    fn test_string_builder_append_null() {
+        let mut builder = StringBuilderWrapper::new(10, 100);
+        builder.append_null();
+        assert_eq!(builder.len(), 1);
+
+        let array = builder.finish();
+        let string_array = array.as_any().downcast_ref::<StringArray>().unwrap();
+        assert!(string_array.is_null(0));
+    }
+
+    #[test]
+    fn test_string_builder_append_non_string_type() {
+        let mut builder = StringBuilderWrapper::new(10, 100);
+        builder.append_hana_value(&HdbValue::INT(42)).unwrap();
+        assert_eq!(builder.len(), 1);
+
+        let array = builder.finish();
+        let string_array = array.as_any().downcast_ref::<StringArray>().unwrap();
+        assert!(string_array.value(0).contains("INT"));
+    }
+
+    #[test]
+    fn test_string_builder_finish_and_reuse() {
+        let mut builder = StringBuilderWrapper::new(10, 100);
+        builder.append_hana_value(&HdbValue::STRING("first".to_string())).unwrap();
+        let _array1 = builder.finish();
+        assert_eq!(builder.len(), 0);
+
+        builder.append_hana_value(&HdbValue::STRING("second".to_string())).unwrap();
+        let array2 = builder.finish();
+        assert_eq!(array2.len(), 1);
+    }
+
+    #[test]
+    fn test_string_builder_empty_string() {
+        let mut builder = StringBuilderWrapper::new(10, 100);
+        builder.append_hana_value(&HdbValue::STRING(String::new())).unwrap();
+
+        let array = builder.finish();
+        let string_array = array.as_any().downcast_ref::<StringArray>().unwrap();
+        assert_eq!(string_array.value(0), "");
+    }
+
+    #[test]
+    fn test_string_builder_unicode() {
+        let mut builder = StringBuilderWrapper::new(10, 1000);
+        builder.append_hana_value(&HdbValue::STRING("日本語テスト".to_string())).unwrap();
+        builder.append_hana_value(&HdbValue::STRING("émojis: 🚀🎉".to_string())).unwrap();
+
+        let array = builder.finish();
+        let string_array = array.as_any().downcast_ref::<StringArray>().unwrap();
+        assert_eq!(string_array.value(0), "日本語テスト");
+        assert_eq!(string_array.value(1), "émojis: 🚀🎉");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LargeStringBuilderWrapper Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_large_string_builder_new() {
+        let builder = LargeStringBuilderWrapper::new(10, 1000);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_large_string_builder_default_capacity() {
+        let builder = LargeStringBuilderWrapper::default_capacity();
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_large_string_builder_append_string() {
+        let mut builder = LargeStringBuilderWrapper::new(10, 1000);
+        builder.append_hana_value(&HdbValue::STRING("large text".to_string())).unwrap();
+
+        let array = builder.finish();
+        let large_string_array = array.as_any().downcast_ref::<LargeStringArray>().unwrap();
+        assert_eq!(large_string_array.value(0), "large text");
+    }
+
+    #[test]
+    fn test_large_string_builder_append_null() {
+        let mut builder = LargeStringBuilderWrapper::new(10, 1000);
+        builder.append_null();
+
+        let array = builder.finish();
+        let large_string_array = array.as_any().downcast_ref::<LargeStringArray>().unwrap();
+        assert!(large_string_array.is_null(0));
+    }
+
+    #[test]
+    fn test_large_string_builder_append_non_string_type() {
+        let mut builder = LargeStringBuilderWrapper::new(10, 1000);
+        builder.append_hana_value(&HdbValue::BIGINT(123456789)).unwrap();
+
+        let array = builder.finish();
+        let large_string_array = array.as_any().downcast_ref::<LargeStringArray>().unwrap();
+        assert!(large_string_array.value(0).contains("BIGINT"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // BinaryBuilderWrapper Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_binary_builder_new() {
+        let builder = BinaryBuilderWrapper::new(10, 100);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_binary_builder_default_capacity() {
+        let builder = BinaryBuilderWrapper::default_capacity();
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_binary_builder_append_binary() {
         let mut builder = BinaryBuilderWrapper::new(10, 100);
-
-        builder
-            .append_hana_value(&HdbValue::BINARY(vec![1, 2, 3]))
-            .unwrap();
-        builder.append_null();
+        builder.append_hana_value(&HdbValue::BINARY(vec![1, 2, 3])).unwrap();
 
         let array = builder.finish();
-        assert_eq!(array.len(), 2);
+        let binary_array = array.as_any().downcast_ref::<BinaryArray>().unwrap();
+        assert_eq!(binary_array.value(0), &[1, 2, 3]);
     }
 
     #[test]
-    fn test_fixed_size_binary_builder() {
-        let mut builder = FixedSizeBinaryBuilderWrapper::new(10, 4);
+    fn test_binary_builder_append_null() {
+        let mut builder = BinaryBuilderWrapper::new(10, 100);
+        builder.append_null();
 
-        builder
-            .append_hana_value(&HdbValue::BINARY(vec![1, 2, 3, 4]))
-            .unwrap();
+        let array = builder.finish();
+        let binary_array = array.as_any().downcast_ref::<BinaryArray>().unwrap();
+        assert!(binary_array.is_null(0));
+    }
 
-        // Wrong size should error
-        let result = builder.append_hana_value(&HdbValue::BINARY(vec![1, 2]));
+    #[test]
+    fn test_binary_builder_append_geometry() {
+        let mut builder = BinaryBuilderWrapper::new(10, 100);
+        builder.append_hana_value(&HdbValue::GEOMETRY(vec![0x00, 0x01, 0x02])).unwrap();
+
+        let array = builder.finish();
+        assert_eq!(array.len(), 1);
+    }
+
+    #[test]
+    fn test_binary_builder_append_point() {
+        let mut builder = BinaryBuilderWrapper::new(10, 100);
+        builder.append_hana_value(&HdbValue::POINT(vec![0xAB, 0xCD])).unwrap();
+
+        let array = builder.finish();
+        assert_eq!(array.len(), 1);
+    }
+
+    #[test]
+    fn test_binary_builder_reject_string() {
+        let mut builder = BinaryBuilderWrapper::new(10, 100);
+        let result = builder.append_hana_value(&HdbValue::STRING("text".to_string()));
         assert!(result.is_err());
         assert!(result.unwrap_err().is_value_conversion());
+    }
+
+    #[test]
+    fn test_binary_builder_empty_binary() {
+        let mut builder = BinaryBuilderWrapper::new(10, 100);
+        builder.append_hana_value(&HdbValue::BINARY(vec![])).unwrap();
+
+        let array = builder.finish();
+        let binary_array = array.as_any().downcast_ref::<BinaryArray>().unwrap();
+        assert!(binary_array.value(0).is_empty());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // LargeBinaryBuilderWrapper Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_large_binary_builder_new() {
+        let builder = LargeBinaryBuilderWrapper::new(10, 1000);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_large_binary_builder_default_capacity() {
+        let builder = LargeBinaryBuilderWrapper::default_capacity();
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_large_binary_builder_append_binary() {
+        let mut builder = LargeBinaryBuilderWrapper::new(10, 1000);
+        builder.append_hana_value(&HdbValue::BINARY(vec![1, 2, 3, 4, 5])).unwrap();
+
+        let array = builder.finish();
+        let large_binary_array = array.as_any().downcast_ref::<LargeBinaryArray>().unwrap();
+        assert_eq!(large_binary_array.value(0), &[1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_large_binary_builder_append_null() {
+        let mut builder = LargeBinaryBuilderWrapper::new(10, 1000);
+        builder.append_null();
+
+        let array = builder.finish();
+        let large_binary_array = array.as_any().downcast_ref::<LargeBinaryArray>().unwrap();
+        assert!(large_binary_array.is_null(0));
+    }
+
+    #[test]
+    fn test_large_binary_builder_reject_string() {
+        let mut builder = LargeBinaryBuilderWrapper::new(10, 1000);
+        let result = builder.append_hana_value(&HdbValue::STRING("text".to_string()));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().is_value_conversion());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // FixedSizeBinaryBuilderWrapper Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_fixed_size_binary_builder_new() {
+        let builder = FixedSizeBinaryBuilderWrapper::new(10, 4);
+        assert_eq!(builder.len(), 0);
+        assert_eq!(builder.byte_width, 4);
+    }
+
+    #[test]
+    fn test_fixed_size_binary_builder_correct_size() {
+        let mut builder = FixedSizeBinaryBuilderWrapper::new(10, 4);
+        builder.append_hana_value(&HdbValue::BINARY(vec![1, 2, 3, 4])).unwrap();
+
+        let array = builder.finish();
+        let fixed_binary = array.as_any().downcast_ref::<FixedSizeBinaryArray>().unwrap();
+        assert_eq!(fixed_binary.value(0), &[1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn test_fixed_size_binary_builder_wrong_size_smaller() {
+        let mut builder = FixedSizeBinaryBuilderWrapper::new(10, 4);
+        let result = builder.append_hana_value(&HdbValue::BINARY(vec![1, 2]));
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.is_value_conversion());
+        assert!(err.to_string().contains("expected 4 bytes"));
+    }
+
+    #[test]
+    fn test_fixed_size_binary_builder_wrong_size_larger() {
+        let mut builder = FixedSizeBinaryBuilderWrapper::new(10, 4);
+        let result = builder.append_hana_value(&HdbValue::BINARY(vec![1, 2, 3, 4, 5, 6]));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_fixed_size_binary_builder_append_null() {
+        let mut builder = FixedSizeBinaryBuilderWrapper::new(10, 4);
+        builder.append_null();
+
+        let array = builder.finish();
+        let fixed_binary = array.as_any().downcast_ref::<FixedSizeBinaryArray>().unwrap();
+        assert!(fixed_binary.is_null(0));
+    }
+
+    #[test]
+    fn test_fixed_size_binary_builder_reject_non_binary() {
+        let mut builder = FixedSizeBinaryBuilderWrapper::new(10, 4);
+        let result = builder.append_hana_value(&HdbValue::INT(42));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().is_value_conversion());
+    }
+
+    #[test]
+    fn test_fixed_size_binary_builder_different_widths() {
+        // Test with byte_width = 8
+        let mut builder8 = FixedSizeBinaryBuilderWrapper::new(10, 8);
+        builder8.append_hana_value(&HdbValue::BINARY(vec![1, 2, 3, 4, 5, 6, 7, 8])).unwrap();
+        assert_eq!(builder8.len(), 1);
+
+        // Test with byte_width = 16
+        let mut builder16 = FixedSizeBinaryBuilderWrapper::new(10, 16);
+        builder16.append_hana_value(&HdbValue::BINARY(vec![0; 16])).unwrap();
+        assert_eq!(builder16.len(), 1);
     }
 }

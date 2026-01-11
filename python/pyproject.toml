@@ -52,6 +52,7 @@ Changelog = "https://github.com/bug-ops/pyhdb-rs/blob/main/CHANGELOG.md"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+strip = true
 python-source = "."
 module-name = "pyhdb_rs._core"
 manifest-path = "../crates/hdbconnect-py/Cargo.toml"

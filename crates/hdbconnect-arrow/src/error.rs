@@ -222,46 +222,220 @@ pub type Result<T> = std::result::Result<T, ArrowConversionError>;
 mod tests {
     use super::*;
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Constructor Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
     #[test]
-    fn test_error_creation() {
+    fn test_unsupported_type_creation() {
         let err = ArrowConversionError::unsupported_type(42);
         assert!(err.is_unsupported_type());
         assert!(!err.is_schema_mismatch());
+        assert!(!err.is_value_conversion());
+        assert!(!err.is_decimal_overflow());
+        assert!(!err.is_arrow_error());
+        assert!(!err.is_hdbconnect_error());
+        assert!(!err.is_lob_streaming());
+        assert!(!err.is_invalid_precision());
+        assert!(!err.is_invalid_scale());
     }
 
     #[test]
-    fn test_schema_mismatch() {
+    fn test_schema_mismatch_creation() {
         let err = ArrowConversionError::schema_mismatch(5, 3);
         assert!(err.is_schema_mismatch());
+        assert!(!err.is_unsupported_type());
         assert!(err.to_string().contains("expected 5 columns, got 3"));
     }
 
     #[test]
-    fn test_value_conversion() {
+    fn test_value_conversion_creation() {
         let err = ArrowConversionError::value_conversion("col1", "invalid integer");
         assert!(err.is_value_conversion());
+        assert!(!err.is_unsupported_type());
         assert!(err.to_string().contains("col1"));
+        assert!(err.to_string().contains("invalid integer"));
     }
 
     #[test]
-    fn test_decimal_overflow() {
+    fn test_decimal_overflow_creation() {
         let err = ArrowConversionError::decimal_overflow(38, 10);
         assert!(err.is_decimal_overflow());
+        assert!(!err.is_unsupported_type());
+        assert!(err.to_string().contains("precision 38"));
+        assert!(err.to_string().contains("scale 10"));
     }
+
+    #[test]
+    fn test_lob_streaming_creation() {
+        let err = ArrowConversionError::lob_streaming("connection lost");
+        assert!(err.is_lob_streaming());
+        assert!(!err.is_unsupported_type());
+        assert!(err.to_string().contains("LOB streaming error"));
+        assert!(err.to_string().contains("connection lost"));
+    }
+
+    #[test]
+    fn test_invalid_precision_creation() {
+        let err = ArrowConversionError::invalid_precision("precision must be positive");
+        assert!(err.is_invalid_precision());
+        assert!(!err.is_unsupported_type());
+        assert!(err.to_string().contains("invalid precision"));
+    }
+
+    #[test]
+    fn test_invalid_scale_creation() {
+        let err = ArrowConversionError::invalid_scale("scale exceeds precision");
+        assert!(err.is_invalid_scale());
+        assert!(!err.is_unsupported_type());
+        assert!(err.to_string().contains("invalid scale"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // From Conversion Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_from_arrow_error() {
+        let arrow_err = arrow_schema::ArrowError::SchemaError("test error".to_string());
+        let err: ArrowConversionError = arrow_err.into();
+        assert!(err.is_arrow_error());
+        assert!(!err.is_unsupported_type());
+        assert!(err.to_string().contains("arrow error"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Display and Debug Tests
+    // ═══════════════════════════════════════════════════════════════════════════
 
     #[test]
     fn test_error_debug() {
         let err = ArrowConversionError::unsupported_type(99);
-        // Debug should be implemented
         let debug_str = format!("{err:?}");
         assert!(debug_str.contains("ArrowConversionError"));
+        assert!(debug_str.contains("UnsupportedType"));
     }
 
     #[test]
-    fn test_error_display() {
-        let err = ArrowConversionError::lob_streaming("connection lost");
+    fn test_unsupported_type_display() {
+        let err = ArrowConversionError::unsupported_type(127);
         let display = err.to_string();
-        assert!(display.contains("LOB streaming error"));
-        assert!(display.contains("connection lost"));
+        assert!(display.contains("unsupported HANA type"));
+        assert!(display.contains("127"));
+    }
+
+    #[test]
+    fn test_schema_mismatch_display() {
+        let err = ArrowConversionError::schema_mismatch(10, 5);
+        let display = err.to_string();
+        assert!(display.contains("schema mismatch"));
+        assert!(display.contains("expected 10 columns"));
+        assert!(display.contains("got 5"));
+    }
+
+    #[test]
+    fn test_value_conversion_display() {
+        let err = ArrowConversionError::value_conversion("my_column", "parse error");
+        let display = err.to_string();
+        assert!(display.contains("value conversion failed"));
+        assert!(display.contains("my_column"));
+        assert!(display.contains("parse error"));
+    }
+
+    #[test]
+    fn test_decimal_overflow_display() {
+        let err = ArrowConversionError::decimal_overflow(50, 20);
+        let display = err.to_string();
+        assert!(display.contains("decimal overflow"));
+        assert!(display.contains("precision 50"));
+        assert!(display.contains("scale 20"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Predicate Exhaustive Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_all_predicates_false_for_unsupported_type() {
+        let err = ArrowConversionError::unsupported_type(1);
+        assert!(err.is_unsupported_type());
+        assert!(!err.is_schema_mismatch());
+        assert!(!err.is_value_conversion());
+        assert!(!err.is_decimal_overflow());
+        assert!(!err.is_arrow_error());
+        assert!(!err.is_hdbconnect_error());
+        assert!(!err.is_lob_streaming());
+        assert!(!err.is_invalid_precision());
+        assert!(!err.is_invalid_scale());
+    }
+
+    #[test]
+    fn test_all_predicates_false_for_schema_mismatch() {
+        let err = ArrowConversionError::schema_mismatch(1, 2);
+        assert!(!err.is_unsupported_type());
+        assert!(err.is_schema_mismatch());
+        assert!(!err.is_value_conversion());
+        assert!(!err.is_decimal_overflow());
+        assert!(!err.is_arrow_error());
+        assert!(!err.is_hdbconnect_error());
+        assert!(!err.is_lob_streaming());
+        assert!(!err.is_invalid_precision());
+        assert!(!err.is_invalid_scale());
+    }
+
+    #[test]
+    fn test_all_predicates_false_for_lob_streaming() {
+        let err = ArrowConversionError::lob_streaming("test");
+        assert!(!err.is_unsupported_type());
+        assert!(!err.is_schema_mismatch());
+        assert!(!err.is_value_conversion());
+        assert!(!err.is_decimal_overflow());
+        assert!(!err.is_arrow_error());
+        assert!(!err.is_hdbconnect_error());
+        assert!(err.is_lob_streaming());
+        assert!(!err.is_invalid_precision());
+        assert!(!err.is_invalid_scale());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Edge Case Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_empty_column_name() {
+        let err = ArrowConversionError::value_conversion("", "error");
+        assert!(err.is_value_conversion());
+    }
+
+    #[test]
+    fn test_empty_message() {
+        let err = ArrowConversionError::lob_streaming("");
+        assert!(err.is_lob_streaming());
+    }
+
+    #[test]
+    fn test_unicode_in_messages() {
+        let err = ArrowConversionError::value_conversion("列名", "无效数据");
+        assert!(err.is_value_conversion());
+        assert!(err.to_string().contains("列名"));
+    }
+
+    #[test]
+    fn test_zero_schema_mismatch() {
+        let err = ArrowConversionError::schema_mismatch(0, 0);
+        assert!(err.is_schema_mismatch());
+    }
+
+    #[test]
+    fn test_negative_type_id() {
+        let err = ArrowConversionError::unsupported_type(-1);
+        assert!(err.is_unsupported_type());
+    }
+
+    #[test]
+    fn test_negative_scale() {
+        let err = ArrowConversionError::decimal_overflow(10, -5);
+        assert!(err.is_decimal_overflow());
+        assert!(err.to_string().contains("scale -5"));
     }
 }
