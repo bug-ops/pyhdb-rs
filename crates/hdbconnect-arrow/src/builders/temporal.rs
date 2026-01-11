@@ -396,7 +396,13 @@ const fn days_from_ymd(year: i32, month: u32, day: u32) -> i32 {
 
 #[cfg(test)]
 mod tests {
+    use arrow_array::{Array, Date32Array, Time64NanosecondArray, TimestampNanosecondArray};
+
     use super::*;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Date32 Builder Tests
+    // ═══════════════════════════════════════════════════════════════════════════
 
     #[test]
     fn test_date32_builder_creation() {
@@ -406,10 +412,70 @@ mod tests {
     }
 
     #[test]
+    fn test_date32_builder_capacity() {
+        let builder = Date32BuilderWrapper::new(100);
+        assert!(builder.capacity().is_some());
+    }
+
+    #[test]
+    fn test_date32_builder_append_null() {
+        let mut builder = Date32BuilderWrapper::new(10);
+        builder.append_null();
+        assert_eq!(builder.len(), 1);
+
+        let array = builder.finish();
+        let date_array = array.as_any().downcast_ref::<Date32Array>().unwrap();
+        assert!(date_array.is_null(0));
+    }
+
+    #[test]
+    fn test_date32_builder_finish_resets_len() {
+        let mut builder = Date32BuilderWrapper::new(10);
+        builder.append_null();
+        assert_eq!(builder.len(), 1);
+
+        let _array = builder.finish();
+        assert_eq!(builder.len(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Time64 Builder Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
     fn test_time64_builder_creation() {
         let builder = Time64NanosecondBuilderWrapper::new(100);
         assert_eq!(builder.len(), 0);
     }
+
+    #[test]
+    fn test_time64_builder_capacity() {
+        let builder = Time64NanosecondBuilderWrapper::new(100);
+        assert!(builder.capacity().is_some());
+    }
+
+    #[test]
+    fn test_time64_builder_append_null() {
+        let mut builder = Time64NanosecondBuilderWrapper::new(10);
+        builder.append_null();
+        assert_eq!(builder.len(), 1);
+
+        let array = builder.finish();
+        let time_array = array.as_any().downcast_ref::<Time64NanosecondArray>().unwrap();
+        assert!(time_array.is_null(0));
+    }
+
+    #[test]
+    fn test_time64_builder_finish_resets_len() {
+        let mut builder = Time64NanosecondBuilderWrapper::new(10);
+        builder.append_null();
+        let _array = builder.finish();
+        assert_eq!(builder.len(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Timestamp Builder Tests
+    // ═══════════════════════════════════════════════════════════════════════════
 
     #[test]
     fn test_timestamp_builder_creation() {
@@ -418,54 +484,258 @@ mod tests {
     }
 
     #[test]
-    fn test_days_from_ymd() {
-        // Unix epoch
+    fn test_timestamp_builder_capacity() {
+        let builder = TimestampNanosecondBuilderWrapper::new(100);
+        assert!(builder.capacity().is_some());
+    }
+
+    #[test]
+    fn test_timestamp_builder_append_null() {
+        let mut builder = TimestampNanosecondBuilderWrapper::new(10);
+        builder.append_null();
+        assert_eq!(builder.len(), 1);
+
+        let array = builder.finish();
+        let ts_array = array.as_any().downcast_ref::<TimestampNanosecondArray>().unwrap();
+        assert!(ts_array.is_null(0));
+    }
+
+    #[test]
+    fn test_timestamp_builder_finish_resets_len() {
+        let mut builder = TimestampNanosecondBuilderWrapper::new(10);
+        builder.append_null();
+        let _array = builder.finish();
+        assert_eq!(builder.len(), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // days_from_ymd Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_days_from_ymd_epoch() {
         assert_eq!(days_from_ymd(1970, 1, 1), 0);
-        // Day after epoch
+    }
+
+    #[test]
+    fn test_days_from_ymd_day_after_epoch() {
         assert_eq!(days_from_ymd(1970, 1, 2), 1);
-        // Year 2000
-        assert_eq!(days_from_ymd(2000, 1, 1), 10957);
-        // Before epoch
+    }
+
+    #[test]
+    fn test_days_from_ymd_before_epoch() {
         assert_eq!(days_from_ymd(1969, 12, 31), -1);
     }
 
     #[test]
-    fn test_parse_date_string() {
+    fn test_days_from_ymd_year_2000() {
+        assert_eq!(days_from_ymd(2000, 1, 1), 10957);
+    }
+
+    #[test]
+    fn test_days_from_ymd_leap_year() {
+        // 2000 is a leap year
+        assert_eq!(days_from_ymd(2000, 2, 29), 10957 + 31 + 28);
+        // 2024 is a leap year
+        let days_2024_feb_29 = days_from_ymd(2024, 2, 29);
+        let days_2024_mar_1 = days_from_ymd(2024, 3, 1);
+        assert_eq!(days_2024_mar_1 - days_2024_feb_29, 1);
+    }
+
+    #[test]
+    fn test_days_from_ymd_end_of_year() {
+        assert_eq!(days_from_ymd(1970, 12, 31), 364);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // parse_date_string Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_parse_date_string_epoch() {
+        assert_eq!(Date32BuilderWrapper::parse_date_string("1970-01-01").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_parse_date_string_future() {
+        assert_eq!(Date32BuilderWrapper::parse_date_string("2024-06-15").unwrap(), 19889);
+    }
+
+    #[test]
+    fn test_parse_date_string_invalid_format() {
+        let result = Date32BuilderWrapper::parse_date_string("2024/06/15");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().is_value_conversion());
+    }
+
+    #[test]
+    fn test_parse_date_string_invalid_year() {
+        let result = Date32BuilderWrapper::parse_date_string("XXXX-01-01");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_date_string_invalid_month() {
+        let result = Date32BuilderWrapper::parse_date_string("2024-XX-01");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_date_string_invalid_day() {
+        let result = Date32BuilderWrapper::parse_date_string("2024-06-XX");
+        assert!(result.is_err());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // parse_time_string Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_parse_time_string_midnight() {
+        assert_eq!(Time64NanosecondBuilderWrapper::parse_time_string("00:00:00").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_parse_time_string_midday() {
+        let expected = 12 * 3600 * 1_000_000_000_i64;
+        assert_eq!(Time64NanosecondBuilderWrapper::parse_time_string("12:00:00").unwrap(), expected);
+    }
+
+    #[test]
+    fn test_parse_time_string_with_minutes_seconds() {
+        let expected = (12 * 3600 + 30 * 60 + 45) * 1_000_000_000_i64;
+        assert_eq!(Time64NanosecondBuilderWrapper::parse_time_string("12:30:45").unwrap(), expected);
+    }
+
+    #[test]
+    fn test_parse_time_string_end_of_day() {
+        let expected = (23 * 3600 + 59 * 60 + 59) * 1_000_000_000_i64;
+        assert_eq!(Time64NanosecondBuilderWrapper::parse_time_string("23:59:59").unwrap(), expected);
+    }
+
+    #[test]
+    fn test_parse_time_string_invalid_format() {
+        let result = Time64NanosecondBuilderWrapper::parse_time_string("12-30-45");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_time_string_invalid_hour() {
+        let result = Time64NanosecondBuilderWrapper::parse_time_string("XX:00:00");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_time_string_invalid_minute() {
+        let result = Time64NanosecondBuilderWrapper::parse_time_string("12:XX:00");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_time_string_invalid_second() {
+        let result = Time64NanosecondBuilderWrapper::parse_time_string("12:00:XX");
+        assert!(result.is_err());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // parse_datetime_string Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_parse_datetime_string_epoch() {
         assert_eq!(
-            Date32BuilderWrapper::parse_date_string("1970-01-01").unwrap(),
+            TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-01T00:00:00").unwrap(),
             0
-        );
-        assert_eq!(
-            Date32BuilderWrapper::parse_date_string("2024-06-15").unwrap(),
-            19889
         );
     }
 
     #[test]
-    fn test_parse_time_string() {
+    fn test_parse_datetime_string_with_fractional_seconds() {
+        // 0.1 seconds = 100M nanoseconds
         assert_eq!(
-            Time64NanosecondBuilderWrapper::parse_time_string("00:00:00").unwrap(),
-            0
-        );
-        assert_eq!(
-            Time64NanosecondBuilderWrapper::parse_time_string("12:30:45").unwrap(),
-            (12 * 3600 + 30 * 60 + 45) * 1_000_000_000
+            TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-01T00:00:00.1000000").unwrap(),
+            100_000_000
         );
     }
 
     #[test]
-    fn test_parse_datetime_string() {
-        // Epoch
+    fn test_parse_datetime_string_with_milliseconds() {
+        // 0.5 seconds = 500M nanoseconds
         assert_eq!(
-            TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-01T00:00:00")
-                .unwrap(),
-            0
+            TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-01T00:00:00.5000000").unwrap(),
+            500_000_000
         );
-        // With fractional seconds
+    }
+
+    #[test]
+    fn test_parse_datetime_string_invalid_format_no_t() {
+        let result = TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-01 00:00:00");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_datetime_string_invalid_date() {
+        let result = TimestampNanosecondBuilderWrapper::parse_datetime_string("1970/01/01T00:00:00");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_datetime_string_invalid_year() {
+        let result = TimestampNanosecondBuilderWrapper::parse_datetime_string("XXXX-01-01T00:00:00");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_datetime_string_invalid_month() {
+        let result = TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-XX-01T00:00:00");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_datetime_string_invalid_day() {
+        let result = TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-XXT00:00:00");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_datetime_string_invalid_time() {
+        let result = TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-01T00-00-00");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_datetime_string_invalid_hour() {
+        let result = TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-01TXX:00:00");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_datetime_string_invalid_minute() {
+        let result = TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-01T00:XX:00");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_datetime_string_invalid_second() {
+        let result = TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-01T00:00:XX");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_datetime_string_one_day_after_epoch() {
+        let expected = 86_400 * 1_000_000_000_i64; // 1 day in nanoseconds
         assert_eq!(
-            TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-01T00:00:00.1000000")
-                .unwrap(),
-            100_000_000 // 0.1 seconds = 100M nanoseconds
+            TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-02T00:00:00").unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn test_parse_datetime_string_one_hour_after_epoch() {
+        let expected = 3_600 * 1_000_000_000_i64; // 1 hour in nanoseconds
+        assert_eq!(
+            TimestampNanosecondBuilderWrapper::parse_datetime_string("1970-01-01T01:00:00").unwrap(),
+            expected
         );
     }
 }
