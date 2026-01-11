@@ -36,10 +36,18 @@ mod private;
 pub mod reader;
 pub mod types;
 
+#[cfg(feature = "async")]
+pub mod async_support;
+
 pub use connection::PyConnection;
 pub use cursor::PyCursor;
 pub use error::PyHdbError;
 pub use reader::PyRecordBatchReader;
+
+#[cfg(feature = "async")]
+pub use async_support::{
+    AsyncPyConnection, AsyncPyCursor, PooledConnection, PreparedStatementCache, PyConnectionPool,
+};
 
 /// DB-API 2.0 API level.
 const APILEVEL: &str = "2.0";
@@ -91,6 +99,22 @@ fn pyhdb_rs_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyConnection>()?;
     m.add_class::<PyCursor>()?;
     m.add_class::<PyRecordBatchReader>()?;
+
+    // Async classes (when feature enabled)
+    #[cfg(feature = "async")]
+    {
+        m.add_class::<AsyncPyConnection>()?;
+        m.add_class::<AsyncPyCursor>()?;
+        m.add_class::<PyConnectionPool>()?;
+        m.add_class::<PooledConnection>()?;
+        m.add_class::<async_support::pool::PoolStatus>()?;
+        m.add("ASYNC_AVAILABLE", true)?;
+    }
+
+    #[cfg(not(feature = "async"))]
+    {
+        m.add("ASYNC_AVAILABLE", false)?;
+    }
 
     // Exceptions
     error::register_exceptions(m.py(), m)?;

@@ -11,13 +11,10 @@ use pyo3::prelude::*;
 use crate::error::PyHdbError;
 use hdbconnect_arrow::{BatchConfig, FieldMetadataExt, HanaBatchProcessor};
 
-/// Python `RecordBatchReader` class.
-///
 /// Streams Arrow `RecordBatches` from HANA result set.
 /// Implements `__arrow_c_stream__` for zero-copy transfer.
 #[pyclass(name = "RecordBatchReader", module = "hdbconnect")]
 pub struct PyRecordBatchReader {
-    /// Inner pyo3-arrow reader.
     inner: Option<pyo3_arrow::PyRecordBatchReader>,
 }
 
@@ -29,7 +26,6 @@ impl std::fmt::Debug for PyRecordBatchReader {
     }
 }
 
-/// Internal streaming reader that converts HANA rows to Arrow batches.
 struct StreamingReader {
     result_set: hdbconnect::ResultSet,
     processor: HanaBatchProcessor,
@@ -119,7 +115,6 @@ impl arrow_array::RecordBatchReader for StreamingReader {
 }
 
 impl PyRecordBatchReader {
-    /// Create from a HANA result set.
     pub fn from_resultset(result_set: hdbconnect::ResultSet, batch_size: usize) -> PyResult<Self> {
         let reader = StreamingReader::new(result_set, batch_size);
         let pyo3_reader = pyo3_arrow::PyRecordBatchReader::new(Box::new(reader));
@@ -127,14 +122,100 @@ impl PyRecordBatchReader {
             inner: Some(pyo3_reader),
         })
     }
+
+    /// WARNING: Loads ALL rows into memory. For large result sets, use sync API.
+    #[cfg(feature = "async")]
+    pub fn from_resultset_async(
+        result_set: hdbconnect_async::ResultSet,
+        batch_size: usize,
+    ) -> PyResult<Self> {
+        let reader = AsyncStreamingReader::new(result_set, batch_size);
+        let pyo3_reader = pyo3_arrow::PyRecordBatchReader::new(Box::new(reader));
+        Ok(Self {
+            inner: Some(pyo3_reader),
+        })
+    }
+}
+
+/// Async streaming reader - loads ALL data into memory.
+///
+/// WARNING: This is NOT true streaming. For large result sets, use sync API.
+///
+/// TODO(PERF-001): Implement true async streaming using `tokio::sync::mpsc`
+/// channel to stream batches incrementally with backpressure support.
+#[cfg(feature = "async")]
+struct AsyncStreamingReader {
+    batches: std::vec::IntoIter<RecordBatch>,
+    schema: SchemaRef,
+}
+
+// SAFETY: AsyncStreamingReader only contains:
+// - Vec<RecordBatch>::IntoIter: RecordBatch is Send + Sync (contains Arc<ArrayData>)
+// - SchemaRef (Arc<Schema>): Send + Sync
+// No shared mutable state, no thread-unsafe types, no raw pointers.
+#[cfg(feature = "async")]
+unsafe impl Send for AsyncStreamingReader {}
+
+#[cfg(feature = "async")]
+impl AsyncStreamingReader {
+    fn new(result_set: hdbconnect_async::ResultSet, batch_size: usize) -> Self {
+        let schema = Self::build_schema(&result_set);
+        let config = BatchConfig::with_batch_size(batch_size);
+        let mut processor = HanaBatchProcessor::new(Arc::clone(&schema), config);
+        let mut batches = Vec::new();
+
+        // Block to fetch all rows - hdbconnect_async::ResultSet.into_rows() is async
+        let rows_result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(result_set.into_rows())
+        });
+
+        if let Ok(rows) = rows_result {
+            for row in rows {
+                if let Ok(Some(batch)) = processor.process_row(&row) {
+                    batches.push(batch);
+                }
+            }
+        }
+
+        if let Ok(Some(batch)) = processor.flush() {
+            batches.push(batch);
+        }
+
+        Self {
+            batches: batches.into_iter(),
+            schema,
+        }
+    }
+
+    fn build_schema(result_set: &hdbconnect_async::ResultSet) -> SchemaRef {
+        let fields: Vec<_> = result_set
+            .metadata()
+            .iter()
+            .map(FieldMetadataExt::to_arrow_field)
+            .collect();
+
+        Arc::new(arrow_schema::Schema::new(fields))
+    }
+}
+
+#[cfg(feature = "async")]
+impl Iterator for AsyncStreamingReader {
+    type Item = Result<RecordBatch, arrow_schema::ArrowError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.batches.next().map(Ok)
+    }
+}
+
+#[cfg(feature = "async")]
+impl arrow_array::RecordBatchReader for AsyncStreamingReader {
+    fn schema(&self) -> SchemaRef {
+        Arc::clone(&self.schema)
+    }
 }
 
 #[pymethods]
 impl PyRecordBatchReader {
-    /// Export to `PyArrow` `RecordBatchReader`.
-    ///
-    /// This allows using the reader with PyArrow-based libraries.
-    /// Consumes this reader.
     #[allow(clippy::wrong_self_convention)]
     fn to_pyarrow<'py>(&mut self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let inner = self
@@ -145,7 +226,6 @@ impl PyRecordBatchReader {
         inner.into_pyarrow(py)
     }
 
-    /// Get the schema of the record batches.
     fn schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let inner = self
             .inner
@@ -157,7 +237,6 @@ impl PyRecordBatchReader {
         pyo3_schema.into_pyarrow(py)
     }
 
-    /// String representation.
     fn __repr__(&self) -> String {
         if self.inner.is_some() {
             "RecordBatchReader(active)".to_string()

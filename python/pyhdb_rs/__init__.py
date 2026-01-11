@@ -73,6 +73,12 @@ from pyhdb_rs.dbapi import (
     TimestampFromTicks,
 )
 
+# Import async availability flag
+try:
+    from pyhdb_rs._core import ASYNC_AVAILABLE
+except ImportError:
+    ASYNC_AVAILABLE = False
+
 __all__ = [
     # Connection
     "connect",
@@ -84,6 +90,8 @@ __all__ = [
     "threadsafety",
     "paramstyle",
     "__version__",
+    # Async availability
+    "ASYNC_AVAILABLE",
     # Exceptions
     "Error",
     "Warning",

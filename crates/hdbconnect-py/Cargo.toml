@@ -17,17 +17,35 @@ crate-type = ["cdylib"]
 [lints]
 workspace = true
 
+[features]
+default = []
+async = [
+    "dep:hdbconnect_async",
+    "dep:pyo3-async-runtimes",
+    "dep:tokio",
+    "dep:deadpool",
+    "dep:lru",
+    "hdbconnect-arrow/async",
+]
+
 [dependencies]
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 hdbconnect = { workspace = true }
 hdbconnect-arrow = { path = "../hdbconnect-arrow" }
 parking_lot = { workspace = true }
-pyo3 = { workspace = true }
+pyo3 = { workspace = true, features = ["extension-module", "abi3-py311"] }
 pyo3-arrow = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 url = { workspace = true }
+
+# Async dependencies (optional)
+deadpool = { workspace = true, optional = true, features = ["rt_tokio_1", "managed"] }
+hdbconnect_async = { workspace = true, optional = true }
+lru = { workspace = true, optional = true }
+pyo3-async-runtimes = { workspace = true, optional = true, features = ["tokio-runtime"] }
+tokio = { workspace = true, optional = true, features = ["rt-multi-thread", "sync"] }
 
 [dev-dependencies]
 criterion = { workspace = true }

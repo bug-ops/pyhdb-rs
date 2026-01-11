@@ -12,14 +12,19 @@ categories = ["database", "api-bindings"]
 [lints]
 workspace = true
 
-# Dependencies sorted ALPHABETICALLY - features only
+[features]
+default = []
+async = ["dep:hdbconnect_async"]
+
+# Dependencies sorted ALPHABETICALLY
 [dependencies]
-arrow = { workspace = true }
+arrow = { workspace = true, features = ["ffi", "ipc"] }
 arrow-array = { workspace = true }
 arrow-buffer = { workspace = true }
 arrow-data = { workspace = true }
 arrow-schema = { workspace = true }
 hdbconnect = { workspace = true }
+hdbconnect_async = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
