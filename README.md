@@ -242,6 +242,18 @@ Benchmarks show 2x+ performance improvement over hdbcli for bulk reads.
 > [!TIP]
 > For maximum performance, use `execute_polars()` or `execute_arrow()` methods which provide zero-copy data transfer.
 
+## Arrow ecosystem
+
+Data is exported in [Apache Arrow](https://arrow.apache.org/) format, enabling zero-copy interoperability with:
+
+- **DataFrames** — Polars, pandas, Vaex, Dask
+- **Query engines** — DataFusion, DuckDB, ClickHouse
+- **ML/AI** — Ray, Hugging Face Datasets, PyTorch
+- **Data lakes** — Delta Lake, Apache Iceberg, Lance
+- **Serialization** — Parquet, Arrow IPC (Feather)
+
+For Rust integration examples (DataFusion, DuckDB, Parquet export), see [`hdbconnect-arrow`](crates/hdbconnect-arrow/README.md).
+
 ## MSRV policy
 
 > [!NOTE]
