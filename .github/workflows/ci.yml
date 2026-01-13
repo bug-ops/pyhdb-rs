@@ -158,10 +158,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - name: Build wheel
         uses: PyO3/maturin-action@v1
         with:
@@ -170,6 +170,8 @@ jobs:
           args: --release --out dist
           manylinux: ${{ matrix.manylinux }}
           sccache: true
+        env:
+          SCCACHE_GHA_ENABLED: "true"
       - name: Upload wheels
         uses: actions/upload-artifact@v6
         with:
