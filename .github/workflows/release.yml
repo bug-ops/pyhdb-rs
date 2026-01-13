@@ -72,6 +72,7 @@ jobs:
         with:
           name: wheels-${{ matrix.target }}
           path: python/dist/*.whl
+          retention-days: 3
 
   build-sdist:
     name: Build source distribution
@@ -93,6 +94,7 @@ jobs:
         with:
           name: sdist
           path: python/dist/*.tar.gz
+          retention-days: 3
 
   publish-pypi:
     name: Publish to PyPI

@@ -177,6 +177,7 @@ jobs:
         with:
           name: wheels-${{ matrix.target }}
           path: python/dist/*.whl
+          retention-days: 3
 
   coverage-rust:
     name: Coverage Rust
