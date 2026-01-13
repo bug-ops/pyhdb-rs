@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/hdbconnect-arrow)](https://crates.io/crates/hdbconnect-arrow)
 [![docs.rs](https://img.shields.io/docsrs/hdbconnect-arrow)](https://docs.rs/hdbconnect-arrow)
 [![codecov](https://codecov.io/gh/bug-ops/pyhdb-rs/graph/badge.svg?token=75RR61N6FI&flag=hdbconnect-arrow)](https://codecov.io/gh/bug-ops/pyhdb-rs)
-[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue)](https://github.com/bug-ops/pyhdb-rs)
+[![MSRV](https://img.shields.io/badge/MSRV-1.88-blue)](https://github.com/bug-ops/pyhdb-rs)
 [![License](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue.svg)](LICENSE-APACHE)
 
 Apache Arrow integration for the [hdbconnect](https://crates.io/crates/hdbconnect) SAP HANA driver, enabling zero-copy data transfer to analytics tools like Polars and pandas.
@@ -24,7 +24,7 @@ cargo add hdbconnect-arrow
 ```
 
 > [!IMPORTANT]
-> Requires Rust 1.85 or later.
+> Requires Rust 1.88 or later.
 
 ## Usage
 
@@ -179,7 +179,7 @@ Related crates:
 ## MSRV policy
 
 > [!NOTE]
-> Minimum Supported Rust Version: **1.85**. MSRV increases are minor version bumps.
+> Minimum Supported Rust Version: **1.88**. MSRV increases are minor version bumps.
 
 ## License
 

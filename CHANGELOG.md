@@ -7,10 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-01-13
+
+### Added
+
+- Linux musl support (x86_64, aarch64) for Alpine and static builds
+- Jupyter notebook examples in `examples/notebooks/`
+  - Quickstart guide
+  - Advanced Polars analytics
+  - Streaming large datasets
+  - Performance comparison vs hdbcli
+
 ### Changed
 
 - **BREAKING**: Minimum Supported Rust Version raised from 1.85 to 1.88
 - Refactored nested if-let patterns to use let chains (Rust 1.88 feature)
+- README updated with platform support table and uv commands
+- Installation examples now use uv instead of pip
+
+### CI/CD
+
+- Expanded build matrix to 9 cross-platform targets
+- Added macOS and Windows to Python test matrix (9 combinations)
+- Enabled sccache with GitHub Actions cache backend
+- Added `generate-import-lib` feature for PyO3 cross-compilation
+- Improved caching with `uv sync --frozen` and cache suffixes
 
 ## [0.1.2] - 2026-01-11
 
@@ -117,7 +138,8 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/bug-ops/pyhdb-rs/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/bug-ops/pyhdb-rs/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/bug-ops/pyhdb-rs/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/bug-ops/pyhdb-rs/releases/tag/v0.1.0

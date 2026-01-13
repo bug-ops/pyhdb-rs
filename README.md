@@ -23,20 +23,29 @@ High-performance Python driver for SAP HANA with native Arrow support.
 ## Installation
 
 ```bash
-pip install pyhdb_rs
+uv pip install pyhdb_rs
 ```
 
 With optional dependencies:
 
 ```bash
-pip install pyhdb_rs[polars]    # Polars integration
-pip install pyhdb_rs[pandas]    # pandas + PyArrow
-pip install pyhdb_rs[async]     # Async support
-pip install pyhdb_rs[all]       # All integrations
+uv pip install pyhdb_rs[polars]    # Polars integration
+uv pip install pyhdb_rs[pandas]    # pandas + PyArrow
+uv pip install pyhdb_rs[async]     # Async support
+uv pip install pyhdb_rs[all]       # All integrations
 ```
 
 > [!IMPORTANT]
 > Requires Python 3.11 or later.
+
+### Platform support
+
+| Platform | Architectures |
+|----------|---------------|
+| Linux (glibc) | x86_64, aarch64 |
+| Linux (musl) | x86_64, aarch64 |
+| macOS | x86_64, aarch64 |
+| Windows | x86_64 |
 
 ### From source
 
@@ -44,11 +53,11 @@ pip install pyhdb_rs[all]       # All integrations
 git clone https://github.com/bug-ops/pyhdb-rs.git
 cd pyhdb-rs/python
 
-python -m venv .venv
+uv venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-pip install maturin
-maturin develop
+uv pip install maturin
+maturin develop --release
 ```
 
 ## Quick start
@@ -237,6 +246,15 @@ Benchmarks show 2x+ performance improvement over hdbcli for bulk reads.
 
 > [!NOTE]
 > Minimum Supported Rust Version: **1.88**. MSRV increases are minor version bumps.
+
+## Examples
+
+Interactive Jupyter notebooks are available in [`examples/notebooks/`](examples/notebooks/):
+
+- **01_quickstart** — Basic connection and DataFrame integration
+- **02_polars_analytics** — Advanced Polars analytics with LazyFrames
+- **03_streaming_large_data** — Memory-efficient large dataset processing
+- **04_performance_comparison** — Benchmarks vs hdbcli
 
 ## Repository
 
