@@ -4,21 +4,21 @@ build-backend = "maturin"
 
 [project]
 name = "pyhdb_rs"
-version = "0.1.3"
+version = "0.2.0"
 description = "High-performance Python driver for SAP HANA with native Arrow support"
 readme = "README.md"
 license = { text = "Apache-2.0 OR MIT" }
 authors = [{ name = "Andrei G", email = "andrei.g@my.com" }]
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Rust",
     "Topic :: Database",
     "Topic :: Database :: Front-Ends",
@@ -62,7 +62,7 @@ testpaths = ["../tests/python"]
 addopts = "-v --tb=short"
 
 [tool.ruff]
-target-version = "py311"
+target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
@@ -79,7 +79,7 @@ ignore = ["ANN401"]
 "pyhdb_rs/pandas.py" = ["SIM105"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 warn_return_any = true
 warn_unused_configs = true

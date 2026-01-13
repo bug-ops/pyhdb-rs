@@ -36,7 +36,7 @@ uv pip install pyhdb_rs[all]       # All integrations
 ```
 
 > [!IMPORTANT]
-> Requires Python 3.11 or later.
+> Requires Python 3.12 or later.
 
 <details>
 <summary><strong>Platform support</strong></summary>
@@ -141,7 +141,7 @@ print(df.head())
 pyhdb-rs supports async/await operations for non-blocking database access.
 
 > [!NOTE]
-> Async support requires the package to be built with the `async` feature: `pip install pyhdb_rs[async]`
+> Async support requires the `async` extra: `uv pip install pyhdb_rs[async]`
 
 ### Basic async usage
 

@@ -32,7 +32,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - name: Check formatting
         run: cargo +nightly fmt --check
       - name: Clippy
@@ -69,7 +69,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - uses: taiki-e/install-action@nextest
       - name: Run tests
         # Exclude hdbconnect-py: PyO3 abi3 crates can't link Python standalone.
@@ -85,7 +85,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -160,7 +160,7 @@ jobs:
           targets: ${{ matrix.target }}
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - uses: mozilla-actions/sccache-action@v0.0.9
       - name: Build wheel
         uses: PyO3/maturin-action@v1
@@ -190,7 +190,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate coverage
         # Exclude hdbconnect-py: PyO3 abi3 crates can't link Python standalone.

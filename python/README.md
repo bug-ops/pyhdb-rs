@@ -129,7 +129,7 @@ def query_data(uri: str) -> list[tuple[int, str]]:
 
 ## Requirements
 
-- Python >= 3.11
+- Python >= 3.12
 
 ## Development
 
