@@ -46,10 +46,8 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             manylinux: auto
-          # Windows ARM64
-          - os: windows-latest
-            target: aarch64-pc-windows-msvc
-            manylinux: auto
+          # NOTE: aarch64-pc-windows-msvc disabled until upstream deps
+          # (advapi32-sys, username) support Windows ARM64
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
