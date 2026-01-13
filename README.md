@@ -135,7 +135,7 @@ print(df.head())
 pyhdb-rs supports async/await operations for non-blocking database access.
 
 > [!NOTE]
-> Async support requires the package to be built with the `async` feature: `pip install pyhdb_rs[async]`
+> Async support requires the `async` extra: `uv pip install pyhdb_rs[async]`
 
 ### Basic async usage
 
