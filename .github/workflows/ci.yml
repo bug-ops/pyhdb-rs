@@ -90,17 +90,21 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: test-python-${{ matrix.os }}
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
+          cache-dependency-glob: python/uv.lock
+          cache-suffix: ${{ matrix.os }}-${{ matrix.python-version }}
       - name: Install dependencies
-        run: uv sync --extra dev
+        run: uv sync --frozen --extra dev
         working-directory: python
       - name: Build wheel
-        run: uv run maturin develop
+        run: uv run maturin develop --release
         working-directory: python
       - name: Run tests with coverage
         run: uv run pytest --cov=pyhdb_rs --cov-report=xml

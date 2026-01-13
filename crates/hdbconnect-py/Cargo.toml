@@ -34,7 +34,7 @@ arrow-schema = { workspace = true }
 hdbconnect = { workspace = true }
 hdbconnect-arrow = { workspace = true }
 parking_lot = { workspace = true }
-pyo3 = { workspace = true, features = ["extension-module", "abi3-py311"] }
+pyo3 = { workspace = true, features = ["extension-module", "abi3-py311", "generate-import-lib"] }
 pyo3-arrow = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
