@@ -36,7 +36,7 @@ uv pip install pyhdb_rs[all]       # All integrations
 ```
 
 > [!IMPORTANT]
-> Requires Python 3.11 or later.
+> Requires Python 3.12 or later.
 
 ### Platform support
 

@@ -59,7 +59,7 @@ body:
     attributes:
       label: Python Version
       description: What version of Python are you using?
-      placeholder: "3.11.0"
+      placeholder: "3.12.0"
     validations:
       required: true
 

@@ -30,7 +30,7 @@ This project adheres to the Contributor Covenant code of conduct. By participati
 ### Prerequisites
 
 - Rust 1.85+ (see `rust-version` in Cargo.toml for MSRV)
-- Python 3.11+
+- Python 3.12+
 - [maturin](https://github.com/PyO3/maturin) for building Python wheels
 - [cargo-nextest](https://nexte.st/) for running tests
 - [cargo-deny](https://github.com/EmbarkStudios/cargo-deny) for security audits
