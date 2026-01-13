@@ -38,7 +38,8 @@ uv pip install pyhdb_rs[all]       # All integrations
 > [!IMPORTANT]
 > Requires Python 3.11 or later.
 
-### Platform support
+<details>
+<summary><strong>Platform support</strong></summary>
 
 | Platform | Architectures |
 |----------|---------------|
@@ -47,7 +48,10 @@ uv pip install pyhdb_rs[all]       # All integrations
 | macOS | x86_64, aarch64 |
 | Windows | x86_64 |
 
-### From source
+</details>
+
+<details>
+<summary><strong>From source</strong></summary>
 
 ```bash
 git clone https://github.com/bug-ops/pyhdb-rs.git
@@ -59,6 +63,8 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uv pip install maturin
 maturin develop --release
 ```
+
+</details>
 
 ## Quick start
 
@@ -151,7 +157,8 @@ async def main():
 asyncio.run(main())
 ```
 
-### Connection pooling
+<details>
+<summary><strong>Connection pooling</strong></summary>
 
 ```python
 import asyncio
@@ -174,7 +181,10 @@ async def main():
 asyncio.run(main())
 ```
 
-### Concurrent queries
+</details>
+
+<details>
+<summary><strong>Concurrent queries</strong></summary>
 
 ```python
 import asyncio
@@ -199,6 +209,8 @@ async def main():
 asyncio.run(main())
 ```
 
+</details>
+
 ## Connection URL format
 
 ```
@@ -210,7 +222,8 @@ Examples:
 - `hdbsql://user:pass@hana.example.com:39017/HDB`
 - `hdbsql://user:pass@host:30015?encrypt=true`
 
-## Type mapping
+<details>
+<summary><strong>Type mapping</strong></summary>
 
 | HANA Type | Python Type | Arrow Type |
 |-----------|-------------|------------|
@@ -226,7 +239,10 @@ Examples:
 | TIMESTAMP | `datetime.datetime` | Timestamp |
 | BOOLEAN | `bool` | Boolean |
 
-## Performance
+</details>
+
+<details>
+<summary><strong>Performance</strong></summary>
 
 pyhdb-rs is designed for high-performance data access:
 
@@ -241,6 +257,8 @@ Benchmarks show 2x+ performance improvement over hdbcli for bulk reads.
 
 > [!TIP]
 > For maximum performance, use `execute_polars()` or `execute_arrow()` methods which provide zero-copy data transfer.
+
+</details>
 
 ## Arrow ecosystem
 
@@ -259,7 +277,8 @@ For Rust integration examples (DataFusion, DuckDB, Parquet export), see [`hdbcon
 > [!NOTE]
 > Minimum Supported Rust Version: **1.88**. MSRV increases are minor version bumps.
 
-## Examples
+<details>
+<summary><strong>Examples</strong></summary>
 
 Interactive Jupyter notebooks are available in [`examples/notebooks/`](examples/notebooks/):
 
@@ -267,6 +286,8 @@ Interactive Jupyter notebooks are available in [`examples/notebooks/`](examples/
 - **02_polars_analytics** — Advanced Polars analytics with LazyFrames
 - **03_streaming_large_data** — Memory-efficient large dataset processing
 - **04_performance_comparison** — Benchmarks vs hdbcli
+
+</details>
 
 ## Repository
 
