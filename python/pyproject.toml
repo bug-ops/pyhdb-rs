@@ -28,7 +28,7 @@ keywords = ["sap", "hana", "database", "arrow", "polars", "pandas"]
 
 [project.optional-dependencies]
 polars = ["polars>=1.0"]
-pandas = ["pandas>=2.0", "pyarrow>=22.0,<23"]
+pandas = ["pandas>=2.0", "pyarrow>=22.0,<24"]
 async = []  # No additional Python deps; Rust async feature handles this
 all = ["polars>=1.0", "pandas>=2.0", "pyarrow>=14.0"]
 dev = [
