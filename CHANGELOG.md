@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated all example notebooks to use universal Arrow API
 - Updated README documentation to reflect new API patterns
 
+### Fixed
+
+- `__arrow_c_stream__()` method signature now compatible with Polars via `pl.from_arrow()`
+  - Added default parameter `requested_schema=None` for proper Arrow C Stream protocol
+  - Fixes TypeError when Polars invokes the method without arguments
+  - Enables seamless zero-copy integration: `df = pl.from_arrow(cursor.execute_arrow(sql))`
+
 ## [0.2.2] - 2026-01-22
 
 ### Fixed
