@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Include HANA error codes (e.g., [260] for table not found)
   - Show SQLSTATE for SQL standard error documentation
   - Display error position in SQL query for syntax errors
+- Arrow PyCapsule Interface (__arrow_c_stream__) for zero-copy integration
+  - Seamless integration with Polars, PyArrow, pandas, and other Arrow-compatible libraries
+  - Delegates to pyo3_arrow for FFI safety
+  - Implements consumption semantics (single-use pattern)
 
 ### Changed
 
