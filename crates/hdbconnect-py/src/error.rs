@@ -169,8 +169,39 @@ impl From<PyHdbError> for PyErr {
 
 /// Map HANA error codes to DB-API 2.0 exception types.
 fn map_hdbconnect_error(err: &hdbconnect::HdbError) -> PyHdbError {
-    let msg = err.to_string();
+    let msg = build_detailed_error_message(err);
     categorize_hana_error(msg)
+}
+
+/// Build a detailed error message from `hdbconnect::HdbError`.
+fn build_detailed_error_message(err: &hdbconnect::HdbError) -> String {
+    if let Some(server_err) = err.server_error() {
+        return format_server_error(server_err);
+    }
+    err.to_string()
+}
+
+/// Format server error with all available details (code, severity, SQLSTATE, position).
+fn format_server_error(server_err: &hdbconnect::ServerError) -> String {
+    use std::fmt::Write;
+
+    let mut details = format!(
+        "[{}] {} (severity: {:?})",
+        server_err.code(),
+        server_err.text(),
+        server_err.severity(),
+    );
+
+    let sqlstate = server_err.sqlstate();
+    if !sqlstate.is_empty() {
+        write!(details, ", SQLSTATE: {}", String::from_utf8_lossy(sqlstate)).ok();
+    }
+
+    if server_err.position() > 0 {
+        write!(details, ", at position {}", server_err.position()).ok();
+    }
+
+    details
 }
 
 /// Categorize a HANA error message into the appropriate DB-API 2.0 exception type.
