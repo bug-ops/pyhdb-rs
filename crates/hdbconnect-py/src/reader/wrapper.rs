@@ -305,4 +305,51 @@ impl PyRecordBatchReader {
             "RecordBatchReader(consumed)".to_string()
         }
     }
+
+    /// Export Arrow C Stream via `PyCapsule` protocol.
+    ///
+    /// This method implements the Arrow `PyCapsule` Interface, allowing zero-copy
+    /// data transfer to Arrow-compatible libraries (e.g., Polars, `PyArrow`).
+    ///
+    /// The stream can only be exported once. After export, the reader is marked
+    /// as consumed and cannot be reused.
+    ///
+    /// # Arguments
+    ///
+    /// * `requested_schema` - Optional memory address for C schema struct (as per Arrow spec)
+    ///
+    /// # Returns
+    ///
+    /// `PyCapsule` object containing the Arrow C Stream pointer
+    ///
+    /// # Errors
+    ///
+    /// Returns `PyHdbError::Programming` if reader has already been consumed.
+    ///
+    /// # Example (Python)
+    ///
+    /// ```python
+    /// import polars as pl
+    /// reader = conn.execute_arrow("SELECT * FROM table")
+    /// df = pl.from_arrow(reader)  # Uses __arrow_c_stream__ internally
+    /// ```
+    fn __arrow_c_stream__<'py>(
+        &'py mut self,
+        py: Python<'py>,
+        requested_schema: Option<usize>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let inner = self
+            .inner
+            .take()
+            .ok_or_else(|| PyHdbError::programming("reader already consumed"))?;
+
+        // Convert inner reader to Python object so we can call its __arrow_c_stream__ method
+        let py_reader = Bound::new(py, inner)?;
+
+        // Call __arrow_c_stream__ on the inner pyo3_arrow::PyRecordBatchReader
+        // NOTE: requested_schema parameter is currently ignored - pyo3-arrow handles schema
+        // internally
+        let _ = requested_schema;
+        py_reader.call_method0("__arrow_c_stream__")
+    }
 }
