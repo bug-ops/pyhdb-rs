@@ -137,7 +137,8 @@ impl PyConnectionPool {
     ///
     /// * `url` - HANA connection URL (hdbsql://user:pass@host:port)
     /// * `max_size` - Maximum number of connections (default: 10)
-    /// * `min_idle` - Minimum idle connections to maintain (accepted for API compatibility, not enforced by underlying pool)
+    /// * `min_idle` - Minimum idle connections to maintain (accepted for API compatibility, not
+    ///   enforced by underlying pool)
     /// * `connection_timeout` - Connection acquisition timeout in seconds (default: 30)
     #[new]
     #[pyo3(signature = (url, *, max_size=10, min_idle=None, connection_timeout=30))]
