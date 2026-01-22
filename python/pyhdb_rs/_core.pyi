@@ -169,13 +169,18 @@ class Cursor:
         """Execute a SQL query.
 
         Args:
-            sql: SQL statement
-            parameters: Optional parameters (not yet supported)
+            sql: SQL statement with ? placeholders for parameters
+            parameters: Optional parameters for parameterized queries (sequence or dict)
 
         Raises:
-            NotSupportedError: If parameters are provided (not yet implemented)
             ProgrammingError: If SQL syntax is invalid
             OperationalError: If connection is closed
+            DataError: If parameter types are invalid
+
+        Example::
+
+            cursor.execute("SELECT * FROM users WHERE id = ?", (123,))
+            cursor.execute("INSERT INTO users (name, age) VALUES (?, ?)", ("Alice", 30))
         """
         ...
 
@@ -187,11 +192,25 @@ class Cursor:
         """Execute a DML statement with multiple parameter sets.
 
         Args:
-            sql: SQL statement
-            seq_of_parameters: Sequence of parameter sequences (not yet supported)
+            sql: SQL statement with ? placeholders for parameters
+            seq_of_parameters: Sequence of parameter sequences for batch operations
 
         Raises:
-            NotSupportedError: If parameters are provided (not yet implemented)
+            ProgrammingError: If SQL syntax is invalid
+            OperationalError: If connection is closed
+            DataError: If parameter types are invalid
+
+        Example::
+
+            # Batch insert multiple rows
+            cursor.executemany(
+                "INSERT INTO users (name, age) VALUES (?, ?)",
+                [
+                    ("Alice", 30),
+                    ("Bob", 25),
+                    ("Charlie", 35),
+                ]
+            )
         """
         ...
 
