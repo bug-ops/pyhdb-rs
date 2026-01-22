@@ -303,6 +303,45 @@ class RecordBatchReader:
         """
         ...
 
+    def __arrow_c_stream__(self, requested_schema: int | None = None) -> object:
+        """Export via Arrow PyCapsule interface (zero-copy).
+
+        Implements the Arrow PyCapsule Interface for seamless integration
+        with Polars, PyArrow, pandas, and other Arrow-compatible libraries.
+
+        Note:
+            This method consumes the reader. After calling, the reader
+            cannot be used again.
+
+        Args:
+            requested_schema: Optional schema capsule for cast request.
+                Most consumers pass None.
+
+        Returns:
+            PyCapsule containing ArrowArrayStream pointer.
+
+        Raises:
+            ProgrammingError: If reader was already consumed.
+
+        Example::
+
+            import polars as pl
+
+            reader = conn.execute_arrow("SELECT * FROM sales")
+            df = pl.from_arrow(reader)  # Uses __arrow_c_stream__ internally
+
+            # Or explicitly with PyArrow
+            import pyarrow as pa
+
+            reader = conn.execute_arrow("SELECT * FROM sales")
+            pa_reader = pa.RecordBatchReader.from_stream(reader)
+            table = pa_reader.read_all()
+
+        See Also:
+            Arrow PyCapsule Interface: https://arrow.apache.org/docs/format/CDataInterface/PyCapsuleInterface.html
+        """
+        ...
+
     def __repr__(self) -> str: ...
 
 # =====================================================================
