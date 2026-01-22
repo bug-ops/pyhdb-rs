@@ -256,6 +256,46 @@ class Cursor:
         """
         ...
 
+    def execute_arrow(
+        self,
+        sql: str,
+        batch_size: int = 65536,
+    ) -> RecordBatchReader:
+        """Execute query and return Arrow RecordBatchReader.
+
+        This is the high-performance path for analytics workloads.
+        Data is transferred zero-copy to Python Arrow/Polars.
+
+        Args:
+            sql: SQL query string
+            batch_size: Number of rows per batch (default: 65536)
+
+        Returns:
+            RecordBatchReader for streaming Arrow results
+
+        Example::
+
+            import polars as pl
+            cursor = conn.cursor()
+            reader = cursor.execute_arrow("SELECT * FROM sales")
+            df = pl.from_arrow(reader)
+        """
+        ...
+
+    def execute_polars(self, sql: str) -> Any:
+        """Execute query and return Polars DataFrame.
+
+        Convenience method that wraps execute_arrow with pl.from_arrow.
+        Requires polars to be installed.
+
+        Args:
+            sql: SQL query string
+
+        Returns:
+            polars.DataFrame
+        """
+        ...
+
     def __iter__(self) -> Iterator[tuple[Any, ...]]: ...
     def __next__(self) -> tuple[Any, ...]: ...
     def __enter__(self) -> Cursor: ...
