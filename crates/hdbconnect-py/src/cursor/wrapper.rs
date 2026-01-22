@@ -301,24 +301,6 @@ impl PyCursor {
         py.detach(|| PyRecordBatchReader::from_resultset(result_set, batch_size))
     }
 
-    /// Execute a query and return Polars `DataFrame`.
-    ///
-    /// Requires polars to be installed.
-    ///
-    /// Args:
-    ///     sql: SQL query string
-    ///
-    /// Returns:
-    ///     Polars `DataFrame`
-    #[pyo3(signature = (sql))]
-    fn execute_polars<'py>(&self, py: Python<'py>, sql: &str) -> PyResult<Bound<'py, PyAny>> {
-        let reader = self.execute_arrow(py, sql, 65536)?;
-
-        // Import polars and use from_arrow
-        let polars = py.import("polars")?;
-        polars.call_method1("from_arrow", (reader,))
-    }
-
     // Iterator protocol
     const fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
         slf

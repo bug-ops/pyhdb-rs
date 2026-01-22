@@ -165,24 +165,6 @@ impl PyConnection {
         }
     }
 
-    /// Execute a query and return Polars `DataFrame`.
-    ///
-    /// Requires polars to be installed.
-    ///
-    /// Args:
-    ///     sql: SQL query string
-    ///
-    /// Returns:
-    ///     Polars `DataFrame`
-    #[pyo3(signature = (sql))]
-    fn execute_polars<'py>(&self, py: Python<'py>, sql: &str) -> PyResult<Bound<'py, PyAny>> {
-        let reader = self.execute_arrow(sql, 65536)?;
-
-        // Import polars and use from_arrow
-        let polars = py.import("polars")?;
-        polars.call_method1("from_arrow", (reader,))
-    }
-
     // Context manager protocol
     const fn __enter__(slf: Py<Self>) -> Py<Self> {
         slf

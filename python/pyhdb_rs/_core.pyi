@@ -109,20 +109,6 @@ class Connection:
         """
         ...
 
-    def execute_polars(self, sql: str) -> Any:
-        """Execute query and return Polars DataFrame.
-
-        Convenience method that wraps execute_arrow with pl.from_arrow.
-        Requires polars to be installed.
-
-        Args:
-            sql: SQL query string
-
-        Returns:
-            polars.DataFrame
-        """
-        ...
-
     def __enter__(self) -> Connection: ...
     def __exit__(
         self,
@@ -279,20 +265,6 @@ class Cursor:
             cursor = conn.cursor()
             reader = cursor.execute_arrow("SELECT * FROM sales")
             df = pl.from_arrow(reader)
-        """
-        ...
-
-    def execute_polars(self, sql: str) -> Any:
-        """Execute query and return Polars DataFrame.
-
-        Convenience method that wraps execute_arrow with pl.from_arrow.
-        Requires polars to be installed.
-
-        Args:
-            sql: SQL query string
-
-        Returns:
-            polars.DataFrame
         """
         ...
 

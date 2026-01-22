@@ -103,17 +103,19 @@ print(df.head())
 ```
 
 > [!TIP]
-> Use `execute_polars()` for best performance. Data flows directly from HANA to Polars without intermediate copies.
+> Use `execute_arrow()` with Polars for best performance. Data flows directly from HANA to Polars without intermediate copies.
 
 Or using the connection object:
 
 ```python
 import pyhdb_rs
+import polars as pl
 
 conn = pyhdb_rs.connect("hdbsql://USER:PASSWORD@HOST:30015")
 
 # Get as Polars DataFrame
-df = conn.execute_polars("SELECT * FROM products")
+reader = conn.execute_arrow("SELECT * FROM products")
+df = pl.from_arrow(reader)
 
 # Get as Arrow RecordBatchReader for streaming large datasets
 reader = conn.execute_arrow("SELECT * FROM large_table")
@@ -147,11 +149,13 @@ pyhdb-rs supports async/await operations for non-blocking database access.
 
 ```python
 import asyncio
+import polars as pl
 from pyhdb_rs.aio import connect
 
 async def main():
     async with await connect("hdbsql://USER:PASSWORD@HOST:30015") as conn:
-        df = await conn.execute_polars("SELECT * FROM sales")
+        reader = await conn.execute_arrow("SELECT * FROM sales")
+        df = pl.from_arrow(reader)
         print(df)
 
 asyncio.run(main())
@@ -162,6 +166,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
+import polars as pl
 from pyhdb_rs.aio import create_pool
 
 async def main():
@@ -172,7 +177,8 @@ async def main():
     )
 
     async with pool.acquire() as conn:
-        df = await conn.execute_polars("SELECT * FROM sales")
+        reader = await conn.execute_arrow("SELECT * FROM sales")
+        df = pl.from_arrow(reader)
         print(df)
 
     status = pool.status
@@ -188,11 +194,13 @@ asyncio.run(main())
 
 ```python
 import asyncio
+import polars as pl
 from pyhdb_rs.aio import create_pool
 
 async def fetch_data(pool, table: str):
     async with pool.acquire() as conn:
-        return await conn.execute_polars(f"SELECT * FROM {table}")
+        reader = await conn.execute_arrow(f"SELECT * FROM {table}")
+        return pl.from_arrow(reader)
 
 async def main():
     pool = create_pool("hdbsql://USER:PASSWORD@HOST:30015", max_size=5)
@@ -290,7 +298,7 @@ pyhdb-rs is designed for high-performance data access:
 Benchmarks show 2x+ performance improvement over hdbcli for bulk reads.
 
 > [!TIP]
-> For maximum performance, use `execute_polars()` or `execute_arrow()` methods which provide zero-copy data transfer.
+> For maximum performance, use `execute_arrow()` with your Arrow-compatible library (Polars, PyArrow, pandas) for zero-copy data transfer.
 
 </details>
 
