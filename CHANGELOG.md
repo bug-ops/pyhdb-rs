@@ -9,9 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### CI/CD
 
-- Added cargo caching for `build-wheels` job in GitHub Actions
-  - Enables separate caches per cross-platform target (7 architectures)
-  - Achieves ~80% build time reduction on cache hit (~8-12 min → ~1-2 min)
+- Added cargo caching for GitHub Actions workflows
+  - **build-wheels job (CI):** Separate caches per cross-platform target (7 architectures)
+  - **build-wheels job (release):** Same optimization for release builds
+  - **publish-crates job:** Cargo registry operations with cache
+  - Achieves ~80% build time reduction on cache hit (~8-12 min → ~1-2 min per target)
   - Workspace mapping ensures compiled binaries are cached correctly
 
 ## [0.2.3] - 2026-01-22
