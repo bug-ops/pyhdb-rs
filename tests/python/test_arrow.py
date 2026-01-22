@@ -128,7 +128,7 @@ class TestArrowCStreamProtocol:
         """Test that RecordBatchReader has __arrow_c_stream__ method."""
         reader = connection.execute_arrow("SELECT 1 AS value FROM DUMMY")
         assert hasattr(reader, "__arrow_c_stream__")
-        assert callable(getattr(reader, "__arrow_c_stream__"))
+        assert callable(reader.__arrow_c_stream__)
 
     def test_polars_from_arrow_uses_protocol(
         self, connection: pyhdb_rs.Connection
