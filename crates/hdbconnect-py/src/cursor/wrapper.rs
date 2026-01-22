@@ -29,7 +29,7 @@ pub enum CursorInner {
 /// Python Cursor class.
 ///
 /// DB-API 2.0 compliant cursor object.
-#[pyclass(name = "Cursor", module = "hdbconnect")]
+#[pyclass(name = "Cursor", module = "pyhdb_rs._core")]
 #[derive(Debug)]
 pub struct PyCursor {
     /// Shared connection reference.

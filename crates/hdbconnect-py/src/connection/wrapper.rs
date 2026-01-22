@@ -38,7 +38,7 @@ pub enum ConnectionInner {
 /// result = cursor.fetchone()
 /// conn.close()
 /// ```
-#[pyclass(name = "Connection", module = "hdbconnect")]
+#[pyclass(name = "Connection", module = "pyhdb_rs._core")]
 #[derive(Debug)]
 pub struct PyConnection {
     /// Shared connection for thread safety.
