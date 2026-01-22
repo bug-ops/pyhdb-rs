@@ -209,7 +209,41 @@ async def main():
 asyncio.run(main())
 ```
 
-</details>
+## Error handling
+
+pyhdb-rs provides detailed error messages that include HANA server information for better diagnostics:
+
+```python
+import pyhdb_rs
+
+try:
+    conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM nonexistent_table")
+except pyhdb_rs.ProgrammingError as e:
+    # Error message includes:
+    # - Error code: [260] (HANA error number)
+    # - Message: table not found
+    # - Severity: Error
+    # - SQLSTATE: 42601 (SQL standard code)
+    # Example: "[260] table not found (severity: Error), SQLSTATE: 42601"
+    print(f"SQL Error: {e}")
+except pyhdb_rs.DatabaseError as e:
+    print(f"Database error: {e}")
+except pyhdb_rs.InterfaceError as e:
+    print(f"Connection error: {e}")
+```
+
+**Exception hierarchy** (DB-API 2.0 compliant):
+
+- `pyhdb_rs.Error` — Base exception
+- `pyhdb_rs.InterfaceError` — Connection or driver issues
+- `pyhdb_rs.DatabaseError` — Database server errors
+  - `pyhdb_rs.ProgrammingError` — SQL syntax, missing table, wrong column
+  - `pyhdb_rs.IntegrityError` — Constraint violations, duplicate keys
+  - `pyhdb_rs.DataError` — Type conversion, value overflow
+  - `pyhdb_rs.OperationalError` — Connection lost, timeout, server unavailable
+  - `pyhdb_rs.NotSupportedError` — Unsupported operation
 
 ## Connection URL format
 

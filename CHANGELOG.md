@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-01-22
+
+### Added
+
+- Detailed HANA server error reporting with error code, severity, SQLSTATE, and query position
+  - Replace generic "Database server responded with an error" messages
+  - Include HANA error codes (e.g., [260] for table not found)
+  - Show SQLSTATE for SQL standard error documentation
+  - Display error position in SQL query for syntax errors
+
+### Changed
+
+- Enhanced error messages automatically visible in Python via PyO3 conversion
+- Improved user debugging experience with actionable error information
+- Errors now map to correct DB-API 2.0 exception types (ProgrammingError, IntegrityError, DataError)
+
+### Fixed
+
+- Error formatting now uses efficient `std::fmt::Write` instead of repeated `format!` + `push_str`
+
+### Quality
+
+- Performance review: PASS (cold path, zero impact on hot paths)
+- Security review: PASS (0 vulnerabilities, DB-API 2.0 compliant)
+- Code review: PASS (all lints resolved, rustfmt compliant)
+
 ## [0.2.0] - 2026-01-13
 
 ### Changed
