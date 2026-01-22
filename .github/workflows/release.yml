@@ -53,6 +53,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: wheels-${{ matrix.target }}
+          workspaces: crates/hdbconnect-py -> ../target
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -133,6 +137,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Authenticate with crates.io
         uses: rust-lang/crates-io-auth-action@v1
         id: auth

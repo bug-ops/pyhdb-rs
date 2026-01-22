@@ -158,6 +158,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: wheels-${{ matrix.target }}
+          workspaces: crates/hdbconnect-py -> ../target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
