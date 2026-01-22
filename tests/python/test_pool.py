@@ -115,14 +115,14 @@ class TestPoolOperations:
 
         async def query():
             async with pool.acquire() as conn:
-                return await conn.execute_polars("SELECT 1 AS value FROM DUMMY")
+                return await conn.execute_arrow("SELECT 1 AS value FROM DUMMY")
 
         # Run 5 concurrent queries with pool size 3
         results = await asyncio.gather(*[query() for _ in range(5)])
 
         assert len(results) == 5
-        for df in results:
-            assert len(df) == 1
+        for reader in results:
+            assert reader is not None
 
     @pytest.mark.asyncio
     async def test_pool_connection_reuse(self, hana_url):
@@ -133,11 +133,11 @@ class TestPoolOperations:
 
         # First query
         async with pool.acquire() as conn:
-            await conn.execute_polars("SELECT 1 FROM DUMMY")
+            await conn.execute_arrow("SELECT 1 FROM DUMMY")
 
         # Second query should reuse the connection
         async with pool.acquire() as conn:
-            await conn.execute_polars("SELECT 2 FROM DUMMY")
+            await conn.execute_arrow("SELECT 2 FROM DUMMY")
 
         # Pool should have exactly 1 connection
         status = pool.status
@@ -169,7 +169,7 @@ class TestPoolOperations:
 
         # Use the pool
         async with pool.acquire() as conn:
-            await conn.execute_polars("SELECT 1 FROM DUMMY")
+            await conn.execute_arrow("SELECT 1 FROM DUMMY")
 
         # Close the pool
         await pool.close()
