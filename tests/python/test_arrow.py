@@ -119,3 +119,115 @@ class TestCursorFetchArrow:
 
         table = pa_reader.read_all()
         assert len(table) == 1
+
+
+class TestArrowCStreamProtocol:
+    """Tests for Arrow PyCapsule Protocol (__arrow_c_stream__)."""
+
+    def test_has_arrow_c_stream_method(self, connection: pyhdb_rs.Connection) -> None:
+        """Test that RecordBatchReader has __arrow_c_stream__ method."""
+        reader = connection.execute_arrow("SELECT 1 AS value FROM DUMMY")
+        assert hasattr(reader, "__arrow_c_stream__")
+        assert callable(getattr(reader, "__arrow_c_stream__"))
+
+    def test_polars_from_arrow_uses_protocol(
+        self, connection: pyhdb_rs.Connection
+    ) -> None:
+        """Test that Polars can consume reader via protocol."""
+        polars = pytest.importorskip("polars")
+
+        reader = connection.execute_arrow(
+            "SELECT 1 AS int_col, 'test' AS str_col FROM DUMMY"
+        )
+        df = polars.from_arrow(reader)
+
+        assert len(df) == 1
+        assert len(df.columns) == 2
+
+    def test_consumed_after_protocol_call(
+        self, connection: pyhdb_rs.Connection
+    ) -> None:
+        """Test that reader is consumed after __arrow_c_stream__ call."""
+        import pyhdb_rs
+
+        reader = connection.execute_arrow("SELECT 1 AS value FROM DUMMY")
+
+        # First call should succeed
+        capsule = reader.__arrow_c_stream__()
+        assert capsule is not None
+
+        # Second call should fail
+        with pytest.raises(pyhdb_rs.ProgrammingError, match="already consumed"):
+            reader.__arrow_c_stream__()
+
+    def test_repr_shows_consumed_state(self, connection: pyhdb_rs.Connection) -> None:
+        """Test that repr shows consumed state after protocol call."""
+        reader = connection.execute_arrow("SELECT 1 FROM DUMMY")
+
+        assert "active" in repr(reader)
+        _ = reader.__arrow_c_stream__()
+        assert "consumed" in repr(reader)
+
+    def test_pyarrow_from_stream(self, connection: pyhdb_rs.Connection) -> None:
+        """Test that PyArrow can consume reader via protocol."""
+        pyarrow = pytest.importorskip("pyarrow")
+
+        reader = connection.execute_arrow("SELECT 1 AS value FROM DUMMY")
+        pa_reader = pyarrow.RecordBatchReader.from_stream(reader)
+
+        table = pa_reader.read_all()
+        assert len(table) == 1
+
+    def test_protocol_with_multiple_batches(
+        self, connection: pyhdb_rs.Connection
+    ) -> None:
+        """Test protocol works with large result sets (multiple batches)."""
+        polars = pytest.importorskip("polars")
+
+        # Generate multiple batches - use a system table with multiple rows
+        reader = connection.execute_arrow(
+            "SELECT TOP 500 * FROM M_TABLES", batch_size=100
+        )
+        df = polars.from_arrow(reader)
+
+        assert len(df) > 0
+
+    def test_schema_preserved_through_protocol(
+        self, connection: pyhdb_rs.Connection
+    ) -> None:
+        """Test that schema is correctly transferred via protocol."""
+        pyarrow = pytest.importorskip("pyarrow")
+
+        reader = connection.execute_arrow(
+            "SELECT 1 AS int_col, 'test' AS str_col, 3.14 AS float_col FROM DUMMY"
+        )
+        pa_reader = pyarrow.RecordBatchReader.from_stream(reader)
+        schema = pa_reader.schema
+
+        assert len(schema) == 3
+        # Verify field names (HANA returns uppercase)
+        names = [f.name.upper() for f in schema]
+        assert "INT_COL" in names
+        assert "STR_COL" in names
+        assert "FLOAT_COL" in names
+
+    def test_null_values_through_protocol(
+        self, connection: pyhdb_rs.Connection
+    ) -> None:
+        """Test that NULL values are correctly handled via protocol."""
+        polars = pytest.importorskip("polars")
+
+        reader = connection.execute_arrow("SELECT NULL AS null_col FROM DUMMY")
+        df = polars.from_arrow(reader)
+
+        assert len(df) == 1
+        # HANA may return uppercase column names
+        assert df["NULL_COL"][0] is None or df["null_col"][0] is None
+
+    def test_requested_schema_parameter(self, connection: pyhdb_rs.Connection) -> None:
+        """Test that requested_schema parameter is accepted."""
+        reader = connection.execute_arrow("SELECT 1 AS value FROM DUMMY")
+
+        # None is the most common case
+        capsule = reader.__arrow_c_stream__(None)
+        assert capsule is not None
