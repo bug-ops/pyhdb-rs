@@ -174,13 +174,6 @@ class TestConnectionAttributes:
         assert hasattr(pyhdb_rs.Connection, "execute_arrow")
         assert callable(pyhdb_rs.Connection.execute_arrow)
 
-    def test_connection_has_execute_polars_method(self) -> None:
-        """Test that Connection class has execute_polars method."""
-        import pyhdb_rs
-
-        assert hasattr(pyhdb_rs.Connection, "execute_polars")
-        assert callable(pyhdb_rs.Connection.execute_polars)
-
 
 class TestConnectionContextManager:
     """Tests for connection context manager protocol."""

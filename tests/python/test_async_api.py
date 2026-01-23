@@ -129,12 +129,6 @@ class TestAsyncConnectionClassMethods:
 
         assert hasattr(AsyncConnection, "execute_arrow")
 
-    def test_async_connection_has_execute_polars_method(self) -> None:
-        """Test that AsyncConnection has execute_polars method."""
-        from pyhdb_rs.aio import AsyncConnection
-
-        assert hasattr(AsyncConnection, "execute_polars")
-
     def test_async_connection_has_is_connected_property(self) -> None:
         """Test that AsyncConnection has is_connected property."""
         from pyhdb_rs.aio import AsyncConnection
@@ -290,12 +284,6 @@ class TestPooledConnectionClassMethods:
         from pyhdb_rs.aio import PooledConnection
 
         assert hasattr(PooledConnection, "execute_arrow")
-
-    def test_pooled_connection_has_execute_polars_method(self) -> None:
-        """Test that PooledConnection has execute_polars method."""
-        from pyhdb_rs.aio import PooledConnection
-
-        assert hasattr(PooledConnection, "execute_polars")
 
     def test_pooled_connection_has_cursor_method(self) -> None:
         """Test that PooledConnection has cursor method."""

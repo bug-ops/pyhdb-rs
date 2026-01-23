@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### CI/CD
+
+- Added cargo caching for GitHub Actions workflows
+  - **build-wheels job (CI):** Separate caches per cross-platform target (7 architectures)
+  - **build-wheels job (release):** Same optimization for release builds
+  - **publish-crates job:** Cargo registry operations with cache
+  - Achieves ~80% build time reduction on cache hit (~8-12 min → ~1-2 min per target)
+  - Workspace mapping ensures compiled binaries are cached correctly
+
+## [0.2.3] - 2026-01-22
+
+### Changed
+
+- **BREAKING**: Removed `execute_polars()` convenience methods from Connection and Cursor
+  - Use universal `execute_arrow()` API instead: `reader = cursor.execute_arrow(sql)`
+  - Convert to desired format: `df = pl.from_arrow(reader)` for Polars, `pa.RecordBatchReader.from_stream(reader)` for PyArrow
+  - More extensible and maintains cleaner API surface
+- Added `execute_arrow()` method to Cursor for consistency with Connection API
+- Updated all example notebooks to use universal Arrow API
+- Updated README documentation to reflect new API patterns
+
+### Fixed
+
+- `__arrow_c_stream__()` method signature now compatible with Polars via `pl.from_arrow()`
+  - Added default parameter `requested_schema=None` for proper Arrow C Stream protocol
+  - Fixes TypeError when Polars invokes the method without arguments
+  - Enables seamless zero-copy integration: `df = pl.from_arrow(cursor.execute_arrow(sql))`
+
 ## [0.2.2] - 2026-01-22
 
 ### Fixed
@@ -189,7 +217,8 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/bug-ops/pyhdb-rs/compare/v0.1.3...v0.2.0

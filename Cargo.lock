@@ -814,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "hdbconnect-arrow"
-version = "0.2.1"
+version = "0.2.3"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -832,7 +832,7 @@ dependencies = [
 
 [[package]]
 name = "hdbconnect-py"
-version = "0.2.1"
+version = "0.2.3"
 dependencies = [
  "arrow-array",
  "arrow-schema",

@@ -13,7 +13,7 @@ use crate::error::PyHdbError;
 
 /// Streams Arrow `RecordBatches` from HANA result set.
 /// Implements `__arrow_c_stream__` for zero-copy transfer.
-#[pyclass(name = "RecordBatchReader", module = "hdbconnect")]
+#[pyclass(name = "RecordBatchReader", module = "pyhdb_rs._core")]
 pub struct PyRecordBatchReader {
     inner: Option<pyo3_arrow::PyRecordBatchReader>,
 }
@@ -333,6 +333,7 @@ impl PyRecordBatchReader {
     /// reader = conn.execute_arrow("SELECT * FROM table")
     /// df = pl.from_arrow(reader)  # Uses __arrow_c_stream__ internally
     /// ```
+    #[pyo3(signature = (requested_schema=None))]
     fn __arrow_c_stream__<'py>(
         &'py mut self,
         py: Python<'py>,
@@ -347,8 +348,7 @@ impl PyRecordBatchReader {
         let py_reader = Bound::new(py, inner)?;
 
         // Call __arrow_c_stream__ on the inner pyo3_arrow::PyRecordBatchReader
-        // NOTE: requested_schema parameter is currently ignored - pyo3-arrow handles schema
-        // internally
+        // The pyo3_arrow reader handles the C interface internally
         let _ = requested_schema;
         py_reader.call_method0("__arrow_c_stream__")
     }

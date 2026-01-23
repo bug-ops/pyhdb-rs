@@ -109,20 +109,6 @@ class Connection:
         """
         ...
 
-    def execute_polars(self, sql: str) -> Any:
-        """Execute query and return Polars DataFrame.
-
-        Convenience method that wraps execute_arrow with pl.from_arrow.
-        Requires polars to be installed.
-
-        Args:
-            sql: SQL query string
-
-        Returns:
-            polars.DataFrame
-        """
-        ...
-
     def __enter__(self) -> Connection: ...
     def __exit__(
         self,
@@ -183,13 +169,18 @@ class Cursor:
         """Execute a SQL query.
 
         Args:
-            sql: SQL statement
-            parameters: Optional parameters (not yet supported)
+            sql: SQL statement with ? placeholders for parameters
+            parameters: Optional parameters for parameterized queries (sequence or dict)
 
         Raises:
-            NotSupportedError: If parameters are provided (not yet implemented)
             ProgrammingError: If SQL syntax is invalid
             OperationalError: If connection is closed
+            DataError: If parameter types are invalid
+
+        Example::
+
+            cursor.execute("SELECT * FROM users WHERE id = ?", (123,))
+            cursor.execute("INSERT INTO users (name, age) VALUES (?, ?)", ("Alice", 30))
         """
         ...
 
@@ -201,11 +192,25 @@ class Cursor:
         """Execute a DML statement with multiple parameter sets.
 
         Args:
-            sql: SQL statement
-            seq_of_parameters: Sequence of parameter sequences (not yet supported)
+            sql: SQL statement with ? placeholders for parameters
+            seq_of_parameters: Sequence of parameter sequences for batch operations
 
         Raises:
-            NotSupportedError: If parameters are provided (not yet implemented)
+            ProgrammingError: If SQL syntax is invalid
+            OperationalError: If connection is closed
+            DataError: If parameter types are invalid
+
+        Example::
+
+            # Batch insert multiple rows
+            cursor.executemany(
+                "INSERT INTO users (name, age) VALUES (?, ?)",
+                [
+                    ("Alice", 30),
+                    ("Bob", 25),
+                    ("Charlie", 35),
+                ]
+            )
         """
         ...
 
@@ -253,6 +258,32 @@ class Cursor:
 
         Raises:
             ProgrammingError: If no active result set
+        """
+        ...
+
+    def execute_arrow(
+        self,
+        sql: str,
+        batch_size: int = 65536,
+    ) -> RecordBatchReader:
+        """Execute query and return Arrow RecordBatchReader.
+
+        This is the high-performance path for analytics workloads.
+        Data is transferred zero-copy to Python Arrow/Polars.
+
+        Args:
+            sql: SQL query string
+            batch_size: Number of rows per batch (default: 65536)
+
+        Returns:
+            RecordBatchReader for streaming Arrow results
+
+        Example::
+
+            import polars as pl
+            cursor = conn.cursor()
+            reader = cursor.execute_arrow("SELECT * FROM sales")
+            df = pl.from_arrow(reader)
         """
         ...
 

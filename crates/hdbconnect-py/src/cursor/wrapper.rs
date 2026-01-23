@@ -29,7 +29,7 @@ pub enum CursorInner {
 /// Python Cursor class.
 ///
 /// DB-API 2.0 compliant cursor object.
-#[pyclass(name = "Cursor", module = "hdbconnect")]
+#[pyclass(name = "Cursor", module = "pyhdb_rs._core")]
 #[derive(Debug)]
 pub struct PyCursor {
     /// Shared connection reference.
@@ -260,6 +260,39 @@ impl PyCursor {
                 CursorInner::Active { result_set, .. } => result_set,
                 CursorInner::Idle => {
                     return Err(PyHdbError::programming("no active result set").into());
+                }
+            }
+        };
+
+        // Release GIL for CPU-bound schema building and processor creation
+        py.detach(|| PyRecordBatchReader::from_resultset(result_set, batch_size))
+    }
+
+    /// Execute a query and return Arrow `RecordBatchReader`.
+    ///
+    /// Args:
+    ///     sql: SQL query string
+    ///     `batch_size`: Rows per batch (default: 65536)
+    ///
+    /// Returns:
+    ///     `RecordBatchReader` for streaming results
+    #[pyo3(signature = (sql, batch_size=65536))]
+    fn execute_arrow(
+        &self,
+        py: Python<'_>,
+        sql: &str,
+        batch_size: usize,
+    ) -> PyResult<PyRecordBatchReader> {
+        let result_set = {
+            let mut conn_guard = self.connection.lock();
+            match &mut *conn_guard {
+                ConnectionInner::Connected(conn) => {
+                    let rs = conn.query(sql).map_err(PyHdbError::from)?;
+                    drop(conn_guard);
+                    rs
+                }
+                ConnectionInner::Disconnected => {
+                    return Err(PyHdbError::operational("connection is closed").into());
                 }
             }
         };

@@ -12,7 +12,7 @@ TODO(TEST): Add integration tests (require HANA):
   - test_connection_with_statement_cache - verify cache is used
   - test_connection_autocommit_false - verify manual commit/rollback
   - test_execute_arrow_batch_size - verify custom batch sizes
-  - test_execute_polars_large_result - verify memory handling
+  - test_execute_arrow_large_result - verify memory handling
   - test_cursor_description_after_execute - verify column metadata
   - test_cursor_fetchone_returns_none - verify stub returns None
   - test_cursor_fetchmany_returns_empty - verify stub returns empty list
@@ -108,9 +108,8 @@ class TestAsyncConnection:
         from pyhdb_rs.aio import connect
 
         async with await connect(hana_url) as conn:
-            df = await conn.execute_polars("SELECT 1 AS value FROM DUMMY")
-            assert df is not None
-            assert len(df) == 1
+            reader = await conn.execute_arrow("SELECT 1 AS value FROM DUMMY")
+            assert reader is not None
 
     @pytest.mark.asyncio
     async def test_cursor_execute(self, hana_url):
@@ -164,8 +163,8 @@ class TestAsyncPool:
         pool = create_pool(hana_url, max_size=2)
 
         async with pool.acquire() as conn:
-            df = await conn.execute_polars("SELECT 1 AS value FROM DUMMY")
-            assert df is not None
+            reader = await conn.execute_arrow("SELECT 1 AS value FROM DUMMY")
+            assert reader is not None
 
         # Connection should be returned to pool
         status = pool.status

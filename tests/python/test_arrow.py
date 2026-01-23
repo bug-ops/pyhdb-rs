@@ -80,23 +80,6 @@ class TestExecuteArrow:
 class TestExecutePolars:
     """Tests for direct Polars integration."""
 
-    def test_execute_polars_returns_dataframe(self, connection: pyhdb_rs.Connection) -> None:
-        """Test that execute_polars returns a Polars DataFrame."""
-        polars = pytest.importorskip("polars")
-
-        df = connection.execute_polars("SELECT 1 AS value FROM DUMMY")
-        assert isinstance(df, polars.DataFrame)
-
-    def test_execute_polars_multiple_columns(self, connection: pyhdb_rs.Connection) -> None:
-        """Test execute_polars with multiple columns."""
-        pytest.importorskip("polars")
-
-        df = connection.execute_polars(
-            "SELECT 1 AS int_col, 'hello' AS str_col, 3.14 AS float_col FROM DUMMY"
-        )
-        assert len(df) == 1
-        assert len(df.columns) == 3
-
 
 class TestCursorFetchArrow:
     """Tests for Cursor.fetch_arrow."""

@@ -38,7 +38,7 @@ pub enum ConnectionInner {
 /// result = cursor.fetchone()
 /// conn.close()
 /// ```
-#[pyclass(name = "Connection", module = "hdbconnect")]
+#[pyclass(name = "Connection", module = "pyhdb_rs._core")]
 #[derive(Debug)]
 pub struct PyConnection {
     /// Shared connection for thread safety.
@@ -163,24 +163,6 @@ impl PyConnection {
                 Err(PyHdbError::operational("connection is closed").into())
             }
         }
-    }
-
-    /// Execute a query and return Polars `DataFrame`.
-    ///
-    /// Requires polars to be installed.
-    ///
-    /// Args:
-    ///     sql: SQL query string
-    ///
-    /// Returns:
-    ///     Polars `DataFrame`
-    #[pyo3(signature = (sql))]
-    fn execute_polars<'py>(&self, py: Python<'py>, sql: &str) -> PyResult<Bound<'py, PyAny>> {
-        let reader = self.execute_arrow(sql, 65536)?;
-
-        // Import polars and use from_arrow
-        let polars = py.import("polars")?;
-        polars.call_method1("from_arrow", (reader,))
     }
 
     // Context manager protocol
