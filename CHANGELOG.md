@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-01-28
+
+### Changed
+
+- **Refactoring:** Comprehensive technical debt elimination across 5 phases
+  - **Connection Builder (Phase 1):** Eliminated HIGH RISK `expect()` calls in connection builder
+    - Changed from panic-inducing `expect()` to defensive `ok_or_else()` with proper error handling
+    - Typestate pattern enforcement ensures compile-time safety
+    - Zero breaking changes, backward compatible
+  - **Unsafe Send Hardening (Phase 2):** Added safety review infrastructure for unsafe Send implementations
+    - Added SAFETY REVIEW dates (2026-01-28) with 6-month review cycle
+    - Implemented IterationGuard for concurrent access detection in debug builds
+    - Created CI workflow to monitor safety review staleness (180-day threshold)
+    - Added Send verification tests and comprehensive safety documentation
+    - Zero performance overhead in release builds
+  - **Connection State Safety (Phase 3):** Eliminated HIGH RISK `expect()` in connection state
+    - Changed `params` field from `Option<ConnectParams>` to `ConnectParams`
+    - Compile-time safety guarantees (params always present by construction)
+    - Reduced memory footprint (~8 bytes per connection)
+    - Zero breaking changes to public API
+  - **Lint Suppression Cleanup (Phase 4):** Documented and refined module-level lint suppressions
+    - Reduced module-level suppressions from 11 to 6 (-45%)
+    - Added 100% documentation coverage for all suppressions
+    - Narrowed suppressions to 13 precise item-level locations
+    - Fixed `clippy::doc_markdown` warnings
+    - Improved code maintainability and reduced risk of masking real issues
+  - **PyO3 API Migration (Phase 5):** Migrated from deprecated API to PyO3 0.27+ compliance
+    - Replaced deprecated `PySequence::downcast()` with modern `Bound::cast()`
+    - Eliminated deprecation warnings
+    - Zero performance impact (semantically identical)
+    - Type safety and error handling maintained
+
+### Added
+
+- CI workflow for safety review monitoring (`.github/workflows/safety-audit.yml`)
+  - Monitors SAFETY REVIEW dates in unsafe Send implementations
+  - Warns when reviews exceed 180 days (non-blocking)
+  - Cross-platform date parsing (GNU and BSD)
+- Compile-time Send verification tests for StreamingReader types
+- Comprehensive safety documentation for async_support module
+
+### Fixed
+
+- Eliminated 2 HIGH RISK production panic paths in connection builder and state
+- Removed all deprecated API usage for PyO3 0.27+ compatibility
+
 ### CI/CD
 
 - Added cargo caching for GitHub Actions workflows
