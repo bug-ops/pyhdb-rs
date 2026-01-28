@@ -106,6 +106,8 @@ impl PreparedStatementCache {
     }
 
     /// Returns the cache hit rate as a value between 0.0 and 1.0.
+    // Hit rate is approximate metric; u64 counts won't exceed f64 precision (2^53).
+    #[allow(clippy::cast_precision_loss)]
     pub fn hit_rate(&self) -> f64 {
         let total = self.hits + self.misses;
         if total == 0 {

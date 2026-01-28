@@ -1,17 +1,15 @@
-//! Connection pool using `deadpool`.
+//! Connection pool using [`deadpool`].
 //!
 //! Provides an async connection pool for SAP HANA with configurable size limits.
 //!
 //! # Note on `min_idle`
 //!
-//! The `deadpool` crate's managed pool does not natively support `min_idle`.
+//! The [`deadpool`] crate's managed pool does not natively support `min_idle`.
 //! The `min_idle` configuration is exposed for API consistency and future
 //! implementation. Currently, connections are created on-demand.
-#![allow(
-    clippy::doc_markdown,
-    clippy::missing_fields_in_debug,
-    clippy::significant_drop_tightening
-)]
+
+// Intentionally omits connection details from Debug output for security/brevity.
+#![allow(clippy::missing_fields_in_debug)]
 
 use std::sync::Arc;
 
@@ -52,7 +50,7 @@ impl Default for PoolConfig {
 /// This wrapper exists to provide a clean separation between pool management
 /// and connection logic, allowing future extensions like connection-level
 /// statement caching or connection metadata without modifying the underlying
-/// hdbconnect_async::Connection.
+/// [`hdbconnect_async::Connection`].
 pub struct PooledConnectionInner {
     pub connection: hdbconnect_async::Connection,
 }
@@ -345,6 +343,8 @@ impl PooledConnection {
         })
     }
 
+    // PyO3 requires &self for Python __aenter__ protocol binding.
+    #[allow(clippy::unused_self)]
     fn __aenter__(slf: Py<Self>) -> Py<Self> {
         slf
     }

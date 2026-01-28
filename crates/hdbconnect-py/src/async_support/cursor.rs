@@ -54,6 +54,8 @@ impl AsyncPyCursor {
 
 #[pymethods]
 impl AsyncPyCursor {
+    // PyO3 requires &self for Python property getter binding.
+    #[allow(clippy::unused_self)]
     #[getter]
     fn description<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
         py.None().into_bound(py)
@@ -104,6 +106,8 @@ impl AsyncPyCursor {
         }
     }
 
+    // PyO3 requires &self for Python method binding; returns NotSupportedError.
+    #[allow(clippy::unused_self)]
     fn fetchone(&self) -> PyResult<()> {
         Err(
             PyHdbError::not_supported("fetchone() not supported; use connection.execute_arrow()")
@@ -111,6 +115,8 @@ impl AsyncPyCursor {
         )
     }
 
+    // PyO3 requires &self for Python method binding; returns NotSupportedError.
+    #[allow(clippy::unused_self)]
     #[pyo3(signature = (_size=None))]
     fn fetchmany(&self, _size: Option<usize>) -> PyResult<()> {
         Err(
@@ -119,6 +125,8 @@ impl AsyncPyCursor {
         )
     }
 
+    // PyO3 requires &self for Python method binding; returns NotSupportedError.
+    #[allow(clippy::unused_self)]
     fn fetchall(&self) -> PyResult<()> {
         Err(
             PyHdbError::not_supported("fetchall() not supported; use connection.execute_arrow()")
@@ -130,14 +138,20 @@ impl AsyncPyCursor {
         self.rowcount = -1;
     }
 
+    // PyO3 requires &self for Python __aiter__ protocol binding.
+    #[allow(clippy::unused_self)]
     fn __aiter__(slf: Py<Self>) -> Py<Self> {
         slf
     }
 
+    // PyO3 requires &self for Python __anext__ protocol binding.
+    #[allow(clippy::unused_self)]
     fn __anext__(&self) -> Option<()> {
         None
     }
 
+    // PyO3 requires &self for Python __aenter__ protocol binding.
+    #[allow(clippy::unused_self)]
     fn __aenter__(slf: Py<Self>) -> Py<Self> {
         slf
     }
