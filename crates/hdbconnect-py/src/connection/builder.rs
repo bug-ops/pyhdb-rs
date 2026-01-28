@@ -186,13 +186,36 @@ impl ConnectionBuilder<HasHost, HasCredentials> {
     ///
     /// Only available when both host and credentials are set.
     ///
+    /// # Type Safety
+    ///
+    /// The typestate pattern guarantees that `host`, `user`, and `password` are always
+    /// `Some` when this method is callable. The `ok_or_else` checks below are defensive
+    /// measures for defense-in-depth. If these errors ever occur, they indicate an
+    /// internal driver bug rather than a user error.
+    ///
+    /// # Example (Compile-Time Safety)
+    ///
+    /// ```compile_fail
+    /// use hdbconnect_py::connection::builder::ConnectionBuilder;
+    ///
+    /// // This won't compile - build() requires HasHost and HasCredentials
+    /// let params = ConnectionBuilder::new().build();
+    /// // Error: method `build` not found for this type
+    /// ```
+    ///
     /// # Errors
     ///
-    /// Returns error if parameters are invalid.
+    /// Returns error if parameters are invalid or if an internal invariant is violated.
     pub fn build(self) -> Result<hdbconnect::ConnectParams, PyHdbError> {
-        let host = self.host.expect("host is set");
-        let user = self.user.expect("user is set");
-        let password = self.password.expect("password is set");
+        let host = self
+            .host
+            .ok_or_else(|| PyHdbError::internal("internal: host missing"))?;
+        let user = self
+            .user
+            .ok_or_else(|| PyHdbError::internal("internal: user missing"))?;
+        let password = self
+            .password
+            .ok_or_else(|| PyHdbError::internal("internal: password missing"))?;
 
         let params = hdbconnect::ConnectParams::builder()
             .hostname(&host)
