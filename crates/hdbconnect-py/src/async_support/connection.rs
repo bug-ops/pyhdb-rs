@@ -6,11 +6,11 @@ use pyo3::prelude::*;
 use pyo3::types::PyType;
 use tokio::sync::Mutex as TokioMutex;
 
+use super::common::{ConnectionState, commit_impl, execute_arrow_impl, rollback_impl};
 use super::cursor::AsyncPyCursor;
 use super::statement_cache::PreparedStatementCache;
 use crate::connection::ConnectionBuilder;
 use crate::error::PyHdbError;
-use crate::reader::PyRecordBatchReader;
 
 pub type SharedAsyncConnection = Arc<TokioMutex<AsyncConnectionInner>>;
 
@@ -111,13 +111,8 @@ impl AsyncPyConnection {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut guard = inner.lock().await;
             match &mut *guard {
-                AsyncConnectionInner::Connected { connection, .. } => {
-                    connection.commit().await.map_err(PyHdbError::from)?;
-                    Ok(())
-                }
-                AsyncConnectionInner::Disconnected => {
-                    Err(PyHdbError::operational("connection is closed").into())
-                }
+                AsyncConnectionInner::Connected { connection, .. } => commit_impl(connection).await,
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
             }
         })
     }
@@ -128,12 +123,9 @@ impl AsyncPyConnection {
             let mut guard = inner.lock().await;
             match &mut *guard {
                 AsyncConnectionInner::Connected { connection, .. } => {
-                    connection.rollback().await.map_err(PyHdbError::from)?;
-                    Ok(())
+                    rollback_impl(connection).await
                 }
-                AsyncConnectionInner::Disconnected => {
-                    Err(PyHdbError::operational("connection is closed").into())
-                }
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
             }
         })
     }
@@ -176,18 +168,17 @@ impl AsyncPyConnection {
                     connection,
                     statement_cache,
                 } => {
-                    // Track query in cache if enabled
                     if let Some(cache) = statement_cache {
+                        // Tracking-only: closure is empty because we only need LRU statistics.
+                        // Actual statement preparation happens inside hdbconnect crate.
                         cache.get_or_insert(&sql, || {});
                     }
 
-                    let rs = connection.query(&sql).await.map_err(PyHdbError::from)?;
+                    let reader = execute_arrow_impl(connection, &sql, batch_size).await?;
                     drop(guard);
-                    PyRecordBatchReader::from_resultset_async(rs, batch_size)
+                    Ok(reader)
                 }
-                AsyncConnectionInner::Disconnected => {
-                    Err(PyHdbError::operational("connection is closed").into())
-                }
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
             }
         })
     }
@@ -215,9 +206,7 @@ impl AsyncPyConnection {
                         })
                     },
                 ),
-                AsyncConnectionInner::Disconnected => {
-                    Err(PyHdbError::operational("connection is closed").into())
-                }
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
             }
         })
     }

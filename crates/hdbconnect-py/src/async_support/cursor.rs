@@ -7,6 +7,7 @@ use std::sync::Arc;
 use pyo3::prelude::*;
 use tokio::sync::Mutex as TokioMutex;
 
+use super::common::{ConnectionState, execute_query_impl};
 use super::connection::{AsyncConnectionInner, SharedAsyncConnection};
 use super::pool::PooledObject;
 use crate::error::PyHdbError;
@@ -76,6 +77,10 @@ impl AsyncPyCursor {
             .into());
         }
 
+        // Branches are structurally similar but handle different connection wrapper types:
+        // Direct uses SharedAsyncConnection with AsyncConnectionInner enum,
+        // Pooled uses Arc<TokioMutex<Option<PooledObject>>> with Option unwrapping.
+        // Unifying would require a trait abstraction that adds complexity without benefit.
         match &self.connection {
             CursorConnection::Direct(conn) => {
                 let connection = Arc::clone(conn);
@@ -83,12 +88,9 @@ impl AsyncPyCursor {
                     let mut conn_guard = connection.lock().await;
                     match &mut *conn_guard {
                         AsyncConnectionInner::Connected { connection, .. } => {
-                            let _rs = connection.query(&sql).await.map_err(PyHdbError::from)?;
-                            Ok(())
+                            execute_query_impl(connection, &sql).await
                         }
-                        AsyncConnectionInner::Disconnected => {
-                            Err(PyHdbError::operational("connection is closed").into())
-                        }
+                        AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
                     }
                 })
             }
@@ -98,9 +100,8 @@ impl AsyncPyCursor {
                     let mut guard = pooled.lock().await;
                     let obj = guard
                         .as_mut()
-                        .ok_or_else(|| PyHdbError::operational("connection returned to pool"))?;
-                    let _rs = obj.connection.query(&sql).await.map_err(PyHdbError::from)?;
-                    Ok(())
+                        .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+                    execute_query_impl(&mut obj.connection, &sql).await
                 })
             }
         }
