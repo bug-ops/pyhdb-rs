@@ -9,6 +9,9 @@ on:
     # Run monthly on the 1st at 00:00 UTC
     - cron: '0 0 1 * *'
 
+permissions:
+  contents: read
+
 jobs:
   check-safety-reviews:
     runs-on: ubuntu-latest
