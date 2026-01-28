@@ -108,9 +108,14 @@ pub type Pool = deadpool::managed::Pool<HanaConnectionManager>;
 /// # Example
 ///
 /// ```python
+/// import polars as pl
+///
 /// pool = create_pool("hdbsql://user:pass@host:30015", max_size=10)
 /// async with pool.acquire() as conn:
-///     df = await conn.execute_polars("SELECT * FROM sales")
+///     reader = await conn.execute_arrow(
+///         "SELECT CUSTOMER_ID, COUNT(*) AS ORDER_COUNT FROM SALES_ORDERS WHERE ORDER_DATE >= '2025-01-01' GROUP BY CUSTOMER_ID"
+///     )
+///     df = pl.from_arrow(reader)
 /// ```
 #[pyclass(name = "ConnectionPool", module = "hdbconnect.aio")]
 pub struct PyConnectionPool {
@@ -276,28 +281,6 @@ impl PooledConnection {
             let rs = obj.connection.query(&sql).await.map_err(PyHdbError::from)?;
             drop(guard);
             crate::reader::PyRecordBatchReader::from_resultset_async(rs, batch_size)
-        })
-    }
-
-    #[pyo3(signature = (sql))]
-    fn execute_polars<'py>(&self, py: Python<'py>, sql: String) -> PyResult<Bound<'py, PyAny>> {
-        let object = Arc::clone(&self.object);
-
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let mut guard = object.lock().await;
-            let obj = guard
-                .as_mut()
-                .ok_or_else(|| PyHdbError::operational("connection returned to pool"))?;
-
-            let rs = obj.connection.query(&sql).await.map_err(PyHdbError::from)?;
-            drop(guard);
-            let reader = crate::reader::PyRecordBatchReader::from_resultset_async(rs, 65536)?;
-
-            Python::attach(|py| {
-                let polars = py.import("polars")?;
-                let df = polars.call_method1("from_arrow", (reader,))?;
-                Ok(df.unbind())
-            })
         })
     }
 

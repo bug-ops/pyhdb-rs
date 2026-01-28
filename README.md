@@ -95,7 +95,19 @@ conn.close()
 import pyhdb_rs.polars as hdb
 
 df = hdb.read_hana(
-    "SELECT * FROM SALES_ITEMS WHERE FISCAL_YEAR = 2026",
+    """
+    SELECT
+        PRODUCT_CATEGORY,
+        FISCAL_YEAR,
+        SUM(NET_AMOUNT) AS TOTAL_REVENUE,
+        COUNT(DISTINCT ORDER_ID) AS ORDER_COUNT,
+        AVG(QUANTITY) AS AVG_QUANTITY
+    FROM SALES_ITEMS
+    WHERE FISCAL_YEAR BETWEEN 2024 AND 2026
+        AND SALES_REGION IN ('EMEA', 'AMERICAS')
+    GROUP BY PRODUCT_CATEGORY, FISCAL_YEAR
+    ORDER BY TOTAL_REVENUE DESC
+    """,
     "hdbsql://USER:PASSWORD@HOST:39017"
 )
 
@@ -114,16 +126,26 @@ import polars as pl
 conn = pyhdb_rs.connect("hdbsql://USER:PASSWORD@HOST:30015")
 
 # Get as Polars DataFrame (zero-copy via Arrow)
-reader = conn.execute_arrow("SELECT * FROM PRODUCTS")
+reader = conn.execute_arrow(
+    "SELECT PRODUCT_ID, PRODUCT_NAME, CATEGORY, UNIT_PRICE FROM PRODUCTS WHERE IS_ACTIVE = 1"
+)
 df = pl.from_arrow(reader)
 
 # For parameterized queries, use two-step pattern
 cursor = conn.cursor()
-cursor.execute("SELECT * FROM PRODUCTS WHERE PRODUCT_CATEGORY = ?", ["Electronics"])
+cursor.execute(
+    """SELECT p.PRODUCT_NAME, p.UNIT_PRICE, s.STOCK_QUANTITY
+       FROM PRODUCTS p
+       JOIN STOCK s ON p.PRODUCT_ID = s.PRODUCT_ID
+       WHERE p.CATEGORY = ? AND s.STOCK_QUANTITY > ?""",
+    ["Electronics", 10]
+)
 df = pl.from_arrow(cursor.fetch_arrow())
 
 # Stream large datasets batch-by-batch
-reader = conn.execute_arrow("SELECT * FROM TRANSACTION_HISTORY")
+reader = conn.execute_arrow(
+    "SELECT ORDER_ID, CUSTOMER_ID, ORDER_DATE, TOTAL_AMOUNT FROM SALES_ORDERS WHERE ORDER_DATE >= '2024-01-01'"
+)
 for batch in reader:
     process_batch(batch)
 
@@ -136,7 +158,9 @@ conn.close()
 import pyhdb_rs.pandas as hdb
 
 df = hdb.read_hana(
-    "SELECT * FROM SALES_ITEMS",
+    """SELECT ORDER_ID, CUSTOMER_NAME, PRODUCT_NAME, QUANTITY, NET_AMOUNT
+       FROM SALES_ITEMS
+       WHERE ORDER_STATUS = 'COMPLETED' AND ORDER_DATE >= ADD_MONTHS(CURRENT_DATE, -12)""",
     "hdbsql://USER:PASSWORD@HOST:39017"
 )
 
@@ -150,8 +174,11 @@ import pyhdb_rs.polars as hdb
 import polars as pl
 
 # scan_hana() returns a LazyFrame - query executes on .collect()
-lf = hdb.scan_hana("SELECT * FROM SALES_ITEMS", "hdbsql://USER:PASSWORD@HOST:39017")
-result = lf.filter(pl.col("NET_AMOUNT") > 1000).select(["CUSTOMER_NAME", "NET_AMOUNT"]).collect()
+lf = hdb.scan_hana(
+    "SELECT ORDER_ID, CUSTOMER_NAME, PRODUCT_CATEGORY, NET_AMOUNT, ORDER_DATE FROM SALES_ITEMS WHERE YEAR(ORDER_DATE) = 2025",
+    "hdbsql://USER:PASSWORD@HOST:39017"
+)
+result = lf.filter(pl.col("NET_AMOUNT") > 1000).select(["CUSTOMER_NAME", "PRODUCT_CATEGORY", "NET_AMOUNT"]).collect()
 ```
 
 > [!TIP]
@@ -173,15 +200,19 @@ from pyhdb_rs.aio import connect
 
 async def main():
     async with await connect("hdbsql://USER:PASSWORD@HOST:30015") as conn:
-        reader = await conn.execute_arrow("SELECT * FROM SALES_ITEMS")
+        reader = await conn.execute_arrow(
+            """SELECT PRODUCT_NAME, SUM(QUANTITY) AS TOTAL_SOLD, SUM(NET_AMOUNT) AS REVENUE
+               FROM SALES_ITEMS
+               WHERE ORDER_DATE >= '2025-01-01'
+               GROUP BY PRODUCT_NAME
+               ORDER BY REVENUE DESC
+               LIMIT 10"""
+        )
         df = pl.from_arrow(reader)
         print(df)
 
 asyncio.run(main())
 ```
-
-> [!TIP]
-> Async API includes `execute_polars()` convenience method: `df = await conn.execute_polars("SELECT * FROM SALES_ITEMS")`. This method is not available in the synchronous API.
 
 <details>
 <summary><strong>Connection pooling</strong></summary>
@@ -199,7 +230,13 @@ async def main():
     )
 
     async with pool.acquire() as conn:
-        reader = await conn.execute_arrow("SELECT * FROM SALES_ITEMS")
+        reader = await conn.execute_arrow(
+            """SELECT CUSTOMER_ID, COUNT(ORDER_ID) AS ORDER_COUNT, SUM(TOTAL_AMOUNT) AS TOTAL_SPENT
+               FROM SALES_ORDERS
+               WHERE ORDER_DATE >= '2025-01-01' AND ORDER_STATUS = 'COMPLETED'
+               GROUP BY CUSTOMER_ID
+               HAVING SUM(TOTAL_AMOUNT) > 10000"""
+        )
         df = pl.from_arrow(reader)
         print(df)
 
@@ -219,22 +256,29 @@ import asyncio
 import polars as pl
 from pyhdb_rs.aio import create_pool
 
-async def fetch_data(pool, table: str):
+async def fetch_sales_by_region(pool, region: str):
     async with pool.acquire() as conn:
-        reader = await conn.execute_arrow(f"SELECT * FROM {table}")
+        reader = await conn.execute_arrow(
+            f"""SELECT PRODUCT_CATEGORY, SUM(NET_AMOUNT) AS REVENUE
+                FROM SALES_ITEMS
+                WHERE REGION = '{region}' AND FISCAL_YEAR = 2025
+                GROUP BY PRODUCT_CATEGORY
+                ORDER BY REVENUE DESC"""
+        )
         return pl.from_arrow(reader)
 
 async def main():
     pool = create_pool("hdbsql://USER:PASSWORD@HOST:30015", max_size=5)
 
-    # Run multiple queries concurrently
+    # Run multiple queries concurrently for different regions
     results = await asyncio.gather(
-        fetch_data(pool, "CUSTOMERS"),
-        fetch_data(pool, "SALES_ORDERS"),
-        fetch_data(pool, "PRODUCTS"),
+        fetch_sales_by_region(pool, "EMEA"),
+        fetch_sales_by_region(pool, "AMERICAS"),
+        fetch_sales_by_region(pool, "APAC"),
     )
 
-    customers_df, orders_df, products_df = results
+    emea_df, americas_df, apac_df = results
+    print(f"EMEA: {len(emea_df)} categories, AMERICAS: {len(americas_df)} categories")
 
 asyncio.run(main())
 ```
@@ -249,16 +293,23 @@ asyncio.run(main())
 
 ```python
 # Pattern 1: Direct conversion to Polars (recommended)
-reader = conn.execute_arrow("SELECT * FROM SALES_ITEMS")
+reader = conn.execute_arrow(
+    "SELECT CUSTOMER_ID, CUSTOMER_NAME, TOTAL_ORDERS FROM CUSTOMER_SUMMARY WHERE ACTIVE_FLAG = 1"
+)
 df = pl.from_arrow(reader)  # Zero-copy via PyCapsule
 
 # Pattern 2: Convert to PyArrow Table first
-reader = conn.execute_arrow("SELECT * FROM SALES_ITEMS")
+reader = conn.execute_arrow(
+    "SELECT ORDER_ID, ORDER_DATE, TOTAL_AMOUNT FROM SALES_ORDERS WHERE ORDER_DATE >= '2025-01-01'"
+)
 pa_reader = pa.RecordBatchReader.from_stream(reader)
 table = pa_reader.read_all()
 
 # Pattern 3: Stream large datasets
-reader = conn.execute_arrow("SELECT * FROM TRANSACTION_HISTORY", batch_size=10000)
+reader = conn.execute_arrow(
+    "SELECT TRANSACTION_ID, CUSTOMER_ID, AMOUNT, TRANSACTION_DATE FROM TRANSACTION_HISTORY WHERE YEAR(TRANSACTION_DATE) = 2025",
+    batch_size=10000
+)
 for batch in reader:
     process_batch(batch)  # Each batch is a RecordBatch
 ```
@@ -273,7 +324,13 @@ for batch in reader:
 ```python
 # Two-step: execute() then fetch_arrow()
 cursor = conn.cursor()
-cursor.execute("SELECT * FROM SALES_ORDERS WHERE ORDER_STATUS = ? AND NET_AMOUNT > ?", ["PENDING", 1000])
+cursor.execute(
+    """SELECT o.ORDER_ID, o.ORDER_DATE, c.CUSTOMER_NAME, o.TOTAL_AMOUNT
+       FROM SALES_ORDERS o
+       JOIN CUSTOMERS c ON o.CUSTOMER_ID = c.CUSTOMER_ID
+       WHERE o.ORDER_STATUS = ? AND o.TOTAL_AMOUNT > ? AND o.ORDER_DATE >= ?""",
+    ["COMPLETED", 5000, "2025-01-01"]
+)
 df = pl.from_arrow(cursor.fetch_arrow())
 ```
 
@@ -306,7 +363,7 @@ import pyhdb_rs
 try:
     conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015")
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM NONEXISTENT_TABLE")
+    cursor.execute("SELECT CUSTOMER_NAME, BALANCE FROM ACCOUNTS WHERE ACCOUNT_TYPE = ?", ["PREMIUM"])
 except pyhdb_rs.ProgrammingError as e:
     # Error message includes:
     # - Error code: [259] (HANA error number)

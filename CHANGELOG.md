@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING**: Removed `execute_polars()` convenience method from async API (`AsyncConnection`, `PooledConnection`)
+  - Aligns async API with synchronous API design
+  - Use `execute_arrow()` instead and convert manually: `df = pl.from_arrow(await conn.execute_arrow(sql))`
+  - Improves API consistency and reduces maintenance burden
+
+### Documentation
+
+- **Async API Documentation:** Comprehensive documentation for async support including:
+  - Connection pooling with deadpool (configurable max_size, connection_timeout)
+  - Statement caching with LRU eviction (configurable cache size, hit/miss statistics)
+  - Concurrent query execution patterns with asyncio.gather()
+  - Transaction support (commit/rollback) in async context
+  - Performance notes and best practices for high-concurrency workloads
+- Expanded README.md async section with detailed usage examples (500+ words)
+- Added async feature documentation to crate README (crates/hdbconnect-py/README.md)
+- Python async examples with connection pooling patterns (python/README.md)
+- Statement caching configuration and monitoring guide
+
 ## [0.2.4] - 2026-01-28
 
 ### Changed

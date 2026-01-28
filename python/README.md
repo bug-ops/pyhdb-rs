@@ -40,7 +40,10 @@ from pyhdb_rs import connect
 
 with connect("hdbsql://USER:PASSWORD@HOST:39017") as conn:
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM MY_TABLE")
+    cursor.execute(
+        "SELECT ORDER_ID, CUSTOMER_NAME, ORDER_DATE, TOTAL_AMOUNT FROM SALES_ORDERS WHERE ORDER_STATUS = ?",
+        ["SHIPPED"]
+    )
     for row in cursor:
         print(row)
 ```
@@ -53,7 +56,11 @@ with connect("hdbsql://USER:PASSWORD@HOST:39017") as conn:
 import pyhdb_rs.polars as hdb
 
 df = hdb.read_hana(
-    "SELECT * FROM sales WHERE year = 2024",
+    """SELECT PRODUCT_NAME, SUM(QUANTITY) AS TOTAL_SOLD, SUM(NET_AMOUNT) AS REVENUE
+       FROM SALES_ITEMS
+       WHERE FISCAL_YEAR = 2025 AND REGION = 'EMEA'
+       GROUP BY PRODUCT_NAME
+       ORDER BY REVENUE DESC""",
     "hdbsql://USER:PASSWORD@HOST:39017"
 )
 print(df.head())
@@ -65,37 +72,136 @@ print(df.head())
 import pyhdb_rs.pandas as hdb
 
 df = hdb.read_hana(
-    "SELECT * FROM sales",
+    """SELECT c.CUSTOMER_NAME, COUNT(o.ORDER_ID) AS ORDER_COUNT, SUM(o.TOTAL_AMOUNT) AS TOTAL_SPENT
+       FROM CUSTOMERS c
+       JOIN SALES_ORDERS o ON c.CUSTOMER_ID = o.CUSTOMER_ID
+       WHERE o.ORDER_DATE >= '2025-01-01'
+       GROUP BY c.CUSTOMER_NAME
+       HAVING SUM(o.TOTAL_AMOUNT) > 5000""",
     "hdbsql://USER:PASSWORD@HOST:39017"
 )
 ```
 
 ### Async support
 
+The async API provides full async/await support with connection pooling and statement caching.
+
+#### Basic async connection
+
 ```python
+import asyncio
+import polars as pl
 from pyhdb_rs.aio import connect
 
-async with await connect("hdbsql://USER:PASSWORD@HOST:39017") as conn:
-    df = await conn.execute_polars("SELECT * FROM sales")
-    print(df)
+async def main():
+    async with await connect("hdbsql://USER:PASSWORD@HOST:39017") as conn:
+        reader = await conn.execute_arrow(
+            """SELECT PRODUCT_CATEGORY, COUNT(*) AS ITEM_COUNT, SUM(NET_AMOUNT) AS TOTAL_REVENUE
+               FROM SALES_ITEMS
+               WHERE ORDER_DATE >= '2025-01-01'
+               GROUP BY PRODUCT_CATEGORY"""
+        )
+        df = pl.from_arrow(reader)
+        print(df)
+
+asyncio.run(main())
 ```
 
 > [!NOTE]
-> Use `async with` for proper resource cleanup. The context manager handles connection pooling automatically.
+> Use `async with` for proper resource cleanup. The context manager automatically closes the connection on exit.
 
-### Connection pooling
+#### Async context managers
+
+The async API uses Python's async context manager protocol for resource management:
 
 ```python
+import polars as pl
+
+# Connection context manager
+async with await connect(url) as conn:
+    reader = await conn.execute_arrow(
+        "SELECT ORDER_ID, CUSTOMER_ID, TOTAL_AMOUNT FROM SALES_ORDERS WHERE ORDER_DATE >= '2025-06-01'"
+    )
+    df = pl.from_arrow(reader)
+# Connection automatically closed
+
+# Pool context manager
+async with pool.acquire() as conn:
+    reader = await conn.execute_arrow(
+        "SELECT PRODUCT_ID, PRODUCT_NAME, STOCK_QUANTITY FROM INVENTORY WHERE STOCK_QUANTITY < 100"
+    )
+    df = pl.from_arrow(reader)
+# Connection automatically returned to pool
+```
+
+#### Connection pooling
+
+For applications that execute many queries concurrently, use connection pooling:
+
+```python
+import asyncio
+import polars as pl
 from pyhdb_rs.aio import create_pool
 
+# Create pool at application startup
 pool = create_pool(
     "hdbsql://USER:PASSWORD@HOST:39017",
     max_size=10,
     connection_timeout=30
 )
 
-async with pool.acquire() as conn:
-    df = await conn.execute_polars("SELECT * FROM sales")
+# Use pool throughout application lifetime
+async def handle_request(customer_id: int):
+    async with pool.acquire() as conn:
+        reader = await conn.execute_arrow(
+            f"""SELECT o.ORDER_ID, o.ORDER_DATE, o.TOTAL_AMOUNT, o.ORDER_STATUS
+                FROM SALES_ORDERS o
+                WHERE o.CUSTOMER_ID = {customer_id} AND o.ORDER_DATE >= '2025-01-01'
+                ORDER BY o.ORDER_DATE DESC"""
+        )
+        df = pl.from_arrow(reader)
+        return df
+
+# Run concurrent queries
+results = await asyncio.gather(
+    handle_request(),
+    handle_request(),
+    handle_request()
+)
+
+# Close pool at shutdown
+await pool.close()
+```
+
+#### Statement caching
+
+Enable prepared statement caching for frequently executed queries:
+
+```python
+import polars as pl
+from pyhdb_rs.aio import connect
+
+async with await connect(
+    "hdbsql://USER:PASSWORD@HOST:39017",
+    statement_cache_size=100  # Cache up to 100 prepared statements
+) as conn:
+    # First execution - cache miss
+    reader = await conn.execute_arrow(
+        "SELECT PRODUCT_ID, PRODUCT_NAME, UNIT_PRICE, STOCK_QUANTITY FROM PRODUCTS WHERE PRODUCT_ID = 1001"
+    )
+    df = pl.from_arrow(reader)
+
+    # Subsequent executions - cache hit (faster)
+    for product_id in range(1002, 1100):
+        reader = await conn.execute_arrow(
+            f"SELECT PRODUCT_ID, PRODUCT_NAME, UNIT_PRICE, STOCK_QUANTITY FROM PRODUCTS WHERE PRODUCT_ID = {product_id}"
+        )
+        df = pl.from_arrow(reader)
+
+    # View cache statistics
+    stats = await conn.cache_stats()
+    if stats:
+        print(f"Cache hit rate: {stats['hit_rate']:.2%}")
 ```
 
 ## Error handling
@@ -106,7 +212,10 @@ from pyhdb_rs import connect, DatabaseError, InterfaceError
 try:
     with connect("hdbsql://USER:PASSWORD@HOST:39017") as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM nonexistent")
+        cursor.execute(
+            "SELECT CUSTOMER_NAME, EMAIL FROM CUSTOMERS WHERE REGISTRATION_DATE >= ?",
+            ["2025-01-01"]
+        )
 except DatabaseError as e:
     print(f"Database error: {e}")
 except InterfaceError as e:
@@ -120,10 +229,13 @@ This package is fully typed and includes inline type stubs:
 ```python
 from pyhdb_rs import connect, Connection, Cursor
 
-def query_data(uri: str) -> list[tuple[int, str]]:
+def query_data(uri: str, status: str) -> list[tuple[int, str, str]]:
     with connect(uri) as conn:
         cursor: Cursor = conn.cursor()
-        cursor.execute("SELECT id, name FROM users")
+        cursor.execute(
+            "SELECT ORDER_ID, CUSTOMER_NAME, ORDER_STATUS FROM SALES_ORDERS WHERE ORDER_STATUS = ?",
+            [status]
+        )
         return cursor.fetchall()
 ```
 
