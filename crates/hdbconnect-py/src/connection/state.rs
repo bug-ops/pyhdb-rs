@@ -67,7 +67,7 @@ pub struct TypedConnection<S: ConnectionState> {
     /// The underlying hdbconnect connection (if connected).
     inner: Option<hdbconnect::Connection>,
     /// Connection parameters for reconnection.
-    params: Option<hdbconnect::ConnectParams>,
+    params: hdbconnect::ConnectParams,
     /// Phantom marker for state.
     _state: PhantomData<S>,
 }
@@ -98,7 +98,7 @@ impl TypedConnection<Disconnected> {
     pub const fn new(params: hdbconnect::ConnectParams) -> Self {
         Self {
             inner: None,
-            params: Some(params),
+            params,
             _state: PhantomData,
         }
     }
@@ -111,11 +111,10 @@ impl TypedConnection<Disconnected> {
     ///
     /// Returns error if connection fails.
     pub fn connect(self) -> Result<TypedConnection<Connected>, hdbconnect::HdbError> {
-        let params = self.params.expect("params must be set");
-        let conn = hdbconnect::Connection::new(params.clone())?;
+        let conn = hdbconnect::Connection::new(self.params.clone())?;
         Ok(TypedConnection {
             inner: Some(conn),
-            params: Some(params),
+            params: self.params,
             _state: PhantomData,
         })
     }
