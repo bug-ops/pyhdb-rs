@@ -62,6 +62,24 @@ DB-API 2.0 exception hierarchy:
   - `InterfaceError` — Driver interface errors
 - `Warning` — Non-fatal warnings
 
+## Feature Flags
+
+### async
+
+Enables async/await support with tokio runtime and deadpool connection pool.
+
+```toml
+[dependencies]
+hdbconnect-py = { version = "0.2", features = ["async"] }
+```
+
+Dependencies enabled:
+- `hdbconnect_async` - Async HANA protocol implementation
+- `pyo3-async-runtimes` - Python asyncio integration
+- `tokio` - Async runtime with multi-threaded executor
+- `deadpool` - High-performance connection pool
+- `lru` - LRU cache for prepared statements
+
 ## Building
 
 ```bash
@@ -70,8 +88,14 @@ cd crates/hdbconnect-py
 # Development build
 maturin develop
 
+# Development build with async support
+maturin develop --features async
+
 # Release build
 maturin build --release
+
+# Release build with async support
+maturin build --release --features async
 ```
 
 > [!NOTE]

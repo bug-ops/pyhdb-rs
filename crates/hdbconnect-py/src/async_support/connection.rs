@@ -34,8 +34,13 @@ impl AsyncConnectionInner {
 /// # Example
 ///
 /// ```python
+/// import polars as pl
+///
 /// async with await AsyncConnection.connect("hdbsql://...") as conn:
-///     df = await conn.execute_polars("SELECT * FROM sales")
+///     reader = await conn.execute_arrow(
+///         "SELECT PRODUCT_NAME, SUM(QUANTITY) AS TOTAL_SOLD FROM SALES_ITEMS WHERE FISCAL_YEAR = 2025 GROUP BY PRODUCT_NAME"
+///     )
+///     df = pl.from_arrow(reader)
 /// ```
 #[pyclass(name = "AsyncConnection", module = "hdbconnect.aio")]
 #[derive(Debug)]
@@ -179,41 +184,6 @@ impl AsyncPyConnection {
                     let rs = connection.query(&sql).await.map_err(PyHdbError::from)?;
                     drop(guard);
                     PyRecordBatchReader::from_resultset_async(rs, batch_size)
-                }
-                AsyncConnectionInner::Disconnected => {
-                    Err(PyHdbError::operational("connection is closed").into())
-                }
-            }
-        })
-    }
-
-    /// Executes a SQL query and returns a Polars `DataFrame`.
-    ///
-    /// If statement caching is enabled, tracks query statistics.
-    #[pyo3(signature = (sql))]
-    fn execute_polars<'py>(&self, py: Python<'py>, sql: String) -> PyResult<Bound<'py, PyAny>> {
-        let inner = Arc::clone(&self.inner);
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let mut guard = inner.lock().await;
-            match &mut *guard {
-                AsyncConnectionInner::Connected {
-                    connection,
-                    statement_cache,
-                } => {
-                    // Track query in cache if enabled
-                    if let Some(cache) = statement_cache {
-                        cache.get_or_insert(&sql, || {});
-                    }
-
-                    let rs = connection.query(&sql).await.map_err(PyHdbError::from)?;
-                    drop(guard);
-                    let reader = PyRecordBatchReader::from_resultset_async(rs, 65536)?;
-
-                    Python::attach(|py| {
-                        let polars = py.import("polars")?;
-                        let df = polars.call_method1("from_arrow", (reader,))?;
-                        Ok(df.unbind())
-                    })
                 }
                 AsyncConnectionInner::Disconnected => {
                     Err(PyHdbError::operational("connection is closed").into())
