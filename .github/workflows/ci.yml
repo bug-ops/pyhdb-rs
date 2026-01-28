@@ -138,7 +138,12 @@ jobs:
           uv pip install --find-links dist pyhdb_rs --reinstall-package pyhdb_rs
         working-directory: python
       - name: Run tests with coverage
+        if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
         run: uv run pytest --cov=pyhdb_rs --cov-report=xml
+        working-directory: python
+      - name: Run tests
+        if: matrix.python-version != '3.12' || matrix.os != 'ubuntu-latest'
+        run: uv run pytest
         working-directory: python
       - name: Upload Python coverage
         if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
