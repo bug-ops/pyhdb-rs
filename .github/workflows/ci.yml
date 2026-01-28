@@ -153,10 +153,10 @@ jobs:
           files: python/coverage.xml
           fail_ci_if_error: false
 
-  # Build cross-platform wheels (test wheels from build-test-wheels are reused for x86_64)
+  # Build cross-platform wheels (parallel with test-python after test-rust)
   build-wheels-cross:
     name: Build cross wheels (${{ matrix.target }})
-    needs: [test-rust, test-python]
+    needs: [test-rust]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -208,9 +208,10 @@ jobs:
           retention-days: 3
 
   # Collect all wheels (native x86_64 from tests + cross-compiled)
+  # Waits for test-python to ensure quality gate before publishing
   collect-wheels:
     name: Collect all wheels
-    needs: [build-test-wheels, build-wheels-cross]
+    needs: [build-test-wheels, build-wheels-cross, test-python]
     runs-on: ubuntu-latest
     steps:
       - name: Download test wheels (native x86_64)
