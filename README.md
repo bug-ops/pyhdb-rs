@@ -76,13 +76,13 @@ import pyhdb_rs
 conn = pyhdb_rs.connect("hdbsql://USER:PASSWORD@HOST:30015")
 
 with conn.cursor() as cursor:
-    cursor.execute("SELECT * FROM USERS WHERE active = ?", [True])
+    cursor.execute("SELECT * FROM CUSTOMERS WHERE IS_ACTIVE = ?", [True])
 
     rows = cursor.fetchall()
     for row in rows:
         print(row)
 
-    cursor.execute("SELECT name, email FROM USERS")
+    cursor.execute("SELECT CUSTOMER_NAME, EMAIL_ADDRESS FROM CUSTOMERS")
     for name, email in cursor:
         print(f"{name}: {email}")
 
@@ -95,7 +95,7 @@ conn.close()
 import pyhdb_rs.polars as hdb
 
 df = hdb.read_hana(
-    "SELECT * FROM sales WHERE year = 2024",
+    "SELECT * FROM SALES_ITEMS WHERE FISCAL_YEAR = 2026",
     "hdbsql://USER:PASSWORD@HOST:39017"
 )
 
@@ -113,12 +113,17 @@ import polars as pl
 
 conn = pyhdb_rs.connect("hdbsql://USER:PASSWORD@HOST:30015")
 
-# Get as Polars DataFrame
-reader = conn.execute_arrow("SELECT * FROM products")
+# Get as Polars DataFrame (zero-copy via Arrow)
+reader = conn.execute_arrow("SELECT * FROM PRODUCTS")
 df = pl.from_arrow(reader)
 
-# Get as Arrow RecordBatchReader for streaming large datasets
-reader = conn.execute_arrow("SELECT * FROM large_table")
+# For parameterized queries, use two-step pattern
+cursor = conn.cursor()
+cursor.execute("SELECT * FROM PRODUCTS WHERE PRODUCT_CATEGORY = ?", ["Electronics"])
+df = pl.from_arrow(cursor.fetch_arrow())
+
+# Stream large datasets batch-by-batch
+reader = conn.execute_arrow("SELECT * FROM TRANSACTION_HISTORY")
 for batch in reader:
     process_batch(batch)
 
@@ -131,12 +136,26 @@ conn.close()
 import pyhdb_rs.pandas as hdb
 
 df = hdb.read_hana(
-    "SELECT * FROM sales",
+    "SELECT * FROM SALES_ITEMS",
     "hdbsql://USER:PASSWORD@HOST:39017"
 )
 
 print(df.head())
 ```
+
+### Lazy evaluation with Polars
+
+```python
+import pyhdb_rs.polars as hdb
+import polars as pl
+
+# scan_hana() returns a LazyFrame - query executes on .collect()
+lf = hdb.scan_hana("SELECT * FROM SALES_ITEMS", "hdbsql://USER:PASSWORD@HOST:39017")
+result = lf.filter(pl.col("NET_AMOUNT") > 1000).select(["CUSTOMER_NAME", "NET_AMOUNT"]).collect()
+```
+
+> [!TIP]
+> Use `scan_hana()` for lazy evaluation when you need to apply filters or transformations before materializing data.
 
 ## Async support
 
@@ -154,12 +173,15 @@ from pyhdb_rs.aio import connect
 
 async def main():
     async with await connect("hdbsql://USER:PASSWORD@HOST:30015") as conn:
-        reader = await conn.execute_arrow("SELECT * FROM sales")
+        reader = await conn.execute_arrow("SELECT * FROM SALES_ITEMS")
         df = pl.from_arrow(reader)
         print(df)
 
 asyncio.run(main())
 ```
+
+> [!TIP]
+> Async API includes `execute_polars()` convenience method: `df = await conn.execute_polars("SELECT * FROM SALES_ITEMS")`. This method is not available in the synchronous API.
 
 <details>
 <summary><strong>Connection pooling</strong></summary>
@@ -177,7 +199,7 @@ async def main():
     )
 
     async with pool.acquire() as conn:
-        reader = await conn.execute_arrow("SELECT * FROM sales")
+        reader = await conn.execute_arrow("SELECT * FROM SALES_ITEMS")
         df = pl.from_arrow(reader)
         print(df)
 
@@ -207,15 +229,72 @@ async def main():
 
     # Run multiple queries concurrently
     results = await asyncio.gather(
-        fetch_data(pool, "customers"),
-        fetch_data(pool, "orders"),
-        fetch_data(pool, "products"),
+        fetch_data(pool, "CUSTOMERS"),
+        fetch_data(pool, "SALES_ORDERS"),
+        fetch_data(pool, "PRODUCTS"),
     )
 
     customers_df, orders_df, products_df = results
 
 asyncio.run(main())
 ```
+
+</details>
+
+## API Patterns
+
+### Arrow RecordBatchReader
+
+`execute_arrow()` returns a `RecordBatchReader` that implements the Arrow PyCapsule Interface (`__arrow_c_stream__`):
+
+```python
+# Pattern 1: Direct conversion to Polars (recommended)
+reader = conn.execute_arrow("SELECT * FROM SALES_ITEMS")
+df = pl.from_arrow(reader)  # Zero-copy via PyCapsule
+
+# Pattern 2: Convert to PyArrow Table first
+reader = conn.execute_arrow("SELECT * FROM SALES_ITEMS")
+pa_reader = pa.RecordBatchReader.from_stream(reader)
+table = pa_reader.read_all()
+
+# Pattern 3: Stream large datasets
+reader = conn.execute_arrow("SELECT * FROM TRANSACTION_HISTORY", batch_size=10000)
+for batch in reader:
+    process_batch(batch)  # Each batch is a RecordBatch
+```
+
+> [!NOTE]
+> The reader is consumed after use (single-pass iterator). You cannot read from it twice.
+
+### Parameterized Queries with Arrow
+
+`execute_arrow()` does NOT support query parameters. For parameterized queries, use the two-step pattern:
+
+```python
+# Two-step: execute() then fetch_arrow()
+cursor = conn.cursor()
+cursor.execute("SELECT * FROM SALES_ORDERS WHERE ORDER_STATUS = ? AND NET_AMOUNT > ?", ["PENDING", 1000])
+df = pl.from_arrow(cursor.fetch_arrow())
+```
+
+### Write Methods
+
+Write DataFrames back to HANA:
+
+```python
+# Polars
+import pyhdb_rs.polars as hdb
+df = pl.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
+hdb.write_hana(df, "my_table", uri, if_table_exists="replace")
+
+# pandas
+import pyhdb_rs.pandas as hdb
+df = pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
+hdb.to_hana(df, "my_table", uri, if_exists="append")
+```
+
+> [!NOTE]
+> Naming difference is intentional: `write_hana()` follows Polars conventions, `to_hana()` follows pandas conventions.
 
 ## Error handling
 
@@ -227,14 +306,14 @@ import pyhdb_rs
 try:
     conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015")
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM nonexistent_table")
+    cursor.execute("SELECT * FROM NONEXISTENT_TABLE")
 except pyhdb_rs.ProgrammingError as e:
     # Error message includes:
-    # - Error code: [260] (HANA error number)
-    # - Message: table not found
+    # - Error code: [259] (HANA error number)
+    # - Message: invalid table name
     # - Severity: Error
-    # - SQLSTATE: 42601 (SQL standard code)
-    # Example: "[260] table not found (severity: Error), SQLSTATE: 42601"
+    # - SQLSTATE: 42000 (SQL standard code)
+    # Example: "[259] invalid table name: NONEXISTENT_TABLE (severity: Error), SQLSTATE: 42000"
     print(f"SQL Error: {e}")
 except pyhdb_rs.DatabaseError as e:
     print(f"Database error: {e}")

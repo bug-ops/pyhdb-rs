@@ -12,7 +12,7 @@ Basic usage::
 
     conn = pyhdb_rs.connect("hdbsql://user:pass@host:39017")
     with conn.cursor() as cursor:
-        cursor.execute("SELECT * FROM sales")
+        cursor.execute("SELECT * FROM SALES_ITEMS")
         for row in cursor:
             print(row)
     conn.close()
@@ -20,12 +20,15 @@ Basic usage::
 Polars integration::
 
     import polars as pl
-    df = conn.execute_polars("SELECT * FROM sales")
-    # Or: df = pl.from_arrow(conn.execute_arrow("..."))
+    reader = conn.execute_arrow("SELECT * FROM SALES_ITEMS")
+    df = pl.from_arrow(reader)  # Zero-copy via Arrow PyCapsule
 
 Pandas integration::
 
-    df = conn.execute_arrow("SELECT * FROM sales").to_pyarrow().to_pandas()
+    import pyarrow as pa
+    reader = conn.execute_arrow("SELECT * FROM SALES_ITEMS")
+    pa_reader = pa.RecordBatchReader.from_stream(reader)
+    df = pa_reader.read_all().to_pandas()
 """
 
 from __future__ import annotations

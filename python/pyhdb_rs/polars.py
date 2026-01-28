@@ -8,7 +8,7 @@ Example::
 
     # Read data
     df = hdb.read_hana(
-        "SELECT * FROM sales WHERE year = 2024",
+        "SELECT * FROM SALES_ITEMS WHERE FISCAL_YEAR = 2026",
         "hdbsql://analyst:secret@hana.corp:39017"
     )
 
@@ -53,7 +53,7 @@ def read_hana(
         import pyhdb_rs.polars as hdb
 
         df = hdb.read_hana(
-            "SELECT * FROM sales WHERE year = 2024",
+            "SELECT * FROM SALES_ITEMS WHERE FISCAL_YEAR = 2026",
             "hdbsql://analyst:secret@hana.corp:39017"
         )
         print(df.head())
@@ -93,11 +93,11 @@ def scan_hana(
 
     Example::
 
-        lf = hdb.scan_hana("SELECT * FROM sales", uri)
+        lf = hdb.scan_hana("SELECT * FROM SALES_ITEMS", uri)
         result = (
-            lf.filter(pl.col("amount") > 1000)
-              .group_by("region")
-              .agg(pl.sum("amount"))
+            lf.filter(pl.col("NET_AMOUNT") > 1000)
+              .group_by("SALES_REGION")
+              .agg(pl.sum("NET_AMOUNT"))
               .collect()
         )
     """
