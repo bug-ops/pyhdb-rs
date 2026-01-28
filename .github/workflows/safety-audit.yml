@@ -1,0 +1,85 @@
+name: Safety Review Audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run monthly on the 1st at 00:00 UTC
+    - cron: '0 0 1 * *'
+
+permissions:
+  contents: read
+
+jobs:
+  check-safety-reviews:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check SAFETY REVIEW dates
+        run: |
+          # Extract SAFETY REVIEW dates from wrapper.rs
+          WRAPPER_FILE="crates/hdbconnect-py/src/reader/wrapper.rs"
+
+          if [ ! -f "$WRAPPER_FILE" ]; then
+            echo "::warning::Safety review file not found: $WRAPPER_FILE"
+            exit 0
+          fi
+
+          # Extract dates in YYYY-MM-DD format following "SAFETY REVIEW:"
+          REVIEW_DATES=$(grep -E "SAFETY REVIEW:" "$WRAPPER_FILE" | grep -oE "[0-9]{4}-[0-9]{2}-[0-9]{2}" || true)
+
+          if [ -z "$REVIEW_DATES" ]; then
+            echo "::warning::No SAFETY REVIEW dates found in $WRAPPER_FILE"
+            exit 0
+          fi
+
+          CURRENT_TIMESTAMP=$(date +%s)
+          STALE_THRESHOLD=15552000  # 180 days in seconds
+          STALE_COUNT=0
+          TOTAL_COUNT=0
+
+          echo "Checking safety review dates..."
+          echo "Current date: $(date +%Y-%m-%d)"
+          echo "Stale threshold: 180 days"
+          echo ""
+
+          for REVIEW_DATE in $REVIEW_DATES; do
+            TOTAL_COUNT=$((TOTAL_COUNT + 1))
+
+            # Parse date (cross-platform: works on both GNU and BSD date)
+            if date --version >/dev/null 2>&1; then
+              # GNU date (Linux)
+              REVIEW_TIMESTAMP=$(date -d "$REVIEW_DATE" +%s 2>/dev/null || echo "0")
+            else
+              # BSD date (macOS)
+              REVIEW_TIMESTAMP=$(date -j -f "%Y-%m-%d" "$REVIEW_DATE" +%s 2>/dev/null || echo "0")
+            fi
+
+            if [ "$REVIEW_TIMESTAMP" = "0" ]; then
+              echo "::warning::Could not parse date: $REVIEW_DATE"
+              continue
+            fi
+
+            SECONDS_OLD=$((CURRENT_TIMESTAMP - REVIEW_TIMESTAMP))
+            DAYS_OLD=$((SECONDS_OLD / 86400))
+
+            if [ "$SECONDS_OLD" -gt "$STALE_THRESHOLD" ]; then
+              STALE_COUNT=$((STALE_COUNT + 1))
+              echo "::warning file=$WRAPPER_FILE::Safety review from $REVIEW_DATE is stale ($DAYS_OLD days old, threshold: 180 days)"
+            else
+              echo "Safety review from $REVIEW_DATE is current ($DAYS_OLD days old)"
+            fi
+          done
+
+          echo ""
+          echo "Summary: $TOTAL_COUNT review(s) checked, $STALE_COUNT stale"
+
+          # Exit with warning if any stale reviews found (non-blocking)
+          if [ "$STALE_COUNT" -gt 0 ]; then
+            echo ""
+            echo "Action required: Update stale safety reviews in $WRAPPER_FILE"
+            echo "See module documentation for review policy."
+          fi
