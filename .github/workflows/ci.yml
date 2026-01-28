@@ -76,8 +76,9 @@ jobs:
         # hdbconnect-py is tested via Python tests (test-python job).
         run: cargo nextest run --workspace --all-features --exclude hdbconnect-py
 
-  test-python:
-    name: Test Python ${{ matrix.python-version }} (${{ matrix.os }})
+  # Build wheels for testing (one per OS, abi3 compatible with all Python versions)
+  build-test-wheels:
+    name: Build test wheel (${{ matrix.os }})
     needs: [lint-rust, lint-python]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -85,13 +86,44 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: test-python-${{ matrix.os }}
+          shared-key: test-wheel-${{ matrix.os }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: python
+          args: --release --out dist
+          sccache: true
+        env:
+          SCCACHE_GHA_ENABLED: "true"
+      - name: Upload wheel
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-wheel-${{ matrix.os }}
+          path: python/dist/*.whl
+          retention-days: 1
+
+  test-python:
+    name: Test Python ${{ matrix.python-version }} (${{ matrix.os }})
+    needs: [build-test-wheels]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
@@ -100,14 +132,23 @@ jobs:
           enable-cache: true
           cache-dependency-glob: python/uv.lock
           cache-suffix: ${{ matrix.os }}-${{ matrix.python-version }}
-      - name: Install dependencies
-        run: uv sync --frozen --extra dev
-        working-directory: python
-      - name: Build wheel
-        run: uv run maturin develop --release
+      - name: Download wheel
+        uses: actions/download-artifact@v6
+        with:
+          name: test-wheel-${{ matrix.os }}
+          path: python/dist
+      - name: Install dependencies and wheel
+        run: |
+          uv sync --frozen --extra dev --no-install-project
+          uv pip install --find-links dist pyhdb_rs --reinstall-package pyhdb_rs
         working-directory: python
       - name: Run tests with coverage
+        if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
         run: uv run pytest --cov=pyhdb_rs --cov-report=xml
+        working-directory: python
+      - name: Run tests
+        if: matrix.python-version != '3.12' || matrix.os != 'ubuntu-latest'
+        run: uv run pytest
         working-directory: python
       - name: Upload Python coverage
         if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
@@ -117,19 +158,17 @@ jobs:
           files: python/coverage.xml
           fail_ci_if_error: false
 
-  build-wheels:
-    name: Build wheels (${{ matrix.target }})
-    needs: [test-rust, test-python]
+  # Build cross-platform wheels (parallel with test-python after test-rust)
+  build-wheels-cross:
+    name: Build cross wheels (${{ matrix.target }})
+    needs: [test-rust]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux glibc
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            manylinux: auto
+          # Cross-compiled Linux aarch64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             manylinux: auto
@@ -140,16 +179,9 @@ jobs:
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             manylinux: musllinux_1_2
-          # macOS
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            manylinux: auto
+          # macOS Apple Silicon
           - os: macos-latest
             target: aarch64-apple-darwin
-            manylinux: auto
-          # Windows
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
             manylinux: auto
           # NOTE: aarch64-pc-windows-msvc disabled until upstream deps
           # (advapi32-sys, username) support Windows ARM64
@@ -158,6 +190,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: wheels-${{ matrix.target }}
@@ -173,12 +207,41 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --out dist
           manylinux: ${{ matrix.manylinux }}
+          sccache: true
+        env:
+          SCCACHE_GHA_ENABLED: "true"
       - name: Upload wheels
         uses: actions/upload-artifact@v6
         with:
-          name: wheels-${{ matrix.target }}
+          name: wheels-cross-${{ matrix.target }}
           path: python/dist/*.whl
           retention-days: 3
+
+  # Collect all wheels (native x86_64 from tests + cross-compiled)
+  # Waits for test-python to ensure quality gate before publishing
+  collect-wheels:
+    name: Collect all wheels
+    needs: [build-test-wheels, build-wheels-cross, test-python]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download test wheels (native x86_64)
+        uses: actions/download-artifact@v6
+        with:
+          pattern: test-wheel-*
+          path: dist
+          merge-multiple: true
+      - name: Download cross wheels
+        uses: actions/download-artifact@v6
+        with:
+          pattern: wheels-cross-*
+          path: dist
+          merge-multiple: true
+      - name: Upload all wheels
+        uses: actions/upload-artifact@v6
+        with:
+          name: wheels
+          path: dist/*.whl
+          retention-days: 7
 
   coverage-rust:
     name: Coverage Rust
