@@ -39,11 +39,13 @@
 // const for simple functions that would be const in pure Rust but are bound to Python.
 #![allow(clippy::missing_const_for_fn)]
 
+pub mod common;
 pub mod connection;
 pub mod cursor;
 pub mod pool;
 pub mod statement_cache;
 
+pub use common::ConnectionState;
 pub use connection::{AsyncConnectionInner, AsyncPyConnection, SharedAsyncConnection};
 pub use cursor::AsyncPyCursor;
 pub use pool::{HanaConnectionManager, PoolConfig, PooledConnection, PyConnectionPool};

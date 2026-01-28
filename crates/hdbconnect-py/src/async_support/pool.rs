@@ -17,6 +17,7 @@ use deadpool::managed::{Manager, Metrics, Object, RecycleError, RecycleResult};
 use pyo3::prelude::*;
 use tokio::sync::Mutex as TokioMutex;
 
+use super::common::{ConnectionState, commit_impl, execute_arrow_impl, rollback_impl};
 use crate::connection::ConnectionBuilder;
 use crate::error::PyHdbError;
 
@@ -276,11 +277,11 @@ impl PooledConnection {
             let mut guard = object.lock().await;
             let obj = guard
                 .as_mut()
-                .ok_or_else(|| PyHdbError::operational("connection returned to pool"))?;
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
 
-            let rs = obj.connection.query(&sql).await.map_err(PyHdbError::from)?;
+            let reader = execute_arrow_impl(&mut obj.connection, &sql, batch_size).await?;
             drop(guard);
-            crate::reader::PyRecordBatchReader::from_resultset_async(rs, batch_size)
+            Ok(reader)
         })
     }
 
@@ -290,7 +291,7 @@ impl PooledConnection {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let guard = object.lock().await;
             if guard.is_none() {
-                return Err(PyHdbError::operational("connection returned to pool").into());
+                return Err(ConnectionState::ReturnedToPool.into_error().into());
             }
             Ok(super::cursor::AsyncPyCursor::from_pooled(Arc::clone(
                 &object,
@@ -305,10 +306,9 @@ impl PooledConnection {
             let mut guard = object.lock().await;
             let obj = guard
                 .as_mut()
-                .ok_or_else(|| PyHdbError::operational("connection returned to pool"))?;
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
 
-            obj.connection.commit().await.map_err(PyHdbError::from)?;
-            Ok(())
+            commit_impl(&mut obj.connection).await
         })
     }
 
@@ -319,10 +319,9 @@ impl PooledConnection {
             let mut guard = object.lock().await;
             let obj = guard
                 .as_mut()
-                .ok_or_else(|| PyHdbError::operational("connection returned to pool"))?;
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
 
-            obj.connection.rollback().await.map_err(PyHdbError::from)?;
-            Ok(())
+            rollback_impl(&mut obj.connection).await
         })
     }
 
