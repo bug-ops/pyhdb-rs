@@ -20,15 +20,24 @@
 //! asyncio.run(main())
 //! ```
 
-#![allow(
-    clippy::large_futures,
-    clippy::significant_drop_tightening,
-    clippy::unnecessary_wraps,
-    clippy::type_complexity,
-    clippy::missing_const_for_fn,
-    clippy::unused_self,
-    clippy::cast_precision_loss
-)]
+// PyO3 async FFI captures connection state in futures; boxing would add unnecessary overhead.
+// These futures necessarily hold Arc<TokioMutex<T>> and connection state for Python interop.
+#![allow(clippy::large_futures)]
+// Async code requires explicit lock release before yield points via drop(guard).
+// Clippy's significant_drop_tightening doesn't account for async boundaries where
+// we intentionally release locks before calling other async operations.
+#![allow(clippy::significant_drop_tightening)]
+// Types like Arc<TokioMutex<Option<PooledObject>>> are inherently complex but correctly
+// model the domain: shared ownership (Arc) + async safety (TokioMutex) + pool return
+// semantics (Option) + pooled connection (PooledObject).
+#![allow(clippy::type_complexity)]
+// PyO3 pymethods returning PyResult<T> where T could theoretically be returned directly.
+// Required by PyO3 trait bounds for Python FFI error propagation even when success is
+// guaranteed (e.g., set_autocommit setter).
+#![allow(clippy::unnecessary_wraps)]
+// PyO3 #[pymethods] cannot be const fn due to Python FFI requirements. Clippy suggests
+// const for simple functions that would be const in pure Rust but are bound to Python.
+#![allow(clippy::missing_const_for_fn)]
 
 pub mod connection;
 pub mod cursor;

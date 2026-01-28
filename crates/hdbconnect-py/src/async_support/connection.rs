@@ -252,6 +252,8 @@ impl AsyncPyConnection {
         })
     }
 
+    // PyO3 requires &self for Python __aenter__ protocol binding.
+    #[allow(clippy::unused_self)]
     fn __aenter__(slf: Py<Self>) -> Py<Self> {
         slf
     }
