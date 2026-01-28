@@ -362,11 +362,8 @@ enum SerializableValue {
 }
 
 /// Convert Python parameters (tuple/list) to serializable values.
-// PySequence::downcast is deprecated in PyO3 0.23+ (use extract::<PySequence>() instead).
-// Keeping downcast for now as it still works and the migration is non-trivial.
-#[allow(deprecated)]
 fn convert_to_serializable(params: &Bound<'_, PyAny>) -> PyResult<Vec<SerializableValue>> {
-    let sequence: &Bound<'_, PySequence> = params.downcast()?;
+    let sequence = params.cast::<PySequence>()?;
     let len = sequence.len()?;
     let mut result = Vec::with_capacity(len);
 
@@ -380,10 +377,8 @@ fn convert_to_serializable(params: &Bound<'_, PyAny>) -> PyResult<Vec<Serializab
 }
 
 /// Convert sequence of Python parameter tuples/lists to batch serializable values.
-// See convert_to_serializable for deprecation note.
-#[allow(deprecated)]
 fn convert_to_serializable_batch(seq: &Bound<'_, PyAny>) -> PyResult<Vec<Vec<SerializableValue>>> {
-    let sequence: &Bound<'_, PySequence> = seq.downcast()?;
+    let sequence = seq.cast::<PySequence>()?;
     let len = sequence.len()?;
     let mut result = Vec::with_capacity(len);
 
