@@ -17,7 +17,9 @@ use deadpool::managed::{Manager, Metrics, Object, RecycleError, RecycleResult};
 use pyo3::prelude::*;
 use tokio::sync::Mutex as TokioMutex;
 
-use super::common::{ConnectionState, commit_impl, execute_arrow_impl, rollback_impl};
+use super::common::{
+    ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, rollback_impl,
+};
 use crate::connection::ConnectionBuilder;
 use crate::error::PyHdbError;
 
@@ -32,11 +34,19 @@ pub struct PoolConfig {
     /// Connection acquisition timeout in seconds.
     pub connection_timeout_secs: u64,
     /// Size of the prepared statement cache per connection.
+    ///
+    /// **DEPRECATED**: This field is ignored. Statement caching is not available
+    /// due to hdbconnect API limitations. Will be removed in version 0.3.0.
+    #[deprecated(
+        since = "0.2.5",
+        note = "Statement caching is not supported. This field is ignored."
+    )]
     pub statement_cache_size: usize,
 }
 
 impl Default for PoolConfig {
     fn default() -> Self {
+        #[allow(deprecated)]
         Self {
             max_size: 10,
             min_idle: None,
@@ -95,7 +105,7 @@ impl Manager for HanaConnectionManager {
         _metrics: &Metrics,
     ) -> RecycleResult<Self::Error> {
         conn.connection
-            .query("SELECT 1 FROM DUMMY")
+            .query(VALIDATION_QUERY)
             .await
             .map_err(RecycleError::Backend)?;
         Ok(())
@@ -325,6 +335,51 @@ impl PooledConnection {
         })
     }
 
+    /// Check if pooled connection is valid.
+    ///
+    /// Returns an awaitable that resolves to a boolean.
+    ///
+    /// # Arguments
+    ///
+    /// * `check_connection` - If True (default), executes `SELECT 1 FROM DUMMY` to verify the
+    ///   connection is alive. If False, only checks if connection is still held (not returned to
+    ///   pool).
+    ///
+    /// # Returns
+    ///
+    /// Awaitable[bool]: True if connection is valid, False otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```python
+    /// async with pool.acquire() as conn:
+    ///     if not await conn.is_valid():
+    ///         # Connection invalid, handle error
+    ///         pass
+    /// ```
+    #[pyo3(signature = (check_connection=true))]
+    fn is_valid<'py>(
+        &self,
+        py: Python<'py>,
+        check_connection: bool,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = object.lock().await;
+            match guard.as_mut() {
+                Some(obj) => {
+                    if check_connection {
+                        Ok(obj.connection.query(VALIDATION_QUERY).await.is_ok())
+                    } else {
+                        Ok(true)
+                    }
+                }
+                None => Ok(false), // Returned to pool
+            }
+        })
+    }
+
     // PyO3 requires &self for Python __aenter__ protocol binding.
     #[allow(clippy::unused_self)]
     fn __aenter__(slf: Py<Self>) -> Py<Self> {
@@ -367,14 +422,19 @@ mod tests {
 
     #[test]
     fn test_pool_config_default() {
+        #[allow(deprecated)]
         let config = PoolConfig::default();
         assert_eq!(config.max_size, 10);
         assert_eq!(config.min_idle, None);
         assert_eq!(config.connection_timeout_secs, 30);
-        assert_eq!(config.statement_cache_size, 0);
+        #[allow(deprecated)]
+        {
+            assert_eq!(config.statement_cache_size, 0);
+        }
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_pool_config_clone() {
         let config = PoolConfig {
             max_size: 20,
@@ -392,6 +452,7 @@ mod tests {
 
     #[test]
     fn test_pool_config_debug() {
+        #[allow(deprecated)]
         let config = PoolConfig::default();
         let debug_str = format!("{:?}", config);
         assert!(debug_str.contains("PoolConfig"));

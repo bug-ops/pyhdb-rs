@@ -11,6 +11,12 @@ use crate::cursor::PyCursor;
 use crate::error::PyHdbError;
 use crate::reader::PyRecordBatchReader;
 
+/// Lightweight validation query for connection health checks.
+///
+/// SAP HANA's `DUMMY` table is equivalent to Oracle's `DUAL` - a special
+/// single-row, single-column table designed for this purpose.
+const VALIDATION_QUERY: &str = "SELECT 1 FROM DUMMY";
+
 /// Shared connection type for thread-safe access.
 pub type SharedConnection = Arc<Mutex<ConnectionInner>>;
 
@@ -120,6 +126,38 @@ impl PyConnection {
         matches!(*self.inner.lock(), ConnectionInner::Connected(_))
     }
 
+    /// Check if connection is valid.
+    ///
+    /// # Arguments
+    ///
+    /// * `check_connection` - If True (default), executes `SELECT 1 FROM DUMMY` to verify the
+    ///   connection is alive. If False, only checks internal state without network round-trip.
+    ///
+    /// # Returns
+    ///
+    /// True if connection is valid, False otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```python
+    /// if not conn.is_valid():
+    ///     conn = pyhdb_rs.connect(uri)  # Reconnect
+    /// ```
+    #[pyo3(signature = (check_connection=true))]
+    fn is_valid(&self, check_connection: bool) -> bool {
+        let mut guard = self.inner.lock();
+        match &mut *guard {
+            ConnectionInner::Connected(conn) => {
+                if check_connection {
+                    conn.query(VALIDATION_QUERY).is_ok()
+                } else {
+                    true
+                }
+            }
+            ConnectionInner::Disconnected => false,
+        }
+    }
+
     /// Get/set autocommit mode.
     #[getter]
     const fn autocommit(&self) -> bool {
@@ -187,5 +225,21 @@ impl PyConnection {
             "closed"
         };
         format!("Connection(state={state}, autocommit={})", self.autocommit)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validation_query_constant() {
+        assert_eq!(VALIDATION_QUERY, "SELECT 1 FROM DUMMY");
+    }
+
+    #[test]
+    fn test_connection_inner_disconnected() {
+        let inner = ConnectionInner::Disconnected;
+        assert!(matches!(inner, ConnectionInner::Disconnected));
     }
 }

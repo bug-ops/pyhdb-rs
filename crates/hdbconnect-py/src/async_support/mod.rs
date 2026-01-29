@@ -11,7 +11,8 @@
 //!
 //! async def main():
 //!     async with await connect("hdbsql://user:pass@host:30015") as conn:
-//!         df = await conn.execute_polars("SELECT * FROM sales")
+//!         reader = await conn.execute_arrow("SELECT * FROM sales")
+//!         df = pl.from_arrow(reader)
 //!
 //!     pool = create_pool("hdbsql://user:pass@host:30015", max_size=10)
 //!     async with pool.acquire() as conn:
@@ -19,6 +20,12 @@
 //!
 //! asyncio.run(main())
 //! ```
+//!
+//! # Statement Cache Deprecation
+//!
+//! The statement cache module is deprecated and will be removed in version 0.3.0.
+//! Statement caching was not providing actual performance benefit due to hdbconnect
+//! API limitations. The `statement_cache_size` parameter in `connect()` is now ignored.
 
 // PyO3 async FFI captures connection state in futures; boxing would add unnecessary overhead.
 // These futures necessarily hold Arc<TokioMutex<T>> and connection state for Python interop.
@@ -49,6 +56,10 @@ pub use common::ConnectionState;
 pub use connection::{AsyncConnectionInner, AsyncPyConnection, SharedAsyncConnection};
 pub use cursor::AsyncPyCursor;
 pub use pool::{HanaConnectionManager, PoolConfig, PooledConnection, PyConnectionPool};
+#[deprecated(
+    since = "0.2.5",
+    note = "Statement cache is deprecated and will be removed in 0.3.0. It provides no performance benefit."
+)]
 pub use statement_cache::{CacheStats, PreparedStatementCache};
 
 #[cfg(test)]

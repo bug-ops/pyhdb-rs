@@ -1,7 +1,13 @@
 //! Prepared statement LRU cache.
 //!
-//! Provides caching for SQL statement metadata to track query patterns and usage.
-//! The cache helps identify frequently executed queries and maintains hit/miss statistics.
+//! # Deprecation Notice
+//!
+//! This module is deprecated and will be removed in version 0.3.0.
+//! The statement cache only tracks statistics and does not provide
+//! actual prepared statement caching due to hdbconnect API limitations.
+//!
+//! The `statement_cache_size` parameter in `AsyncConnection.connect()`
+//! is now ignored. Use direct query execution instead.
 //!
 //! # Performance Note
 //!
@@ -10,6 +16,11 @@
 //! heterogeneous lookups (e.g., `hashbrown` with `raw_entry` API). The LRU crate
 //! doesn't support `Borrow` trait-based lookups, so we accept this trade-off for
 //! simplicity and correctness.
+
+#![deprecated(
+    since = "0.2.5",
+    note = "Statement cache provides no performance benefit. Parameter ignored."
+)]
 
 use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
@@ -58,6 +69,12 @@ pub struct CachedStatement {
 /// LRU cache for prepared statements.
 ///
 /// Tracks SQL statement execution patterns and provides hit/miss statistics.
+///
+/// # Deprecation
+///
+/// This type is deprecated and will be removed in version 0.3.0.
+/// Statement caching is not providing actual performance benefit due to
+/// hdbconnect API limitations.
 #[derive(Debug)]
 pub struct PreparedStatementCache {
     cache: LruCache<StatementKey, CachedStatement>,
@@ -201,6 +218,11 @@ impl PreparedStatementCache {
 }
 
 /// Cache statistics snapshot.
+///
+/// # Deprecation
+///
+/// This type is deprecated and will be removed in version 0.3.0.
+/// The cache_stats() method now always returns None.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CacheStats {
     /// Total number of cache hits.
@@ -216,6 +238,7 @@ pub struct CacheStats {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 

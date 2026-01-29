@@ -3,6 +3,11 @@
 This module provides async/await support for HANA database operations.
 Requires the package to be built with the 'async' feature.
 
+.. warning::
+    The async ``execute_arrow()`` method loads ALL rows into memory before
+    returning the RecordBatchReader. For large datasets (>100K rows), use the
+    sync API instead which provides true streaming with O(batch_size) memory.
+
 Basic async usage::
 
     import asyncio
@@ -10,7 +15,8 @@ Basic async usage::
 
     async def main():
         async with await connect("hdbsql://user:pass@host:39017") as conn:
-            df = await conn.execute_polars("SELECT * FROM sales")
+            reader = await conn.execute_arrow("SELECT * FROM sales")
+            df = pl.from_arrow(reader)
             print(df)
 
     asyncio.run(main())
@@ -62,7 +68,8 @@ async def connect(
     Args:
         url: Connection URL (hdbsql://user:pass@host:port[/database])
         autocommit: Enable auto-commit mode (default: True)
-        statement_cache_size: Size of prepared statement cache (default: 0, disabled)
+        statement_cache_size: DEPRECATED - This parameter is ignored.
+            Statement caching is not available. Will be removed in 0.3.0.
 
     Returns:
         AsyncConnection object
@@ -74,7 +81,8 @@ async def connect(
 
     Example:
         >>> async with await connect("hdbsql://user:pass@host:30015") as conn:
-        ...     df = await conn.execute_polars("SELECT * FROM sales")
+        ...     reader = await conn.execute_arrow("SELECT * FROM sales")
+        ...     df = pl.from_arrow(reader)
     """
     if not ASYNC_AVAILABLE:
         raise RuntimeError(
@@ -112,7 +120,8 @@ def create_pool(
     Example:
         >>> pool = create_pool("hdbsql://user:pass@host:30015", max_size=20)
         >>> async with pool.acquire() as conn:
-        ...     df = await conn.execute_polars("SELECT * FROM sales")
+        ...     reader = await conn.execute_arrow("SELECT * FROM sales")
+        ...     df = pl.from_arrow(reader)
     """
     if not ASYNC_AVAILABLE:
         raise RuntimeError(

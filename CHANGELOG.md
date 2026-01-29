@@ -5,7 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.5]
+
+### Added
+
+- `is_valid(check_connection=True)` method on all connection types for
+  connection health checking. When `check_connection=True` (default),
+  executes lightweight ping query (`SELECT 1 FROM DUMMY`). Available on:
+  - `Connection` (sync)
+  - `AsyncConnection` (async)
+  - `PooledConnection` (pooled async)
 
 ### Changed
 
@@ -14,18 +23,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use `execute_arrow()` instead and convert manually: `df = pl.from_arrow(await conn.execute_arrow(sql))`
   - Improves API consistency and reduces maintenance burden
 
+### Deprecated
+
+- `statement_cache_size` parameter in `AsyncConnection.connect()` is deprecated
+  and ignored. Statement caching was not providing actual performance benefit
+  due to hdbconnect API limitations. Will be removed in 0.3.0.
+- `cache_stats()` method now returns None and is deprecated.
+- `PreparedStatementCache` and `CacheStats` types are deprecated.
+
 ### Documentation
 
+- **Async API Memory Warning:** Added prominent documentation about async API
+  memory behavior. `execute_arrow()` in async mode loads all rows into memory
+  before streaming batches. Use sync API for large datasets (>100K rows).
+  - Module-level warning in `reader/wrapper.rs`
+  - Function-level warnings on `AsyncStreamingReader::new` and `from_resultset_async`
+  - README.md warning callout in async section
+  - Python `pyhdb_rs.aio` module docstring warning
 - **Async API Documentation:** Comprehensive documentation for async support including:
   - Connection pooling with deadpool (configurable max_size, connection_timeout)
-  - Statement caching with LRU eviction (configurable cache size, hit/miss statistics)
   - Concurrent query execution patterns with asyncio.gather()
   - Transaction support (commit/rollback) in async context
   - Performance notes and best practices for high-concurrency workloads
+  - Note: Statement caching documentation removed (feature deprecated)
 - Expanded README.md async section with detailed usage examples (500+ words)
 - Added async feature documentation to crate README (crates/hdbconnect-py/README.md)
 - Python async examples with connection pooling patterns (python/README.md)
-- Statement caching configuration and monitoring guide
+- Added `is_valid()` usage examples in README Connection Validation section
 
 ## [0.2.4] - 2026-01-28
 
@@ -283,7 +307,8 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.3...HEAD
+[0.2.5]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.0...v0.2.1

@@ -8,6 +8,12 @@ use pyo3::prelude::*;
 use crate::error::PyHdbError;
 use crate::reader::PyRecordBatchReader;
 
+/// Lightweight validation query for connection health checks.
+///
+/// SAP HANA's `DUMMY` table is equivalent to Oracle's `DUAL` - a special
+/// single-row, single-column table designed for this purpose.
+pub const VALIDATION_QUERY: &str = "SELECT 1 FROM DUMMY";
+
 /// Connection state error for consistent error messages.
 #[derive(Debug, Clone, Copy)]
 pub enum ConnectionState {
@@ -74,6 +80,11 @@ pub async fn execute_query_impl(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_validation_query_constant() {
+        assert_eq!(VALIDATION_QUERY, "SELECT 1 FROM DUMMY");
+    }
 
     #[test]
     fn test_connection_state_closed_message() {

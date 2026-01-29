@@ -1,4 +1,10 @@
 //! Async connection for Python.
+//!
+//! # Statement Cache Deprecation
+//!
+//! The `statement_cache_size` parameter is deprecated and ignored.
+//! Statement caching is not available due to hdbconnect API limitations.
+//! The parameter will be removed in version 0.3.0.
 
 use std::sync::Arc;
 
@@ -6,9 +12,10 @@ use pyo3::prelude::*;
 use pyo3::types::PyType;
 use tokio::sync::Mutex as TokioMutex;
 
-use super::common::{ConnectionState, commit_impl, execute_arrow_impl, rollback_impl};
+use super::common::{
+    ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, rollback_impl,
+};
 use super::cursor::AsyncPyCursor;
-use super::statement_cache::PreparedStatementCache;
 use crate::connection::ConnectionBuilder;
 use crate::error::PyHdbError;
 
@@ -18,7 +25,6 @@ pub type SharedAsyncConnection = Arc<TokioMutex<AsyncConnectionInner>>;
 pub enum AsyncConnectionInner {
     Connected {
         connection: hdbconnect_async::Connection,
-        statement_cache: Option<PreparedStatementCache>,
     },
     Disconnected,
 }
@@ -47,7 +53,6 @@ impl AsyncConnectionInner {
 pub struct AsyncPyConnection {
     inner: SharedAsyncConnection,
     autocommit: bool,
-    cache_capacity: usize,
 }
 
 impl AsyncPyConnection {
@@ -58,6 +63,14 @@ impl AsyncPyConnection {
 
 #[pymethods]
 impl AsyncPyConnection {
+    /// Connect to HANA database asynchronously.
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - Connection URL (hdbsql://user:pass@host:port)
+    /// * `autocommit` - Enable auto-commit mode (default: True)
+    /// * `statement_cache_size` - **DEPRECATED**: This parameter is ignored. Statement caching is
+    ///   not available due to hdbconnect API limitations. Will be removed in 0.3.0.
     #[classmethod]
     #[pyo3(signature = (url, *, autocommit=true, statement_cache_size=0))]
     fn connect<'py>(
@@ -65,7 +78,7 @@ impl AsyncPyConnection {
         py: Python<'py>,
         url: String,
         autocommit: bool,
-        statement_cache_size: usize,
+        #[allow(unused_variables)] statement_cache_size: usize,
     ) -> PyResult<Bound<'py, PyAny>> {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let params = ConnectionBuilder::from_url(&url)?.build()?;
@@ -74,22 +87,11 @@ impl AsyncPyConnection {
                 .await
                 .map_err(|e| PyHdbError::operational(e.to_string()))?;
 
-            let statement_cache = if statement_cache_size > 0 {
-                Some(PreparedStatementCache::new(statement_cache_size))
-            } else {
-                None
-            };
-
             let inner = Arc::new(TokioMutex::new(AsyncConnectionInner::Connected {
                 connection,
-                statement_cache,
             }));
 
-            Ok(Self {
-                inner,
-                autocommit,
-                cache_capacity: statement_cache_size,
-            })
+            Ok(Self { inner, autocommit })
         })
     }
 
@@ -139,6 +141,47 @@ impl AsyncPyConnection {
         })
     }
 
+    /// Check if connection is valid.
+    ///
+    /// Returns an awaitable that resolves to a boolean.
+    ///
+    /// # Arguments
+    ///
+    /// * `check_connection` - If True (default), executes `SELECT 1 FROM DUMMY` to verify the
+    ///   connection is alive. If False, only checks internal state without network round-trip.
+    ///
+    /// # Returns
+    ///
+    /// Awaitable[bool]: True if connection is valid, False otherwise.
+    ///
+    /// # Example
+    ///
+    /// ```python
+    /// if not await conn.is_valid():
+    ///     conn = await connect(uri)  # Reconnect
+    /// ```
+    #[pyo3(signature = (check_connection=true))]
+    fn is_valid<'py>(
+        &self,
+        py: Python<'py>,
+        check_connection: bool,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = inner.lock().await;
+            match &mut *guard {
+                AsyncConnectionInner::Connected { connection } => {
+                    if check_connection {
+                        Ok(connection.query(VALIDATION_QUERY).await.is_ok())
+                    } else {
+                        Ok(true)
+                    }
+                }
+                AsyncConnectionInner::Disconnected => Ok(false),
+            }
+        })
+    }
+
     #[getter]
     const fn autocommit(&self) -> bool {
         self.autocommit
@@ -151,8 +194,6 @@ impl AsyncPyConnection {
     }
 
     /// Executes a SQL query and returns an Arrow `RecordBatchReader`.
-    ///
-    /// If statement caching is enabled, tracks query statistics.
     #[pyo3(signature = (sql, batch_size=65536))]
     fn execute_arrow<'py>(
         &self,
@@ -164,16 +205,7 @@ impl AsyncPyConnection {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut guard = inner.lock().await;
             match &mut *guard {
-                AsyncConnectionInner::Connected {
-                    connection,
-                    statement_cache,
-                } => {
-                    if let Some(cache) = statement_cache {
-                        // Tracking-only: closure is empty because we only need LRU statistics.
-                        // Actual statement preparation happens inside hdbconnect crate.
-                        cache.get_or_insert(&sql, || {});
-                    }
-
+                AsyncConnectionInner::Connected { connection } => {
                     let reader = execute_arrow_impl(connection, &sql, batch_size).await?;
                     drop(guard);
                     Ok(reader)
@@ -183,31 +215,19 @@ impl AsyncPyConnection {
         })
     }
 
-    /// Returns statement cache statistics if caching is enabled.
+    /// Returns statement cache statistics.
+    ///
+    /// # Deprecation
+    ///
+    /// Always returns None. Statement caching is deprecated and will be
+    /// removed in version 0.3.0.
+    #[deprecated(
+        since = "0.2.5",
+        note = "Statement cache removed. Always returns None."
+    )]
     fn cache_stats<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let inner = Arc::clone(&self.inner);
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let guard = inner.lock().await;
-            match &*guard {
-                AsyncConnectionInner::Connected {
-                    statement_cache, ..
-                } => statement_cache.as_ref().map_or_else(
-                    || Python::attach(|py| Ok(py.None().into_any())),
-                    |cache| {
-                        let stats = cache.stats();
-                        Python::attach(|py| {
-                            let dict = pyo3::types::PyDict::new(py);
-                            dict.set_item("hits", stats.hits)?;
-                            dict.set_item("misses", stats.misses)?;
-                            dict.set_item("hit_rate", stats.hit_rate)?;
-                            dict.set_item("size", stats.size)?;
-                            dict.set_item("capacity", stats.capacity)?;
-                            Ok(dict.unbind().into_any())
-                        })
-                    },
-                ),
-                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
-            }
+            Python::attach(|py| Ok(py.None().into_any()))
         })
     }
 
@@ -233,9 +253,6 @@ impl AsyncPyConnection {
     }
 
     fn __repr__(&self) -> String {
-        format!(
-            "AsyncConnection(autocommit={}, cache_capacity={})",
-            self.autocommit, self.cache_capacity
-        )
+        format!("AsyncConnection(autocommit={})", self.autocommit)
     }
 }

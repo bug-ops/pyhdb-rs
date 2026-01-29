@@ -2,6 +2,26 @@
 //!
 //! Implements __`arrow_c_stream`__ for zero-copy Arrow data transfer.
 //!
+//! # Async Memory Warning
+//!
+//! > **WARNING**: `AsyncStreamingReader` loads ALL rows into memory before
+//! > processing. Despite the channel-based architecture, `hdbconnect_async::ResultSet`
+//! > requires `into_rows().await` which materializes the entire result set.
+//!
+//! For large datasets (>100K rows), use the **sync API** instead:
+//!
+//! ```python
+//! # Memory-efficient for large results
+//! conn = pyhdb_rs.connect(uri)  # Sync connection
+//! reader = conn.execute_arrow("SELECT * FROM large_table", batch_size=10000)
+//! for batch in reader:
+//!     process_batch(batch)  # Streaming, O(batch_size) memory
+//! ```
+//!
+//! The async API is suitable for:
+//! - Small to medium result sets (<100K rows)
+//! - Non-blocking I/O in async contexts where memory is not constrained
+//!
 //! # Safety Model
 //!
 //! This module contains `unsafe impl Send` for `StreamingReader` and
@@ -269,7 +289,15 @@ impl PyRecordBatchReader {
         })
     }
 
-    /// WARNING: Loads ALL rows into memory. For large result sets, use sync API.
+    /// Creates a reader from async result set.
+    ///
+    /// # Memory Warning
+    ///
+    /// This function calls `result_set.into_rows().await` which loads ALL rows
+    /// into memory. Memory usage is `O(n)` where `n` is total row count.
+    ///
+    /// For large datasets, use sync `PyRecordBatchReader::from_resultset` instead
+    /// which provides true `O(batch_size)` memory usage.
     #[cfg(feature = "async")]
     pub fn from_resultset_async(
         result_set: hdbconnect_async::ResultSet,
@@ -295,6 +323,14 @@ impl PyRecordBatchReader {
 ///
 /// The channel buffer size is set to 4 batches, which provides a good balance
 /// between throughput and memory usage.
+///
+/// # Memory Warning
+///
+/// Despite the channel-based architecture, `hdbconnect_async::ResultSet::into_rows().await`
+/// loads ALL rows into memory. Memory usage is `O(n)` where `n` is total row count.
+///
+/// For large datasets (>100K rows), use the sync API instead which provides true
+/// `O(batch_size)` memory usage via streaming iteration.
 #[cfg(feature = "async")]
 struct AsyncStreamingReader {
     receiver: std::sync::mpsc::Receiver<Result<RecordBatch, arrow_schema::ArrowError>>,
@@ -324,6 +360,15 @@ impl AsyncStreamingReader {
     /// Channel buffer size (number of batches to buffer before blocking sender).
     const CHANNEL_BUFFER_SIZE: usize = 4;
 
+    /// Creates async reader for result set.
+    ///
+    /// # Memory Warning
+    ///
+    /// This function calls `result_set.into_rows().await` which loads ALL rows
+    /// into memory. Memory usage is `O(n)` where `n` is total row count.
+    ///
+    /// For large datasets, use sync `StreamingReader::new` instead which provides
+    /// true `O(batch_size)` memory usage via streaming iteration.
     fn new(result_set: hdbconnect_async::ResultSet, batch_size: usize) -> Self {
         let schema = Self::build_schema(&result_set);
         let config = BatchConfig::with_batch_size(batch_size);
