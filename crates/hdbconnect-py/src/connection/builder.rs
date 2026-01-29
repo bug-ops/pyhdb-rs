@@ -459,7 +459,7 @@ mod tests {
         let _builder = ConnectionBuilder::new()
             .host("localhost")
             .port(30015)
-            .credentials("user", "pass")
+            .credentials("test_user", "test_password")
             .database("mydb")
             .tls(true);
         // Type system ensures this is ConnectionBuilder<HasHost, HasCredentials>
@@ -549,7 +549,7 @@ mod tests {
         let _builder = AsyncConnectionBuilder::new()
             .host("localhost")
             .port(30015)
-            .credentials("user", "pass")
+            .credentials("test_user", "test_password")
             .database("mydb")
             .tls(true);
         // Type system ensures this is AsyncConnectionBuilder<HasHost, HasCredentials>
@@ -630,7 +630,7 @@ mod tests {
         let result = AsyncConnectionBuilder::new()
             .host("localhost")
             .port(30015)
-            .credentials("user", "pass")
+            .credentials("test_user", "test_password")
             .database("mydb")
             .build();
         assert!(result.is_ok());
@@ -642,7 +642,7 @@ mod tests {
         let config = ConnectionConfiguration::default();
         let builder = AsyncConnectionBuilder::new()
             .host("localhost")
-            .credentials("user", "pass")
+            .credentials("test_user", "test_password")
             .port(30015)
             .database("mydb")
             .tls(false)
