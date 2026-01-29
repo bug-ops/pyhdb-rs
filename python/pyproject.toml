@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "pyhdb_rs"
-version = "0.3.0"
+version = "0.3.1"
 description = "High-performance Python driver for SAP HANA with native Arrow support"
 readme = "README.md"
 license = { text = "Apache-2.0 OR MIT" }
@@ -74,9 +74,6 @@ ignore = ["ANN401"]
 "pyhdb_rs/dbapi.py" = ["N802"]
 # Exception name Warning is required by DB-API 2.0
 "pyhdb_rs/_core.pyi" = ["N818"]
-# contextlib.suppress is not always cleaner
-"pyhdb_rs/polars.py" = ["SIM105"]
-"pyhdb_rs/pandas.py" = ["SIM105"]
 
 [tool.mypy]
 python_version = "3.12"

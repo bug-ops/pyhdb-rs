@@ -394,28 +394,6 @@ class TestAioModuleAll:
         assert "PoolStatus" in aio.__all__
 
 
-class TestAioPolarsModule:
-    """Tests for aio polars module."""
-
-    def test_import_aio_polars_module(self) -> None:
-        """Test that aio.polars module can be imported."""
-        from pyhdb_rs.aio import polars
-
-        assert polars is not None
-
-    def test_aio_polars_has_read_hana_async(self) -> None:
-        """Test that aio.polars has read_hana_async function."""
-        from pyhdb_rs.aio.polars import read_hana_async
-
-        assert callable(read_hana_async)
-
-    def test_aio_polars_has_read_hana_pooled(self) -> None:
-        """Test that aio.polars has read_hana_pooled function."""
-        from pyhdb_rs.aio.polars import read_hana_pooled
-
-        assert callable(read_hana_pooled)
-
-
 class TestConnectWithoutAsync:
     """Tests for connect function behavior without async runtime."""
 

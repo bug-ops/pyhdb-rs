@@ -16,7 +16,7 @@ High-performance Python driver for SAP HANA with native Arrow support.
 
 - Full DB-API 2.0 (PEP 249) compliance
 - Zero-copy Arrow data transfer via PyCapsule Interface
-- Native Polars/pandas integration
+- Native Polars/pandas integration via `execute_arrow()`
 - Async/await support with connection pooling
 - Built with Rust and PyO3 for maximum performance
 
@@ -71,9 +71,9 @@ maturin develop --release
 ### DB-API 2.0 usage
 
 ```python
-import pyhdb_rs
+from pyhdb_rs import ConnectionBuilder
 
-conn = pyhdb_rs.connect("hdbsql://USER:PASSWORD@HOST:30015")
+conn = ConnectionBuilder.from_url("hdbsql://USER:PASSWORD@HOST:30015").build()
 
 with conn.cursor() as cursor:
     cursor.execute("SELECT * FROM CUSTOMERS WHERE IS_ACTIVE = ?", [True])
@@ -88,6 +88,36 @@ with conn.cursor() as cursor:
 
 conn.close()
 ```
+
+### Polars integration
+
+```python
+from pyhdb_rs import ConnectionBuilder
+import polars as pl
+
+conn = ConnectionBuilder.from_url("hdbsql://USER:PASSWORD@HOST:39017").build()
+reader = conn.execute_arrow("SELECT * FROM SALES_ITEMS WHERE FISCAL_YEAR = 2026")
+df = pl.from_arrow(reader)
+print(df.head())
+conn.close()
+```
+
+### pandas integration
+
+```python
+from pyhdb_rs import ConnectionBuilder
+import pyarrow as pa
+
+conn = ConnectionBuilder.from_url("hdbsql://USER:PASSWORD@HOST:39017").build()
+reader = conn.execute_arrow("SELECT * FROM SALES_ITEMS")
+pa_reader = pa.RecordBatchReader.from_stream(reader)
+df = pa_reader.read_all().to_pandas()
+print(df.head())
+conn.close()
+```
+
+> [!TIP]
+> Use `execute_arrow()` for best performance. Data flows directly from HANA to your DataFrame library without intermediate copies.
 
 ## Builder API
 
@@ -152,6 +182,7 @@ conn = (ConnectionBuilder.from_url("hdbsql://user:pass@host:30015")
 import asyncio
 from pyhdb_rs.aio import AsyncConnectionBuilder
 from pyhdb_rs import TlsConfig
+import polars as pl
 
 async def main():
     conn = await (AsyncConnectionBuilder()
@@ -162,9 +193,9 @@ async def main():
         .build())
 
     async with conn:
-        cursor = conn.cursor()
-        await cursor.execute("SELECT * FROM DUMMY")
-        print(await cursor.fetchone())
+        reader = await conn.execute_arrow("SELECT * FROM DUMMY")
+        df = pl.from_arrow(reader)
+        print(df)
 
 asyncio.run(main())
 ```
@@ -172,41 +203,13 @@ asyncio.run(main())
 </details>
 
 <details>
-<summary><strong>Polars Integration Examples</strong></summary>
+<summary><strong>Advanced Polars Examples</strong></summary>
 
 ```python
-import pyhdb_rs.polars as hdb
-
-df = hdb.read_hana(
-    """
-    SELECT
-        PRODUCT_CATEGORY,
-        FISCAL_YEAR,
-        SUM(NET_AMOUNT) AS TOTAL_REVENUE,
-        COUNT(DISTINCT ORDER_ID) AS ORDER_COUNT,
-        AVG(QUANTITY) AS AVG_QUANTITY
-    FROM SALES_ITEMS
-    WHERE FISCAL_YEAR BETWEEN 2024 AND 2026
-        AND SALES_REGION IN ('EMEA', 'AMERICAS')
-    GROUP BY PRODUCT_CATEGORY, FISCAL_YEAR
-    ORDER BY TOTAL_REVENUE DESC
-    """,
-    "hdbsql://USER:PASSWORD@HOST:39017"
-)
-
-print(df.head())
-```
-
-> [!TIP]
-> Use `execute_arrow()` with Polars for best performance. Data flows directly from HANA to Polars without intermediate copies.
-
-Or using the connection object:
-
-```python
-import pyhdb_rs
+from pyhdb_rs import ConnectionBuilder
 import polars as pl
 
-conn = pyhdb_rs.connect("hdbsql://USER:PASSWORD@HOST:30015")
+conn = ConnectionBuilder.from_url("hdbsql://USER:PASSWORD@HOST:39017").build()
 
 # Get as Polars DataFrame (zero-copy via Arrow)
 reader = conn.execute_arrow(
@@ -225,9 +228,13 @@ cursor.execute(
 )
 df = pl.from_arrow(cursor.fetch_arrow())
 
-# Stream large datasets batch-by-batch
+# Stream large datasets batch-by-batch with ArrowConfig
+from pyhdb_rs import ArrowConfig
+
+config = ArrowConfig(batch_size=10000)
 reader = conn.execute_arrow(
-    "SELECT ORDER_ID, CUSTOMER_ID, ORDER_DATE, TOTAL_AMOUNT FROM SALES_ORDERS WHERE ORDER_DATE >= '2024-01-01'"
+    "SELECT ORDER_ID, CUSTOMER_ID, ORDER_DATE, TOTAL_AMOUNT FROM SALES_ORDERS WHERE ORDER_DATE >= '2024-01-01'",
+    config=config
 )
 for batch in reader:
     process_batch(batch)
@@ -235,37 +242,27 @@ for batch in reader:
 conn.close()
 ```
 
-### pandas integration
-
-```python
-import pyhdb_rs.pandas as hdb
-
-df = hdb.read_hana(
-    """SELECT ORDER_ID, CUSTOMER_NAME, PRODUCT_NAME, QUANTITY, NET_AMOUNT
-       FROM SALES_ITEMS
-       WHERE ORDER_STATUS = 'COMPLETED' AND ORDER_DATE >= ADD_MONTHS(CURRENT_DATE, -12)""",
-    "hdbsql://USER:PASSWORD@HOST:39017"
-)
-
-print(df.head())
-```
-
 ### Lazy evaluation with Polars
 
 ```python
-import pyhdb_rs.polars as hdb
+from pyhdb_rs import ConnectionBuilder
 import polars as pl
 
-# scan_hana() returns a LazyFrame - query executes on .collect()
-lf = hdb.scan_hana(
-    "SELECT ORDER_ID, CUSTOMER_NAME, PRODUCT_CATEGORY, NET_AMOUNT, ORDER_DATE FROM SALES_ITEMS WHERE YEAR(ORDER_DATE) = 2025",
-    "hdbsql://USER:PASSWORD@HOST:39017"
+conn = ConnectionBuilder.from_url("hdbsql://USER:PASSWORD@HOST:39017").build()
+reader = conn.execute_arrow(
+    "SELECT ORDER_ID, CUSTOMER_NAME, PRODUCT_CATEGORY, NET_AMOUNT FROM SALES_ITEMS WHERE YEAR(ORDER_DATE) = 2025"
 )
-result = lf.filter(pl.col("NET_AMOUNT") > 1000).select(["CUSTOMER_NAME", "PRODUCT_CATEGORY", "NET_AMOUNT"]).collect()
-```
 
-> [!TIP]
-> Use `scan_hana()` for lazy evaluation when you need to apply filters or transformations before materializing data.
+# Convert to LazyFrame for deferred operations
+lf = pl.from_arrow(reader).lazy()
+result = (
+    lf.filter(pl.col("NET_AMOUNT") > 1000)
+    .select(["CUSTOMER_NAME", "PRODUCT_CATEGORY", "NET_AMOUNT"])
+    .collect()
+)
+
+conn.close()
+```
 
 </details>
 
@@ -505,6 +502,7 @@ Combine network groups with connection pooling for production deployments:
 ```python
 from pyhdb_rs.aio import ConnectionPoolBuilder
 from pyhdb_rs import TlsConfig
+import polars as pl
 
 pool = (ConnectionPoolBuilder()
     .url("hdbsql://user:pass@host:30015")
@@ -538,10 +536,15 @@ pyhdb-rs supports async/await operations for non-blocking database access.
 ```python
 import asyncio
 import polars as pl
-from pyhdb_rs.aio import connect
+from pyhdb_rs.aio import AsyncConnectionBuilder
 
 async def main():
-    async with await connect("hdbsql://USER:PASSWORD@HOST:30015") as conn:
+    conn = await (AsyncConnectionBuilder()
+        .host("hana.example.com")
+        .credentials("USER", "PASSWORD")
+        .build())
+
+    async with conn:
         reader = await conn.execute_arrow(
             """SELECT PRODUCT_NAME, SUM(QUANTITY) AS TOTAL_SOLD, SUM(NET_AMOUNT) AS REVENUE
                FROM SALES_ITEMS
@@ -593,17 +596,19 @@ async def main():
 asyncio.run(main())
 ```
 
-### Using create_pool (legacy)
+### Using ConnectionPool directly
 
 ```python
 import asyncio
-from pyhdb_rs.aio import create_pool
+from pyhdb_rs.aio import ConnectionPool
+from pyhdb_rs import TlsConfig
 
 async def main():
-    pool = create_pool(
+    pool = ConnectionPool(
         "hdbsql://USER:PASSWORD@HOST:30015",
         max_size=10,
-        connection_timeout=30
+        connection_timeout=30,
+        tls_config=TlsConfig.with_system_roots()
     )
 
     async with pool.acquire() as conn:
@@ -621,7 +626,7 @@ asyncio.run(main())
 ```python
 import asyncio
 import polars as pl
-from pyhdb_rs.aio import create_pool
+from pyhdb_rs.aio import ConnectionPool
 
 async def fetch_sales_by_region(pool, region: str):
     async with pool.acquire() as conn:
@@ -635,7 +640,7 @@ async def fetch_sales_by_region(pool, region: str):
         return pl.from_arrow(reader)
 
 async def main():
-    pool = create_pool("hdbsql://USER:PASSWORD@HOST:30015", max_size=5)
+    pool = ConnectionPool("hdbsql://USER:PASSWORD@HOST:30015", max_size=5)
 
     # Run multiple queries concurrently for different regions
     results = await asyncio.gather(
@@ -655,147 +660,6 @@ asyncio.run(main())
 </details>
 
 <details>
-<summary><strong>Migration Guide: v0.2.x → v0.3.0</strong></summary>
-
-### Breaking Changes
-
-#### 1. Removed `statement_cache_size` parameter
-
-The `statement_cache_size` parameter has been removed from the async `connect()` function. Statement cache size is now fixed at 100 (the default).
-
-**Before (v0.2.x):**
-```python
-from pyhdb_rs.aio import connect
-
-conn = await connect("hdbsql://user:pass@host:30015", statement_cache_size=100)
-```
-
-**After (v0.3.0):**
-```python
-from pyhdb_rs.aio import connect
-
-# statement_cache_size is always 100
-conn = await connect("hdbsql://user:pass@host:30015")
-```
-
-> [!NOTE]
-> This change only affects async connections. Sync connections never had this parameter.
-
-### New Features
-
-#### Builder API (Recommended)
-
-While the old connection methods still work, the new builder API provides more flexibility:
-
-**Old style (still supported):**
-```python
-import pyhdb_rs
-
-conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015")
-```
-
-**New style (recommended):**
-```python
-from pyhdb_rs import ConnectionBuilder, TlsConfig
-
-conn = (ConnectionBuilder()
-    .host("host")
-    .port(30015)
-    .credentials("user", "pass")
-    .tls(TlsConfig.with_system_roots())
-    .build())
-```
-
-**Benefits of the builder pattern:**
-- Type-safe configuration
-- More discoverable API
-- Better IDE autocomplete
-- Fine-grained control over TLS, cursor holdability, network groups
-
-#### TlsConfig
-
-v0.3.0 introduces `TlsConfig` for flexible TLS configuration:
-
-```python
-from pyhdb_rs import ConnectionBuilder, TlsConfig
-
-# Multiple ways to configure TLS
-tls = TlsConfig.from_directory("/etc/hana/certs")
-tls = TlsConfig.from_environment("HANA_CA_CERT")
-tls = TlsConfig.from_certificate(cert_pem)
-tls = TlsConfig.with_system_roots()
-tls = TlsConfig.insecure()  # Development only!
-
-conn = (ConnectionBuilder()
-    .host("hana.example.com")
-    .credentials("SYSTEM", "password")
-    .tls(tls)
-    .build())
-```
-
-#### CursorHoldability
-
-Control cursor behavior across transactions:
-
-```python
-from pyhdb_rs import ConnectionBuilder, CursorHoldability
-
-conn = (ConnectionBuilder()
-    .host("hana.example.com")
-    .credentials("SYSTEM", "password")
-    .cursor_holdability(CursorHoldability.CommitAndRollback)
-    .build())
-```
-
-#### Network Groups
-
-For HA and Scale-Out deployments:
-
-```python
-from pyhdb_rs import ConnectionBuilder
-
-conn = (ConnectionBuilder()
-    .host("hana-ha.example.com")
-    .credentials("SYSTEM", "password")
-    .network_group("production")
-    .build())
-```
-
-#### ConnectionPoolBuilder
-
-The async pool API now has a builder:
-
-**Old style (still supported):**
-```python
-from pyhdb_rs.aio import create_pool
-
-pool = create_pool("hdbsql://user:pass@host:30015", max_size=10)
-```
-
-**New style (recommended):**
-```python
-from pyhdb_rs.aio import ConnectionPoolBuilder
-from pyhdb_rs import TlsConfig
-
-pool = (ConnectionPoolBuilder()
-    .url("hdbsql://user:pass@host:30015")
-    .max_size(10)
-    .tls(TlsConfig.with_system_roots())
-    .network_group("production")
-    .build())
-```
-
-### Upgrade Checklist
-
-- [ ] Remove `statement_cache_size` from async `connect()` calls
-- [ ] Consider migrating to `ConnectionBuilder` for better configuration
-- [ ] Use `TlsConfig` for explicit TLS configuration
-- [ ] Add `network_group` if using HANA HA/Scale-Out
-- [ ] Use `ConnectionPoolBuilder` for new pool configurations
-
-</details>
-
-<details>
 <summary><strong>API Patterns & Best Practices</strong></summary>
 
 ### Arrow RecordBatchReader
@@ -803,6 +667,12 @@ pool = (ConnectionPoolBuilder()
 `execute_arrow()` returns a `RecordBatchReader` that implements the Arrow PyCapsule Interface (`__arrow_c_stream__`):
 
 ```python
+from pyhdb_rs import ArrowConfig, ConnectionBuilder
+import polars as pl
+import pyarrow as pa
+
+conn = ConnectionBuilder.from_url("hdbsql://USER:PASSWORD@HOST:30015").build()
+
 # Pattern 1: Direct conversion to Polars (recommended)
 reader = conn.execute_arrow(
     "SELECT CUSTOMER_ID, CUSTOMER_NAME, TOTAL_ORDERS FROM CUSTOMER_SUMMARY WHERE ACTIVE_FLAG = 1"
@@ -816,13 +686,16 @@ reader = conn.execute_arrow(
 pa_reader = pa.RecordBatchReader.from_stream(reader)
 table = pa_reader.read_all()
 
-# Pattern 3: Stream large datasets
+# Pattern 3: Stream large datasets with ArrowConfig
+config = ArrowConfig(batch_size=10000)
 reader = conn.execute_arrow(
     "SELECT TRANSACTION_ID, CUSTOMER_ID, AMOUNT, TRANSACTION_DATE FROM TRANSACTION_HISTORY WHERE YEAR(TRANSACTION_DATE) = 2025",
-    batch_size=10000
+    config=config
 )
 for batch in reader:
     process_batch(batch)  # Each batch is a RecordBatch
+
+conn.close()
 ```
 
 > [!NOTE]
@@ -833,6 +706,11 @@ for batch in reader:
 `execute_arrow()` does NOT support query parameters. For parameterized queries, use the two-step pattern:
 
 ```python
+from pyhdb_rs import ConnectionBuilder
+import polars as pl
+
+conn = ConnectionBuilder.from_url("hdbsql://USER:PASSWORD@HOST:30015").build()
+
 # Two-step: execute() then fetch_arrow()
 cursor = conn.cursor()
 cursor.execute(
@@ -843,6 +721,8 @@ cursor.execute(
     ["COMPLETED", 5000, "2025-01-01"]
 )
 df = pl.from_arrow(cursor.fetch_arrow())
+
+conn.close()
 ```
 
 ### Connection Validation
@@ -850,13 +730,15 @@ df = pl.from_arrow(cursor.fetch_arrow())
 Check if a connection is still valid before use:
 
 ```python
+from pyhdb_rs import ConnectionBuilder
+
 # Sync API
-conn = pyhdb_rs.connect("hdbsql://USER:PASSWORD@HOST:30015")
+conn = ConnectionBuilder.from_url("hdbsql://USER:PASSWORD@HOST:30015").build()
 if not conn.is_valid():
-    conn = pyhdb_rs.connect("hdbsql://USER:PASSWORD@HOST:30015")  # Reconnect
+    conn = ConnectionBuilder.from_url("hdbsql://USER:PASSWORD@HOST:30015").build()  # Reconnect
 
 # Async API
-async with await connect("hdbsql://USER:PASSWORD@HOST:30015") as conn:
+async with conn:
     if not await conn.is_valid():
         # Handle invalid connection
         pass
@@ -866,25 +748,6 @@ The `is_valid(check_connection=True)` method:
 - When `check_connection=True` (default): Executes `SELECT 1 FROM DUMMY` to verify connection is alive
 - When `check_connection=False`: Only checks internal state (no network round-trip)
 
-### Write Methods
-
-Write DataFrames back to HANA:
-
-```python
-# Polars
-import pyhdb_rs.polars as hdb
-df = pl.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
-hdb.write_hana(df, "my_table", uri, if_table_exists="replace")
-
-# pandas
-import pyhdb_rs.pandas as hdb
-df = pd.DataFrame({"id": [1, 2, 3], "name": ["a", "b", "c"]})
-hdb.to_hana(df, "my_table", uri, if_exists="append")
-```
-
-> [!NOTE]
-> Naming difference is intentional: `write_hana()` follows Polars conventions, `to_hana()` follows pandas conventions.
-
 </details>
 
 <details>
@@ -893,13 +756,13 @@ hdb.to_hana(df, "my_table", uri, if_exists="append")
 pyhdb-rs provides detailed error messages that include HANA server information for better diagnostics:
 
 ```python
-import pyhdb_rs
+from pyhdb_rs import ConnectionBuilder, ProgrammingError, DatabaseError, InterfaceError
 
 try:
-    conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015")
+    conn = ConnectionBuilder.from_url("hdbsql://user:pass@host:30015").build()
     cursor = conn.cursor()
     cursor.execute("SELECT CUSTOMER_NAME, BALANCE FROM ACCOUNTS WHERE ACCOUNT_TYPE = ?", ["PREMIUM"])
-except pyhdb_rs.ProgrammingError as e:
+except ProgrammingError as e:
     # Error message includes:
     # - Error code: [259] (HANA error number)
     # - Message: invalid table name
@@ -907,22 +770,22 @@ except pyhdb_rs.ProgrammingError as e:
     # - SQLSTATE: 42000 (SQL standard code)
     # Example: "[259] invalid table name: NONEXISTENT_TABLE (severity: Error), SQLSTATE: 42000"
     print(f"SQL Error: {e}")
-except pyhdb_rs.DatabaseError as e:
+except DatabaseError as e:
     print(f"Database error: {e}")
-except pyhdb_rs.InterfaceError as e:
+except InterfaceError as e:
     print(f"Connection error: {e}")
 ```
 
 **Exception hierarchy** (DB-API 2.0 compliant):
 
-- `pyhdb_rs.Error` — Base exception
-- `pyhdb_rs.InterfaceError` — Connection or driver issues
-- `pyhdb_rs.DatabaseError` — Database server errors
-  - `pyhdb_rs.ProgrammingError` — SQL syntax, missing table, wrong column
-  - `pyhdb_rs.IntegrityError` — Constraint violations, duplicate keys
-  - `pyhdb_rs.DataError` — Type conversion, value overflow
-  - `pyhdb_rs.OperationalError` — Connection lost, timeout, server unavailable
-  - `pyhdb_rs.NotSupportedError` — Unsupported operation
+- `pyhdb_rs.Error` - Base exception
+- `pyhdb_rs.InterfaceError` - Connection or driver issues
+- `pyhdb_rs.DatabaseError` - Database server errors
+  - `pyhdb_rs.ProgrammingError` - SQL syntax, missing table, wrong column
+  - `pyhdb_rs.IntegrityError` - Constraint violations, duplicate keys
+  - `pyhdb_rs.DataError` - Type conversion, value overflow
+  - `pyhdb_rs.OperationalError` - Connection lost, timeout, server unavailable
+  - `pyhdb_rs.NotSupportedError` - Unsupported operation
 
 </details>
 
@@ -983,11 +846,11 @@ Benchmarks show 2x+ performance improvement over hdbcli for bulk reads.
 
 Data is exported in [Apache Arrow](https://arrow.apache.org/) format, enabling zero-copy interoperability with:
 
-- **DataFrames** — Polars, pandas, Vaex, Dask
-- **Query engines** — DataFusion, DuckDB, ClickHouse
-- **ML/AI** — Ray, Hugging Face Datasets, PyTorch
-- **Data lakes** — Delta Lake, Apache Iceberg, Lance
-- **Serialization** — Parquet, Arrow IPC (Feather)
+- **DataFrames** - Polars, pandas, Vaex, Dask
+- **Query engines** - DataFusion, DuckDB, ClickHouse
+- **ML/AI** - Ray, Hugging Face Datasets, PyTorch
+- **Data lakes** - Delta Lake, Apache Iceberg, Lance
+- **Serialization** - Parquet, Arrow IPC (Feather)
 
 For Rust integration examples (DataFusion, DuckDB, Parquet export), see [`hdbconnect-arrow`](crates/hdbconnect-arrow/README.md).
 
@@ -1003,10 +866,10 @@ For Rust integration examples (DataFusion, DuckDB, Parquet export), see [`hdbcon
 
 Interactive Jupyter notebooks are available in [`examples/notebooks/`](examples/notebooks/):
 
-- **01_quickstart** — Basic connection and DataFrame integration
-- **02_polars_analytics** — Advanced Polars analytics with LazyFrames
-- **03_streaming_large_data** — Memory-efficient large dataset processing
-- **04_performance_comparison** — Benchmarks vs hdbcli
+- **01_quickstart** - Basic connection and DataFrame integration
+- **02_polars_analytics** - Advanced Polars analytics with LazyFrames
+- **03_streaming_large_data** - Memory-efficient large dataset processing
+- **04_performance_comparison** - Benchmarks vs hdbcli
 
 </details>
 

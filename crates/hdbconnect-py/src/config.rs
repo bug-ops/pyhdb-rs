@@ -25,6 +25,79 @@ use pyo3::prelude::*;
 use crate::error::PyHdbError;
 use crate::types::prepared_cache::DEFAULT_CACHE_CAPACITY;
 
+/// Default batch size for Arrow conversions (65536 rows).
+pub const DEFAULT_ARROW_BATCH_SIZE: usize = 65536;
+
+/// Python-facing Arrow configuration for `execute_arrow()`.
+///
+/// Controls batch processing behavior for Arrow result streaming.
+///
+/// # Example
+///
+/// ```python
+/// from pyhdb_rs import ArrowConfig
+///
+/// config = ArrowConfig(batch_size=10000)
+/// reader = conn.execute_arrow("SELECT * FROM T", config=config)
+/// ```
+#[pyclass(name = "ArrowConfig", module = "pyhdb_rs._core", frozen)]
+#[derive(Debug, Clone)]
+pub struct PyArrowConfig {
+    batch_size: usize,
+}
+
+impl PyArrowConfig {
+    /// Get the batch size.
+    #[must_use]
+    pub const fn batch_size(&self) -> usize {
+        self.batch_size
+    }
+}
+
+impl Default for PyArrowConfig {
+    fn default() -> Self {
+        Self {
+            batch_size: DEFAULT_ARROW_BATCH_SIZE,
+        }
+    }
+}
+
+#[pymethods]
+impl PyArrowConfig {
+    /// Default batch size for Arrow conversions.
+    #[classattr]
+    const DEFAULT_BATCH_SIZE: usize = DEFAULT_ARROW_BATCH_SIZE;
+
+    /// Create Arrow configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `batch_size` - Number of rows per Arrow batch (default: 65536). Higher values reduce
+    ///   overhead but increase memory usage per batch. Recommended range: 1,000 - 100,000.
+    ///
+    /// # Raises
+    ///
+    /// `ProgrammingError`: If `batch_size` is 0.
+    #[new]
+    #[pyo3(signature = (batch_size=DEFAULT_ARROW_BATCH_SIZE))]
+    fn new(batch_size: usize) -> PyResult<Self> {
+        if batch_size == 0 {
+            return Err(PyHdbError::programming("batch_size must be > 0").into());
+        }
+        Ok(Self { batch_size })
+    }
+
+    /// Number of rows per Arrow batch.
+    #[getter]
+    const fn get_batch_size(&self) -> usize {
+        self.batch_size
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ArrowConfig(batch_size={})", self.batch_size)
+    }
+}
+
 /// Python-facing connection configuration.
 ///
 /// Wraps values that will be applied to `hdbconnect::ConnectionConfiguration`.
@@ -260,6 +333,55 @@ fn format_option<T: std::fmt::Display>(opt: Option<T>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // PyArrowConfig Tests
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_arrow_config_default() {
+        let config = PyArrowConfig::default();
+        assert_eq!(config.batch_size(), DEFAULT_ARROW_BATCH_SIZE);
+    }
+
+    #[test]
+    fn test_arrow_config_new() {
+        let config = PyArrowConfig::new(10000).unwrap();
+        assert_eq!(config.batch_size(), 10000);
+    }
+
+    #[test]
+    fn test_arrow_config_zero_batch_size() {
+        let result = PyArrowConfig::new(0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_arrow_config_repr() {
+        let config = PyArrowConfig::new(10000).unwrap();
+        let repr = config.__repr__();
+        assert!(repr.contains("ArrowConfig"));
+        assert!(repr.contains("batch_size=10000"));
+    }
+
+    #[test]
+    fn test_arrow_config_clone() {
+        let config = PyArrowConfig::new(10000).unwrap();
+        let cloned = config.clone();
+        assert_eq!(cloned.batch_size(), config.batch_size());
+    }
+
+    #[test]
+    fn test_arrow_config_debug() {
+        let config = PyArrowConfig::new(10000).unwrap();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("PyArrowConfig"));
+        assert!(debug_str.contains("10000"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // PyConnectionConfig Tests
+    // ═══════════════════════════════════════════════════════════════════════════════
 
     #[test]
     fn test_config_defaults() {

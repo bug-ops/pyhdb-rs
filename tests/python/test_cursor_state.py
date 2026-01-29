@@ -225,61 +225,6 @@ class TestRecordBatchReaderAttributes:
         assert hasattr(pyhdb_rs.RecordBatchReader, "__repr__")
 
 
-class TestPollersHelperModule:
-    """Tests for polars helper module imports."""
-
-    def test_import_polars_module(self) -> None:
-        """Test that polars helper module can be imported."""
-        import pyhdb_rs.polars
-
-        assert pyhdb_rs.polars is not None
-
-    def test_polars_module_has_read_hana(self) -> None:
-        """Test that polars module has read_hana function."""
-        import pyhdb_rs.polars
-
-        assert hasattr(pyhdb_rs.polars, "read_hana")
-        assert callable(pyhdb_rs.polars.read_hana)
-
-    def test_polars_module_has_scan_hana(self) -> None:
-        """Test that polars module has scan_hana function."""
-        import pyhdb_rs.polars
-
-        assert hasattr(pyhdb_rs.polars, "scan_hana")
-        assert callable(pyhdb_rs.polars.scan_hana)
-
-    def test_polars_module_has_write_hana(self) -> None:
-        """Test that polars module has write_hana function."""
-        import pyhdb_rs.polars
-
-        assert hasattr(pyhdb_rs.polars, "write_hana")
-        assert callable(pyhdb_rs.polars.write_hana)
-
-
-class TestPandasHelperModule:
-    """Tests for pandas helper module imports."""
-
-    def test_import_pandas_module(self) -> None:
-        """Test that pandas helper module can be imported."""
-        import pyhdb_rs.pandas
-
-        assert pyhdb_rs.pandas is not None
-
-    def test_pandas_module_has_read_hana(self) -> None:
-        """Test that pandas module has read_hana function."""
-        import pyhdb_rs.pandas
-
-        assert hasattr(pyhdb_rs.pandas, "read_hana")
-        assert callable(pyhdb_rs.pandas.read_hana)
-
-    def test_pandas_module_has_to_hana(self) -> None:
-        """Test that pandas module has to_hana function."""
-        import pyhdb_rs.pandas
-
-        assert hasattr(pyhdb_rs.pandas, "to_hana")
-        assert callable(pyhdb_rs.pandas.to_hana)
-
-
 class TestDbapiModuleExports:
     """Tests for dbapi module direct exports."""
 

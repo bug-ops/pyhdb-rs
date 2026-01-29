@@ -45,10 +45,10 @@ use pyo3::prelude::*;
 use tokio::sync::Mutex as TokioMutex;
 
 use super::common::{
-    ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, rollback_impl,
-    validate_non_negative_f64, validate_positive_u32,
+    ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, get_batch_size,
+    rollback_impl, validate_non_negative_f64, validate_positive_u32,
 };
-use crate::config::PyConnectionConfig;
+use crate::config::{PyArrowConfig, PyConnectionConfig};
 use crate::connection::PyCacheStats;
 use crate::error::PyHdbError;
 use crate::tls::{PyTlsConfig, TlsConfigInner};
@@ -224,7 +224,7 @@ pub type Pool = deadpool::managed::Pool<HanaConnectionManager>;
 /// ```python
 /// import polars as pl
 ///
-/// pool = create_pool("hdbsql://user:pass@host:30015", max_size=10)
+/// pool = ConnectionPool("hdbsql://user:pass@host:30015", max_size=10)
 /// async with pool.acquire() as conn:
 ///     reader = await conn.execute_arrow(
 ///         "SELECT CUSTOMER_ID, COUNT(*) AS ORDER_COUNT FROM SALES_ORDERS WHERE ORDER_DATE >= '2025-01-01' GROUP BY CUSTOMER_ID"
@@ -672,13 +672,38 @@ impl std::fmt::Debug for PooledConnection {
 
 #[pymethods]
 impl PooledConnection {
-    #[pyo3(signature = (sql, batch_size=65536))]
+    /// Executes a SQL query and returns an Arrow `RecordBatchReader`.
+    ///
+    /// Args:
+    ///     sql: SQL query string
+    ///     config: Optional Arrow configuration (`batch_size`, etc.)
+    ///
+    /// Returns:
+    ///     `RecordBatchReader` for streaming results
+    ///
+    /// Example:
+    ///     ```python
+    ///     from pyhdb_rs import ArrowConfig
+    ///     import polars as pl
+    ///
+    ///     # With default config
+    ///     async with pool.acquire() as conn:
+    ///         reader = await conn.execute_arrow("SELECT * FROM T")
+    ///         df = pl.from_arrow(reader)
+    ///
+    ///     # With custom batch size
+    ///     config = ArrowConfig(batch_size=10000)
+    ///     async with pool.acquire() as conn:
+    ///         reader = await conn.execute_arrow("SELECT * FROM T", config=config)
+    ///     ```
+    #[pyo3(signature = (sql, config=None))]
     fn execute_arrow<'py>(
         &self,
         py: Python<'py>,
         sql: String,
-        batch_size: usize,
+        config: Option<&PyArrowConfig>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let batch_size = get_batch_size(config);
         let object = Arc::clone(&self.object);
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {

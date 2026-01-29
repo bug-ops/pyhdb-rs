@@ -76,17 +76,6 @@ class TestAsyncImports:
         assert AIO_ASYNC_AVAILABLE is True
 
 
-class TestAsyncPolarsImports:
-    """Test that async polars module imports correctly."""
-
-    def test_import_polars_functions(self):
-        """Test importing polars helper functions."""
-        from pyhdb_rs.aio.polars import read_hana_async, read_hana_pooled
-
-        assert callable(read_hana_async)
-        assert callable(read_hana_pooled)
-
-
 @pytest.mark.skipif(
     not os.environ.get("HANA_TEST_URI"),
     reason="HANA_TEST_URI not set",

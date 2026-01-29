@@ -14,11 +14,11 @@ use pyo3::types::PyType;
 use tokio::sync::Mutex as TokioMutex;
 
 use super::common::{
-    ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, rollback_impl,
-    validate_non_negative_f64, validate_positive_u32,
+    ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, get_batch_size,
+    rollback_impl, validate_non_negative_f64, validate_positive_u32,
 };
 use super::cursor::AsyncPyCursor;
-use crate::config::PyConnectionConfig;
+use crate::config::{PyArrowConfig, PyConnectionConfig};
 use crate::connection::{AsyncConnectionBuilder, PyCacheStats};
 use crate::error::PyHdbError;
 use crate::types::prepared_cache::{
@@ -47,8 +47,9 @@ impl AsyncConnectionInner {
 ///
 /// ```python
 /// import polars as pl
+/// from pyhdb_rs.aio import AsyncConnectionBuilder
 ///
-/// async with await AsyncConnection.connect("hdbsql://...") as conn:
+/// async with await AsyncConnectionBuilder.from_url("hdbsql://...").build() as conn:
 ///     reader = await conn.execute_arrow(
 ///         "SELECT PRODUCT_NAME, SUM(QUANTITY) AS TOTAL_SOLD FROM SALES_ITEMS WHERE FISCAL_YEAR = 2025 GROUP BY PRODUCT_NAME"
 ///     )
@@ -413,13 +414,35 @@ impl AsyncPyConnection {
     }
 
     /// Executes a SQL query and returns an Arrow `RecordBatchReader`.
-    #[pyo3(signature = (sql, batch_size=65536))]
+    ///
+    /// Args:
+    ///     sql: SQL query string
+    ///     config: Optional Arrow configuration (`batch_size`, etc.)
+    ///
+    /// Returns:
+    ///     `RecordBatchReader` for streaming results
+    ///
+    /// Example:
+    ///     ```python
+    ///     from pyhdb_rs import ArrowConfig
+    ///     import polars as pl
+    ///
+    ///     # With default config
+    ///     reader = await conn.execute_arrow("SELECT * FROM T")
+    ///     df = pl.from_arrow(reader)
+    ///
+    ///     # With custom batch size
+    ///     config = ArrowConfig(batch_size=10000)
+    ///     reader = await conn.execute_arrow("SELECT * FROM T", config=config)
+    ///     ```
+    #[pyo3(signature = (sql, config=None))]
     fn execute_arrow<'py>(
         &self,
         py: Python<'py>,
         sql: String,
-        batch_size: usize,
+        config: Option<&PyArrowConfig>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let batch_size = get_batch_size(config);
         let inner = Arc::clone(&self.inner);
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut guard = inner.lock().await;

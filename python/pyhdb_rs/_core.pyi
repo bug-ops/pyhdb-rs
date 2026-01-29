@@ -559,13 +559,54 @@ class AsyncConnectionBuilder:
     def __repr__(self) -> str: ...
 
 # =====================================================================
+# ArrowConfig
+# =====================================================================
+
+class ArrowConfig:
+    """Configuration for Arrow-based query execution.
+
+    Controls batch processing behavior for execute_arrow() methods.
+
+    Example::
+
+        from pyhdb_rs import ArrowConfig
+
+        # Custom batch size for large result sets
+        config = ArrowConfig(batch_size=10000)
+        reader = conn.execute_arrow("SELECT * FROM T", config=config)
+    """
+
+    DEFAULT_BATCH_SIZE: int
+    """Default batch size for Arrow conversions (65536 rows)."""
+
+    def __init__(self, batch_size: int = 65536) -> None:
+        """Create Arrow configuration.
+
+        Args:
+            batch_size: Number of rows per Arrow batch (default: 65536).
+                Higher values reduce overhead but increase memory usage per batch.
+                Recommended range: 1,000 - 100,000.
+
+        Raises:
+            ProgrammingError: If batch_size is 0.
+        """
+        ...
+
+    @property
+    def batch_size(self) -> int:
+        """Number of rows per Arrow batch."""
+        ...
+
+    def __repr__(self) -> str: ...
+
+# =====================================================================
 # ConnectionConfig
 # =====================================================================
 
 class ConnectionConfig:
     """Configuration for SAP HANA connection tuning.
 
-    Use with connect() or create_pool() to customize connection behavior.
+    Use with connect() or ConnectionPool() to customize connection behavior.
     All parameters have sensible defaults matching hdbconnect behavior.
 
     Example::
@@ -596,6 +637,9 @@ class ConnectionConfig:
     MIN_BUFFER_SIZE: int
     """Minimum buffer size (cannot go below this)."""
 
+    DEFAULT_CACHE_CAPACITY: int
+    """Default prepared statement cache size."""
+
     def __init__(
         self,
         *,
@@ -605,6 +649,7 @@ class ConnectionConfig:
         max_buffer_size: int | None = None,
         min_compression_size: int | None = None,
         read_timeout: float | None = None,
+        max_cached_statements: int | None = None,
     ) -> None:
         """Create connection configuration.
 
@@ -622,6 +667,8 @@ class ConnectionConfig:
                 Requests larger than this may be compressed.
             read_timeout: Network read timeout in seconds (default: None = no timeout).
                 Connection dropped if response takes longer.
+            max_cached_statements: Maximum prepared statements to cache per connection
+                (default: 16). Set to 0 to disable caching.
 
         Raises:
             ProgrammingError: If any parameter is invalid.
@@ -656,6 +703,57 @@ class ConnectionConfig:
     @property
     def read_timeout(self) -> float | None:
         """Network read timeout in seconds (None = no timeout)."""
+        ...
+
+    @property
+    def max_cached_statements(self) -> int | None:
+        """Maximum prepared statements to cache per connection (None = use default)."""
+        ...
+
+    def __repr__(self) -> str: ...
+
+# =====================================================================
+# CacheStats
+# =====================================================================
+
+class CacheStats:
+    """Prepared statement cache statistics.
+
+    Example::
+
+        stats = conn.cache_stats()
+        print(f"Cache hit rate: {stats.hit_rate:.2%}")
+        print(f"Size: {stats.size}/{stats.capacity}")
+    """
+
+    @property
+    def size(self) -> int:
+        """Current number of cached statements."""
+        ...
+
+    @property
+    def capacity(self) -> int:
+        """Maximum cache capacity."""
+        ...
+
+    @property
+    def hits(self) -> int:
+        """Total number of cache hits."""
+        ...
+
+    @property
+    def misses(self) -> int:
+        """Total number of cache misses."""
+        ...
+
+    @property
+    def evictions(self) -> int:
+        """Total number of evictions."""
+        ...
+
+    @property
+    def hit_rate(self) -> float:
+        """Cache hit rate (0.0 - 1.0)."""
         ...
 
     def __repr__(self) -> str: ...
@@ -797,7 +895,7 @@ class Connection:
     def execute_arrow(
         self,
         sql: str,
-        batch_size: int = 65536,
+        config: ArrowConfig | None = None,
     ) -> RecordBatchReader:
         """Execute query and return Arrow RecordBatchReader.
 
@@ -806,7 +904,7 @@ class Connection:
 
         Args:
             sql: SQL query string
-            batch_size: Number of rows per batch (default: 65536)
+            config: Optional Arrow configuration (batch_size, etc.)
 
         Returns:
             RecordBatchReader for streaming Arrow results
@@ -814,8 +912,35 @@ class Connection:
         Example::
 
             import polars as pl
+
+            # With default config
             reader = conn.execute_arrow("SELECT * FROM sales")
             df = pl.from_arrow(reader)
+
+            # With custom batch size
+            config = ArrowConfig(batch_size=10000)
+            reader = conn.execute_arrow("SELECT * FROM sales", config=config)
+        """
+        ...
+
+    def cache_stats(self) -> CacheStats:
+        """Get prepared statement cache statistics.
+
+        Returns:
+            CacheStats with size, capacity, hits, misses, evictions, hit_rate
+
+        Example::
+
+            stats = conn.cache_stats()
+            print(f"Cache hit rate: {stats.hit_rate:.2%}")
+        """
+        ...
+
+    def clear_cache(self) -> None:
+        """Clear the prepared statement cache.
+
+        Drops all cached prepared statements. Useful after schema changes
+        or to free server resources.
         """
         ...
 
@@ -955,13 +1080,13 @@ class Cursor:
         """Close the cursor and release resources."""
         ...
 
-    def fetch_arrow(self, batch_size: int = 65536) -> RecordBatchReader:
+    def fetch_arrow(self, config: ArrowConfig | None = None) -> RecordBatchReader:
         """Fetch remaining results as Arrow RecordBatchReader.
 
         Consumes the result set for zero-copy Arrow transfer.
 
         Args:
-            batch_size: Rows per batch
+            config: Optional Arrow configuration (batch_size, etc.)
 
         Returns:
             RecordBatchReader
@@ -974,7 +1099,7 @@ class Cursor:
     def execute_arrow(
         self,
         sql: str,
-        batch_size: int = 65536,
+        config: ArrowConfig | None = None,
     ) -> RecordBatchReader:
         """Execute query and return Arrow RecordBatchReader.
 
@@ -983,7 +1108,7 @@ class Cursor:
 
         Args:
             sql: SQL query string
-            batch_size: Number of rows per batch (default: 65536)
+            config: Optional Arrow configuration (batch_size, etc.)
 
         Returns:
             RecordBatchReader for streaming Arrow results
@@ -991,9 +1116,14 @@ class Cursor:
         Example::
 
             import polars as pl
-            cursor = conn.cursor()
+
+            # With default config
             reader = cursor.execute_arrow("SELECT * FROM sales")
             df = pl.from_arrow(reader)
+
+            # With custom batch size
+            config = ArrowConfig(batch_size=10000)
+            reader = cursor.execute_arrow("SELECT * FROM sales", config=config)
         """
         ...
 
@@ -1239,7 +1369,13 @@ class AsyncConnection:
     async def commit(self) -> None: ...
     async def rollback(self) -> None: ...
     async def is_valid(self, check_connection: bool = True) -> bool: ...
-    async def execute_arrow(self, sql: str, batch_size: int = 65536) -> RecordBatchReader: ...
+    async def execute_arrow(
+        self,
+        sql: str,
+        config: ArrowConfig | None = None,
+    ) -> RecordBatchReader: ...
+    async def cache_stats(self) -> CacheStats: ...
+    async def clear_cache(self) -> None: ...
     async def __aenter__(self) -> AsyncConnection: ...
     async def __aexit__(
         self,
@@ -1276,7 +1412,11 @@ class AsyncCursor:
     async def fetchmany(self, size: int | None = None) -> list[tuple[Any, ...]]: ...
     async def fetchall(self) -> list[tuple[Any, ...]]: ...
     async def close(self) -> None: ...
-    async def execute_arrow(self, sql: str, batch_size: int = 65536) -> RecordBatchReader: ...
+    async def execute_arrow(
+        self,
+        sql: str,
+        config: ArrowConfig | None = None,
+    ) -> RecordBatchReader: ...
     def __aiter__(self) -> AsyncCursor: ...
     async def __anext__(self) -> tuple[Any, ...]: ...
     async def __aenter__(self) -> AsyncCursor: ...
@@ -1299,6 +1439,7 @@ class ConnectionPool:
         min_idle: int | None = None,
         connection_timeout: int = 30,
         config: ConnectionConfig | None = None,
+        tls_config: TlsConfig | None = None,
     ) -> None: ...
     async def acquire(self) -> PooledConnection: ...
     @property
@@ -1429,11 +1570,17 @@ class PooledConnection:
     @property
     def lob_write_length(self) -> Awaitable[int]: ...
     async def set_lob_write_length(self, value: int) -> None: ...
-    async def execute_arrow(self, sql: str, batch_size: int = 65536) -> RecordBatchReader: ...
+    async def execute_arrow(
+        self,
+        sql: str,
+        config: ArrowConfig | None = None,
+    ) -> RecordBatchReader: ...
     async def cursor(self) -> AsyncCursor: ...
     async def commit(self) -> None: ...
     async def rollback(self) -> None: ...
     async def is_valid(self, check_connection: bool = True) -> bool: ...
+    async def cache_stats(self) -> CacheStats: ...
+    async def clear_cache(self) -> None: ...
     async def __aenter__(self) -> PooledConnection: ...
     async def __aexit__(
         self,

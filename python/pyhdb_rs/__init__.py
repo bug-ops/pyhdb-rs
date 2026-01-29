@@ -3,30 +3,17 @@
 A Rust-based driver providing:
 - Full DB-API 2.0 compliance (PEP 249)
 - Native Apache Arrow support for zero-copy data transfer
-- Direct Polars/pandas integration
 - Thread-safe connection sharing
 
 Basic usage::
 
-    import pyhdb_rs
+    from pyhdb_rs import ConnectionBuilder
+    import polars as pl
 
-    conn = pyhdb_rs.connect("hdbsql://user:pass@host:39017")
-    with conn.cursor() as cursor:
-        cursor.execute("SELECT * FROM SALES_ITEMS")
-        for row in cursor:
-            print(row)
+    conn = ConnectionBuilder.from_url("hdbsql://user:pass@host:39017").build()
+    reader = conn.execute_arrow("SELECT * FROM SALES_ITEMS")
+    df = pl.from_arrow(reader)
     conn.close()
-
-Connection with configuration::
-
-    from pyhdb_rs import ConnectionConfig, connect
-
-    config = ConnectionConfig(
-        fetch_size=50000,           # Larger batches for bulk reads
-        lob_read_length=10_000_000, # 10MB LOB chunks
-        read_timeout=60.0,          # 60 second timeout
-    )
-    conn = connect("hdbsql://user:pass@host:39017", config=config)
 
 Builder-based connection with TLS::
 
@@ -45,7 +32,7 @@ Polars integration::
     reader = conn.execute_arrow("SELECT * FROM SALES_ITEMS")
     df = pl.from_arrow(reader)  # Zero-copy via Arrow PyCapsule
 
-Pandas integration::
+pandas integration::
 
     import pyarrow as pa
     reader = conn.execute_arrow("SELECT * FROM SALES_ITEMS")
