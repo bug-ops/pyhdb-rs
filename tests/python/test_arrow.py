@@ -157,10 +157,13 @@ class TestArrowCStreamProtocol:
 
     def test_protocol_with_multiple_batches(self, connection: pyhdb_rs.Connection) -> None:
         """Test protocol works with large result sets (multiple batches)."""
+        import pyhdb_rs
+
         polars = pytest.importorskip("polars")
 
         # Generate multiple batches - use a system table with multiple rows
-        reader = connection.execute_arrow("SELECT TOP 500 * FROM M_TABLES", batch_size=100)
+        config = pyhdb_rs.ArrowConfig(batch_size=100)
+        reader = connection.execute_arrow("SELECT TOP 500 * FROM M_TABLES", config=config)
         df = polars.from_arrow(reader)
 
         assert len(df) > 0
