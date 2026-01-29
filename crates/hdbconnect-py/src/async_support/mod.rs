@@ -50,17 +50,7 @@ pub mod connection;
 pub mod cursor;
 pub mod pool;
 
-// Deprecated module - kept for backward compatibility until 0.3.0
-#[deprecated(
-    since = "0.2.5",
-    note = "Use crate::types::prepared_cache instead. Will be removed in 0.3.0."
-)]
-pub mod statement_cache;
-
 pub use common::ConnectionState;
 pub use connection::{AsyncConnectionInner, AsyncPyConnection, SharedAsyncConnection};
 pub use cursor::AsyncPyCursor;
 pub use pool::{HanaConnectionManager, PoolConfig, PooledConnection, PyConnectionPool};
-
-#[cfg(test)]
-mod tests;

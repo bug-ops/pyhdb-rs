@@ -25,6 +25,7 @@ use tokio::sync::Mutex as TokioMutex;
 
 use super::common::{
     ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, rollback_impl,
+    validate_non_negative_f64, validate_positive_u32,
 };
 use crate::config::PyConnectionConfig;
 use crate::connection::{ConnectionBuilder, PyCacheStats};
@@ -394,9 +395,7 @@ impl PooledConnection {
 
     /// Set fetch size at runtime (async operation).
     fn set_fetch_size<'py>(&self, py: Python<'py>, value: u32) -> PyResult<Bound<'py, PyAny>> {
-        if value == 0 {
-            return Err(PyHdbError::programming("fetch_size must be > 0").into());
-        }
+        validate_positive_u32(value, "fetch_size")?;
         let object = Arc::clone(&self.object);
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -436,11 +435,7 @@ impl PooledConnection {
         py: Python<'py>,
         value: Option<f64>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        if let Some(v) = value
-            && v < 0.0
-        {
-            return Err(PyHdbError::programming("read_timeout cannot be negative").into());
-        }
+        validate_non_negative_f64(value, "read_timeout")?;
         let object = Arc::clone(&self.object);
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -478,9 +473,7 @@ impl PooledConnection {
 
     /// Set LOB read length at runtime (async operation).
     fn set_lob_read_length<'py>(&self, py: Python<'py>, value: u32) -> PyResult<Bound<'py, PyAny>> {
-        if value == 0 {
-            return Err(PyHdbError::programming("lob_read_length must be > 0").into());
-        }
+        validate_positive_u32(value, "lob_read_length")?;
         let object = Arc::clone(&self.object);
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -516,9 +509,7 @@ impl PooledConnection {
         py: Python<'py>,
         value: u32,
     ) -> PyResult<Bound<'py, PyAny>> {
-        if value == 0 {
-            return Err(PyHdbError::programming("lob_write_length must be > 0").into());
-        }
+        validate_positive_u32(value, "lob_write_length")?;
         let object = Arc::clone(&self.object);
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
@@ -606,7 +597,8 @@ impl PooledConnection {
                 .as_mut()
                 .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
 
-            let _ = obj.statement_cache.clear();
+            let evicted = obj.statement_cache.clear();
+            drop(evicted);
             Ok(())
         })
     }

@@ -46,6 +46,42 @@ impl From<ConnectionState> for PyErr {
     }
 }
 
+/// Validates that a u32 parameter is positive (greater than 0).
+///
+/// # Arguments
+///
+/// * `value` - The value to validate
+/// * `param_name` - The parameter name for error messages
+///
+/// # Errors
+///
+/// Returns `PyValueError` if value is 0.
+pub fn validate_positive_u32(value: u32, param_name: &str) -> PyResult<()> {
+    if value == 0 {
+        return Err(PyHdbError::programming(format!("{param_name} must be > 0")).into());
+    }
+    Ok(())
+}
+
+/// Validates that an optional f64 parameter is non-negative.
+///
+/// # Arguments
+///
+/// * `value` - The optional value to validate
+/// * `param_name` - The parameter name for error messages
+///
+/// # Errors
+///
+/// Returns `PyValueError` if value is negative.
+pub fn validate_non_negative_f64(value: Option<f64>, param_name: &str) -> PyResult<()> {
+    if let Some(v) = value
+        && v < 0.0
+    {
+        return Err(PyHdbError::programming(format!("{param_name} cannot be negative")).into());
+    }
+    Ok(())
+}
+
 /// Executes commit on an async HANA connection.
 pub async fn commit_impl(connection: &mut hdbconnect_async::Connection) -> PyResult<()> {
     connection.commit().await.map_err(PyHdbError::from)?;
@@ -121,5 +157,31 @@ mod tests {
         let state = ConnectionState::ReturnedToPool;
         let debug_str = format!("{:?}", state);
         assert!(debug_str.contains("ReturnedToPool"));
+    }
+
+    #[test]
+    fn test_validate_positive_u32_valid() {
+        assert!(validate_positive_u32(1, "test_param").is_ok());
+        assert!(validate_positive_u32(100, "test_param").is_ok());
+        assert!(validate_positive_u32(u32::MAX, "test_param").is_ok());
+    }
+
+    #[test]
+    fn test_validate_positive_u32_zero() {
+        let result = validate_positive_u32(0, "fetch_size");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_non_negative_f64_valid() {
+        assert!(validate_non_negative_f64(None, "test_param").is_ok());
+        assert!(validate_non_negative_f64(Some(0.0), "test_param").is_ok());
+        assert!(validate_non_negative_f64(Some(1.5), "test_param").is_ok());
+    }
+
+    #[test]
+    fn test_validate_non_negative_f64_negative() {
+        let result = validate_non_negative_f64(Some(-1.0), "read_timeout");
+        assert!(result.is_err());
     }
 }

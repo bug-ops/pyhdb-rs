@@ -15,6 +15,7 @@ use tokio::sync::Mutex as TokioMutex;
 
 use super::common::{
     ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, rollback_impl,
+    validate_non_negative_f64, validate_positive_u32,
 };
 use super::cursor::AsyncPyCursor;
 use crate::config::PyConnectionConfig;
@@ -82,17 +83,14 @@ impl AsyncPyConnection {
     /// * `url` - Connection URL (hdbsql://user:pass@host:port)
     /// * `autocommit` - Enable auto-commit mode (default: True)
     /// * `config` - Optional connection configuration for tuning performance
-    /// * `statement_cache_size` - **DEPRECATED**: Use `config.max_cached_statements` instead. This
-    ///   parameter is ignored. Will be removed in 0.3.0.
     #[classmethod]
-    #[pyo3(signature = (url, *, autocommit=true, config=None, statement_cache_size=0))]
+    #[pyo3(signature = (url, *, autocommit=true, config=None))]
     fn connect<'py>(
         _cls: &Bound<'py, PyType>,
         py: Python<'py>,
         url: String,
         autocommit: bool,
         config: Option<PyConnectionConfig>,
-        #[allow(unused_variables)] statement_cache_size: usize,
     ) -> PyResult<Bound<'py, PyAny>> {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let params = ConnectionBuilder::from_url(&url)?.build()?;
@@ -133,9 +131,9 @@ impl AsyncPyConnection {
         let inner = Arc::clone(&self.inner);
         let cache = Arc::clone(&self.statement_cache);
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            // Clear cache first
             let mut cache_guard = cache.lock().await;
-            let _ = cache_guard.clear();
+            let evicted = cache_guard.clear();
+            drop(evicted);
             drop(cache_guard);
 
             let mut guard = inner.lock().await;
@@ -254,9 +252,7 @@ impl AsyncPyConnection {
     ///     `ProgrammingError`: If value is 0
     ///     `OperationalError`: If connection is closed
     fn set_fetch_size<'py>(&self, py: Python<'py>, value: u32) -> PyResult<Bound<'py, PyAny>> {
-        if value == 0 {
-            return Err(PyHdbError::programming("fetch_size must be > 0").into());
-        }
+        validate_positive_u32(value, "fetch_size")?;
         let inner = Arc::clone(&self.inner);
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut guard = inner.lock().await;
@@ -300,11 +296,7 @@ impl AsyncPyConnection {
         py: Python<'py>,
         value: Option<f64>,
     ) -> PyResult<Bound<'py, PyAny>> {
-        if let Some(v) = value
-            && v < 0.0
-        {
-            return Err(PyHdbError::programming("read_timeout cannot be negative").into());
-        }
+        validate_non_negative_f64(value, "read_timeout")?;
         let inner = Arc::clone(&self.inner);
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut guard = inner.lock().await;
@@ -347,9 +339,7 @@ impl AsyncPyConnection {
     ///     `ProgrammingError`: If value is 0
     ///     `OperationalError`: If connection is closed
     fn set_lob_read_length<'py>(&self, py: Python<'py>, value: u32) -> PyResult<Bound<'py, PyAny>> {
-        if value == 0 {
-            return Err(PyHdbError::programming("lob_read_length must be > 0").into());
-        }
+        validate_positive_u32(value, "lob_read_length")?;
         let inner = Arc::clone(&self.inner);
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut guard = inner.lock().await;
@@ -392,9 +382,7 @@ impl AsyncPyConnection {
         py: Python<'py>,
         value: u32,
     ) -> PyResult<Bound<'py, PyAny>> {
-        if value == 0 {
-            return Err(PyHdbError::programming("lob_write_length must be > 0").into());
-        }
+        validate_positive_u32(value, "lob_write_length")?;
         let inner = Arc::clone(&self.inner);
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut guard = inner.lock().await;
@@ -455,7 +443,8 @@ impl AsyncPyConnection {
         let cache = Arc::clone(&self.statement_cache);
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut cache_guard = cache.lock().await;
-            let _ = cache_guard.clear();
+            let evicted = cache_guard.clear();
+            drop(evicted);
             Ok(())
         })
     }
@@ -476,9 +465,9 @@ impl AsyncPyConnection {
         let inner = Arc::clone(&self.inner);
         let cache = Arc::clone(&self.statement_cache);
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            // Clear cache first
             let mut cache_guard = cache.lock().await;
-            let _ = cache_guard.clear();
+            let evicted = cache_guard.clear();
+            drop(evicted);
             drop(cache_guard);
 
             let mut guard = inner.lock().await;

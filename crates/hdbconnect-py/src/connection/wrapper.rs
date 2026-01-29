@@ -136,6 +136,24 @@ impl PyConnection {
     ) -> &Mutex<PreparedStatementCache<hdbconnect::PreparedStatement>> {
         &self.stmt_cache
     }
+
+    /// Validates that a u32 parameter is positive (greater than 0).
+    fn validate_positive_u32(value: u32, param_name: &str) -> PyResult<()> {
+        if value == 0 {
+            return Err(PyHdbError::programming(format!("{param_name} must be > 0")).into());
+        }
+        Ok(())
+    }
+
+    /// Validates that an optional f64 parameter is non-negative.
+    fn validate_non_negative_f64(value: Option<f64>, param_name: &str) -> PyResult<()> {
+        if let Some(v) = value
+            && v < 0.0
+        {
+            return Err(PyHdbError::programming(format!("{param_name} cannot be negative")).into());
+        }
+        Ok(())
+    }
 }
 
 #[pymethods]
@@ -175,9 +193,9 @@ impl PyConnection {
 
     /// Close the connection.
     fn close(&self) {
-        // Clear statement cache first (drops all PreparedStatements)
         let mut cache = self.stmt_cache.lock();
-        let _ = cache.clear();
+        let evicted = cache.clear();
+        drop(evicted);
         drop(cache);
 
         *self.inner.lock() = ConnectionInner::Disconnected;
@@ -293,9 +311,7 @@ impl PyConnection {
     ///     `OperationalError`: If connection is closed
     #[setter]
     fn set_fetch_size(&self, value: u32) -> PyResult<()> {
-        if value == 0 {
-            return Err(PyHdbError::programming("fetch_size must be > 0").into());
-        }
+        Self::validate_positive_u32(value, "fetch_size")?;
         let mut guard = self.inner.lock();
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
@@ -333,11 +349,7 @@ impl PyConnection {
     ///     `OperationalError`: If connection is closed
     #[setter]
     fn set_read_timeout(&self, value: Option<f64>) -> PyResult<()> {
-        if let Some(v) = value
-            && v < 0.0
-        {
-            return Err(PyHdbError::programming("read_timeout cannot be negative").into());
-        }
+        Self::validate_non_negative_f64(value, "read_timeout")?;
         let mut guard = self.inner.lock();
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
@@ -375,9 +387,7 @@ impl PyConnection {
     ///     `OperationalError`: If connection is closed
     #[setter]
     fn set_lob_read_length(&self, value: u32) -> PyResult<()> {
-        if value == 0 {
-            return Err(PyHdbError::programming("lob_read_length must be > 0").into());
-        }
+        Self::validate_positive_u32(value, "lob_read_length")?;
         let mut guard = self.inner.lock();
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
@@ -414,9 +424,7 @@ impl PyConnection {
     ///     `OperationalError`: If connection is closed
     #[setter]
     fn set_lob_write_length(&self, value: u32) -> PyResult<()> {
-        if value == 0 {
-            return Err(PyHdbError::programming("lob_write_length must be > 0").into());
-        }
+        Self::validate_positive_u32(value, "lob_write_length")?;
         let mut guard = self.inner.lock();
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
@@ -473,8 +481,8 @@ impl PyConnection {
     /// Drops all cached prepared statements. Useful after schema changes
     /// or to free server resources.
     fn clear_cache(&self) {
-        let mut cache = self.stmt_cache.lock();
-        let _ = cache.clear();
+        let evicted = self.stmt_cache.lock().clear();
+        drop(evicted);
     }
 
     // Context manager protocol
@@ -576,5 +584,28 @@ mod tests {
         let cloned = stats.clone();
         assert_eq!(cloned.size, stats.size);
         assert_eq!(cloned.capacity, stats.capacity);
+    }
+
+    #[test]
+    fn test_validate_positive_u32_valid() {
+        assert!(PyConnection::validate_positive_u32(1, "test").is_ok());
+        assert!(PyConnection::validate_positive_u32(100, "test").is_ok());
+    }
+
+    #[test]
+    fn test_validate_positive_u32_zero() {
+        assert!(PyConnection::validate_positive_u32(0, "test").is_err());
+    }
+
+    #[test]
+    fn test_validate_non_negative_f64_valid() {
+        assert!(PyConnection::validate_non_negative_f64(None, "test").is_ok());
+        assert!(PyConnection::validate_non_negative_f64(Some(0.0), "test").is_ok());
+        assert!(PyConnection::validate_non_negative_f64(Some(1.5), "test").is_ok());
+    }
+
+    #[test]
+    fn test_validate_non_negative_f64_negative() {
+        assert!(PyConnection::validate_non_negative_f64(Some(-1.0), "test").is_err());
     }
 }
