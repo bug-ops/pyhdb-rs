@@ -5,10 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.1] - 2026-01-29
+
+### Removed
+
+- **BREAKING**: `pyhdb_rs.pandas` module - Use `execute_arrow()` + PyArrow instead
+- **BREAKING**: `pyhdb_rs.polars` module - Use `execute_arrow()` + `pl.from_arrow()` instead
+- **BREAKING**: `pyhdb_rs.aio.polars` module - Use async `execute_arrow()` + `pl.from_arrow()` instead
+- **BREAKING**: Convenience functions: `read_hana`, `write_hana`, `to_hana`, `scan_hana`
+- **BREAKING**: `AsyncConnection.connect()` classmethod - Use `AsyncConnectionBuilder.build()` instead
+- **BREAKING**: `ConnectionPool.__init__()` - Use `ConnectionPoolBuilder.build()` instead
 
 ### Changed
 
+- **BREAKING**: Config-first API for `execute_arrow()` - `batch_size` parameter replaced with `config: ArrowConfig | None`
+  - Before: `conn.execute_arrow("SELECT ...", batch_size=10000)`
+  - After: `conn.execute_arrow("SELECT ...", config=ArrowConfig(batch_size=10000))`
+  - Applies to: `Connection.execute_arrow()`, `Cursor.execute_arrow()`, `Cursor.fetch_arrow()`,
+    `AsyncConnection.execute_arrow()`, `PooledConnection.execute_arrow()`
 - **Internal Refactoring:** Comprehensive DRY (Don't Repeat Yourself) violations elimination
   - Created centralized `utils/` module to consolidate duplicate code across sync and async implementations
   - Eliminated 303 lines of duplicated code across 8 files
@@ -25,6 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Debug output shows `password: "[REDACTED]"` instead of plaintext password
   - Prevents accidental password exposure in logs and error messages
   - Added test coverage for password redaction
+
+### Migration Guide
+
+See README.md "Migration Guide: v0.3.0 to v0.3.1" section.
 
 ## [0.3.0]
 
@@ -368,7 +386,8 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[0.3.0]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.5...HEAD
+[0.3.1]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.2...v0.2.3

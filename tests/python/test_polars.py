@@ -1,149 +1,191 @@
-"""Polars helper tests for pyhdb_rs."""
+"""Tests for Polars integration via execute_arrow() API.
+
+These tests verify that the execute_arrow() API works correctly with Polars
+for converting HANA query results to Polars DataFrames.
+"""
 
 from __future__ import annotations
-
-import contextlib
 
 import pytest
 
 
-class TestReadHana:
-    """Tests for pyhdb_rs.polars.read_hana."""
+class TestExecuteArrowPolars:
+    """Tests for execute_arrow() with Polars conversion."""
 
-    def test_read_hana_returns_dataframe(self, hana_uri: str) -> None:
-        """Test that read_hana returns a Polars DataFrame."""
+    def test_execute_arrow_to_polars_returns_dataframe(self, hana_uri: str) -> None:
+        """Test that execute_arrow() result can be converted to Polars DataFrame."""
         polars = pytest.importorskip("polars")
-        import pyhdb_rs.polars as hdb
+        from pyhdb_rs import ConnectionBuilder
 
-        df = hdb.read_hana("SELECT 1 AS value FROM DUMMY", hana_uri)
-        assert isinstance(df, polars.DataFrame)
-        assert len(df) == 1
-
-    def test_read_hana_with_batch_size(self, hana_uri: str) -> None:
-        """Test read_hana with custom batch size."""
-        polars = pytest.importorskip("polars")
-        import pyhdb_rs.polars as hdb
-
-        df = hdb.read_hana("SELECT 1 AS value FROM DUMMY", hana_uri, batch_size=100)
-        assert isinstance(df, polars.DataFrame)
-        assert len(df) == 1
-
-    def test_read_hana_multiple_columns(self, hana_uri: str) -> None:
-        """Test read_hana with multiple columns."""
-        pytest.importorskip("polars")
-        import pyhdb_rs.polars as hdb
-
-        df = hdb.read_hana(
-            "SELECT 1 AS int_col, 'hello' AS str_col FROM DUMMY",
-            hana_uri,
-        )
-        assert len(df.columns) == 2
-
-
-class TestScanHana:
-    """Tests for pyhdb_rs.polars.scan_hana."""
-
-    def test_scan_hana_returns_lazyframe(self, hana_uri: str) -> None:
-        """Test that scan_hana returns a LazyFrame."""
-        polars = pytest.importorskip("polars")
-        import pyhdb_rs.polars as hdb
-
-        lf = hdb.scan_hana("SELECT 1 AS value FROM DUMMY", hana_uri)
-        assert isinstance(lf, polars.LazyFrame)
-
-    def test_scan_hana_collect(self, hana_uri: str) -> None:
-        """Test that scan_hana can be collected."""
-        polars = pytest.importorskip("polars")
-        import pyhdb_rs.polars as hdb
-
-        lf = hdb.scan_hana("SELECT 1 AS value FROM DUMMY", hana_uri)
-        df = lf.collect()
-        assert isinstance(df, polars.DataFrame)
-        assert len(df) == 1
-
-    def test_scan_hana_filter(self, hana_uri: str) -> None:
-        """Test that scan_hana supports filter operations."""
-        polars = pytest.importorskip("polars")
-        import pyhdb_rs.polars as hdb
-
-        lf = hdb.scan_hana("SELECT 1 AS value FROM DUMMY", hana_uri)
-        col_name = lf.collect().columns[0]
-        result = lf.filter(polars.col(col_name) > 0).collect()
-        assert len(result) == 1
-
-
-class TestWriteHana:
-    """Tests for pyhdb_rs.polars.write_hana.
-
-    These tests require a writable HANA schema.
-    """
-
-    @pytest.fixture
-    def test_table_name(self) -> str:
-        """Generate a unique test table name."""
-        import uuid
-
-        return f"TEST_POLARS_{uuid.uuid4().hex[:8].upper()}"
-
-    def test_write_hana_replace(
-        self, hana_uri: str, test_table_name: str, connection: object
-    ) -> None:
-        """Test write_hana with if_table_exists='replace'."""
-        polars = pytest.importorskip("polars")
-        import pyhdb_rs
-        import pyhdb_rs.polars as hdb
-
-        conn = pyhdb_rs.connect(hana_uri)
-
+        conn = ConnectionBuilder.from_url(hana_uri).build()
         try:
-            df = polars.DataFrame(
-                {
-                    "id": [1, 2, 3],
-                    "value": [10, 20, 30],
-                }
-            )
-
-            rows = hdb.write_hana(df, test_table_name, hana_uri, if_table_exists="replace")
-            assert rows == 3
-
-            result = hdb.read_hana(f"SELECT * FROM {test_table_name}", hana_uri)
-            assert len(result) == 3
+            reader = conn.execute_arrow("SELECT 1 AS value FROM DUMMY")
+            df = polars.from_arrow(reader)
+            assert isinstance(df, polars.DataFrame)
+            assert len(df) == 1
         finally:
-            cursor = conn.cursor()
-            with contextlib.suppress(Exception):
-                cursor.execute(f"DROP TABLE {test_table_name}")
             conn.close()
 
-    def test_write_hana_append(self, hana_uri: str, test_table_name: str) -> None:
-        """Test write_hana with if_table_exists='append'."""
+    def test_execute_arrow_with_arrow_config(self, hana_uri: str) -> None:
+        """Test execute_arrow with ArrowConfig for custom batch size."""
         polars = pytest.importorskip("polars")
-        import pyhdb_rs
-        import pyhdb_rs.polars as hdb
+        from pyhdb_rs import ArrowConfig, ConnectionBuilder
 
-        conn = pyhdb_rs.connect(hana_uri)
-
+        conn = ConnectionBuilder.from_url(hana_uri).build()
         try:
-            df1 = polars.DataFrame(
-                {
-                    "id": [1, 2],
-                    "value": [10, 20],
-                }
-            )
-            hdb.write_hana(df1, test_table_name, hana_uri, if_table_exists="replace")
-
-            df2 = polars.DataFrame(
-                {
-                    "id": [3, 4],
-                    "value": [30, 40],
-                }
-            )
-            rows = hdb.write_hana(df2, test_table_name, hana_uri, if_table_exists="append")
-            assert rows == 2
-
-            result = hdb.read_hana(f"SELECT * FROM {test_table_name}", hana_uri)
-            assert len(result) == 4
+            config = ArrowConfig(batch_size=100)
+            reader = conn.execute_arrow("SELECT 1 AS value FROM DUMMY", config=config)
+            df = polars.from_arrow(reader)
+            assert isinstance(df, polars.DataFrame)
+            assert len(df) == 1
         finally:
+            conn.close()
+
+    def test_execute_arrow_multiple_columns(self, hana_uri: str) -> None:
+        """Test execute_arrow with multiple columns."""
+        polars = pytest.importorskip("polars")
+        from pyhdb_rs import ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
+            reader = conn.execute_arrow("SELECT 1 AS int_col, 'hello' AS str_col FROM DUMMY")
+            df = polars.from_arrow(reader)
+            assert len(df.columns) == 2
+        finally:
+            conn.close()
+
+
+class TestCursorFetchArrowPolars:
+    """Tests for cursor.fetch_arrow() with Polars conversion."""
+
+    def test_cursor_fetch_arrow_to_polars(self, hana_uri: str) -> None:
+        """Test that cursor.fetch_arrow() can be converted to Polars DataFrame."""
+        polars = pytest.importorskip("polars")
+        from pyhdb_rs import ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
             cursor = conn.cursor()
-            with contextlib.suppress(Exception):
-                cursor.execute(f"DROP TABLE {test_table_name}")
+            cursor.execute("SELECT 1 AS value FROM DUMMY")
+            reader = cursor.fetch_arrow()
+            df = polars.from_arrow(reader)
+            assert isinstance(df, polars.DataFrame)
+            assert len(df) == 1
+        finally:
+            conn.close()
+
+    def test_cursor_fetch_arrow_with_arrow_config(self, hana_uri: str) -> None:
+        """Test cursor.fetch_arrow() with ArrowConfig."""
+        polars = pytest.importorskip("polars")
+        from pyhdb_rs import ArrowConfig, ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 AS value FROM DUMMY")
+            config = ArrowConfig(batch_size=100)
+            reader = cursor.fetch_arrow(config=config)
+            df = polars.from_arrow(reader)
+            assert isinstance(df, polars.DataFrame)
+            assert len(df) == 1
+        finally:
+            conn.close()
+
+    def test_cursor_fetch_arrow_with_parameters(self, hana_uri: str) -> None:
+        """Test cursor with parameters followed by fetch_arrow."""
+        polars = pytest.importorskip("polars")
+        from pyhdb_rs import ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT ? AS value FROM DUMMY", [42])
+            reader = cursor.fetch_arrow()
+            df = polars.from_arrow(reader)
+            assert len(df) == 1
+            assert df["VALUE"][0] == 42
+        finally:
+            conn.close()
+
+
+class TestCursorExecuteArrowPolars:
+    """Tests for cursor.execute_arrow() with Polars conversion."""
+
+    def test_cursor_execute_arrow_to_polars(self, hana_uri: str) -> None:
+        """Test that cursor.execute_arrow() can be converted to Polars DataFrame."""
+        polars = pytest.importorskip("polars")
+        from pyhdb_rs import ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
+            cursor = conn.cursor()
+            reader = cursor.execute_arrow("SELECT 1 AS value FROM DUMMY")
+            df = polars.from_arrow(reader)
+            assert isinstance(df, polars.DataFrame)
+            assert len(df) == 1
+        finally:
+            conn.close()
+
+    def test_cursor_execute_arrow_with_arrow_config(self, hana_uri: str) -> None:
+        """Test cursor.execute_arrow() with ArrowConfig."""
+        polars = pytest.importorskip("polars")
+        from pyhdb_rs import ArrowConfig, ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
+            cursor = conn.cursor()
+            config = ArrowConfig(batch_size=100)
+            reader = cursor.execute_arrow("SELECT 1 AS value FROM DUMMY", config=config)
+            df = polars.from_arrow(reader)
+            assert isinstance(df, polars.DataFrame)
+            assert len(df) == 1
+        finally:
+            conn.close()
+
+
+class TestPolarsLazyFrame:
+    """Tests for Polars LazyFrame integration."""
+
+    def test_execute_arrow_to_lazyframe(self, hana_uri: str) -> None:
+        """Test converting execute_arrow result to LazyFrame."""
+        polars = pytest.importorskip("polars")
+        from pyhdb_rs import ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
+            reader = conn.execute_arrow("SELECT 1 AS value FROM DUMMY")
+            df = polars.from_arrow(reader)
+            lf = df.lazy()
+            assert isinstance(lf, polars.LazyFrame)
+        finally:
+            conn.close()
+
+    def test_lazyframe_collect(self, hana_uri: str) -> None:
+        """Test that LazyFrame can be collected."""
+        polars = pytest.importorskip("polars")
+        from pyhdb_rs import ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
+            reader = conn.execute_arrow("SELECT 1 AS value FROM DUMMY")
+            lf = polars.from_arrow(reader).lazy()
+            df = lf.collect()
+            assert isinstance(df, polars.DataFrame)
+            assert len(df) == 1
+        finally:
+            conn.close()
+
+    def test_lazyframe_filter(self, hana_uri: str) -> None:
+        """Test that LazyFrame supports filter operations."""
+        polars = pytest.importorskip("polars")
+        from pyhdb_rs import ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
+            reader = conn.execute_arrow("SELECT 1 AS value FROM DUMMY")
+            lf = polars.from_arrow(reader).lazy()
+            col_name = lf.collect().columns[0]
+            result = lf.filter(polars.col(col_name) > 0).collect()
+            assert len(result) == 1
+        finally:
             conn.close()

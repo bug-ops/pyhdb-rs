@@ -45,10 +45,10 @@ use pyo3::prelude::*;
 use tokio::sync::Mutex as TokioMutex;
 
 use super::common::{
-    ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, rollback_impl,
-    validate_non_negative_f64, validate_positive_u32,
+    ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, get_batch_size,
+    rollback_impl, validate_non_negative_f64, validate_positive_u32,
 };
-use crate::config::PyConnectionConfig;
+use crate::config::{PyArrowConfig, PyConnectionConfig};
 use crate::connection::PyCacheStats;
 use crate::error::PyHdbError;
 use crate::tls::{PyTlsConfig, TlsConfigInner};
@@ -219,15 +219,22 @@ pub type Pool = deadpool::managed::Pool<HanaConnectionManager>;
 
 /// Python connection pool.
 ///
+/// Use `ConnectionPoolBuilder` to create instances.
+///
 /// # Example
 ///
 /// ```python
 /// import polars as pl
+/// from pyhdb_rs.aio import ConnectionPoolBuilder
 ///
-/// pool = create_pool("hdbsql://user:pass@host:30015", max_size=10)
+/// pool = (ConnectionPoolBuilder()
+///     .url("hdbsql://user:pass@host:30015")
+///     .max_size(10)
+///     .build())
+///
 /// async with pool.acquire() as conn:
 ///     reader = await conn.execute_arrow(
-///         "SELECT CUSTOMER_ID, COUNT(*) AS ORDER_COUNT FROM SALES_ORDERS WHERE ORDER_DATE >= '2025-01-01' GROUP BY CUSTOMER_ID"
+///         "SELECT CUSTOMER_ID, COUNT(*) FROM SALES_ORDERS"
 ///     )
 ///     df = pl.from_arrow(reader)
 /// ```
@@ -236,14 +243,13 @@ pub type Pool = deadpool::managed::Pool<HanaConnectionManager>;
 ///
 /// ```python
 /// from pyhdb_rs import TlsConfig
-/// from pyhdb_rs.aio import ConnectionPool
+/// from pyhdb_rs.aio import ConnectionPoolBuilder
 ///
-/// # With TLS configuration
-/// pool = ConnectionPool(
-///     "hdbsql://user:pass@host:30015",
-///     max_size=10,
-///     tls_config=TlsConfig.from_directory("/etc/hana/certs")
-/// )
+/// pool = (ConnectionPoolBuilder()
+///     .url("hdbsql://user:pass@host:30015")
+///     .max_size(10)
+///     .tls(TlsConfig.from_directory("/etc/hana/certs"))
+///     .build())
 /// ```
 #[pyclass(name = "ConnectionPool", module = "hdbconnect.aio")]
 pub struct PyConnectionPool {
@@ -262,81 +268,6 @@ impl std::fmt::Debug for PyConnectionPool {
 
 #[pymethods]
 impl PyConnectionPool {
-    /// Creates a new connection pool.
-    ///
-    /// # Arguments
-    ///
-    /// * `url` - HANA connection URL (`hdbsql://user:pass@host:port`)
-    /// * `max_size` - Maximum number of connections (default: 10)
-    /// * `min_idle` - Minimum idle connections to maintain (accepted for API compatibility, not
-    ///   enforced by underlying pool)
-    /// * `connection_timeout` - Connection acquisition timeout in seconds (default: 30)
-    /// * `config` - Optional connection configuration applied to all pooled connections
-    /// * `tls_config` - Optional TLS configuration for secure connections
-    ///
-    /// # Example
-    ///
-    /// ```python
-    /// # Basic pool
-    /// pool = ConnectionPool("hdbsql://user:pass@host:30015", max_size=10)
-    ///
-    /// # Pool with TLS
-    /// pool = ConnectionPool(
-    ///     "hdbsql://user:pass@host:30015",
-    ///     max_size=10,
-    ///     tls_config=TlsConfig.from_directory("/etc/hana/certs")
-    /// )
-    /// ```
-    #[new]
-    #[pyo3(signature = (url, *, max_size=10, min_idle=None, connection_timeout=30, config=None, tls_config=None))]
-    fn new(
-        url: String,
-        max_size: usize,
-        min_idle: Option<usize>,
-        connection_timeout: u64,
-        config: Option<&PyConnectionConfig>,
-        tls_config: Option<&PyTlsConfig>,
-    ) -> PyResult<Self> {
-        // Validate min_idle doesn't exceed max_size
-        if let Some(min) = min_idle
-            && min > max_size
-        {
-            return Err(PyHdbError::programming(format!(
-                "min_idle ({min}) cannot exceed max_size ({max_size})"
-            ))
-            .into());
-        }
-
-        let manager = match (config, tls_config) {
-            (None, None) => HanaConnectionManager::new(&url),
-            (Some(cfg), None) => HanaConnectionManager::with_config(
-                &url,
-                cfg.to_hdbconnect_config(),
-                cfg.statement_cache_size(),
-            ),
-            (None, Some(tls)) => HanaConnectionManager::with_tls(
-                &url,
-                None,
-                DEFAULT_CACHE_CAPACITY,
-                tls.inner.clone(),
-            ),
-            (Some(cfg), Some(tls)) => HanaConnectionManager::with_tls(
-                &url,
-                Some(cfg.to_hdbconnect_config()),
-                cfg.statement_cache_size(),
-                tls.inner.clone(),
-            ),
-        };
-
-        let pool = Pool::builder(manager)
-            .max_size(max_size)
-            .wait_timeout(Some(std::time::Duration::from_secs(connection_timeout)))
-            .build()
-            .map_err(|e| PyHdbError::operational(e.to_string()))?;
-
-        Ok(Self { pool, url })
-    }
-
     /// Acquire a connection from the pool.
     fn acquire<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let pool = self.pool.clone();
@@ -672,13 +603,38 @@ impl std::fmt::Debug for PooledConnection {
 
 #[pymethods]
 impl PooledConnection {
-    #[pyo3(signature = (sql, batch_size=65536))]
+    /// Executes a SQL query and returns an Arrow `RecordBatchReader`.
+    ///
+    /// Args:
+    ///     sql: SQL query string
+    ///     config: Optional Arrow configuration (`batch_size`, etc.)
+    ///
+    /// Returns:
+    ///     `RecordBatchReader` for streaming results
+    ///
+    /// Example:
+    ///     ```python
+    ///     from pyhdb_rs import ArrowConfig
+    ///     import polars as pl
+    ///
+    ///     # With default config
+    ///     async with pool.acquire() as conn:
+    ///         reader = await conn.execute_arrow("SELECT * FROM T")
+    ///         df = pl.from_arrow(reader)
+    ///
+    ///     # With custom batch size
+    ///     config = ArrowConfig(batch_size=10000)
+    ///     async with pool.acquire() as conn:
+    ///         reader = await conn.execute_arrow("SELECT * FROM T", config=config)
+    ///     ```
+    #[pyo3(signature = (sql, config=None))]
     fn execute_arrow<'py>(
         &self,
         py: Python<'py>,
         sql: String,
-        batch_size: usize,
+        config: Option<&PyArrowConfig>,
     ) -> PyResult<Bound<'py, PyAny>> {
+        let batch_size = get_batch_size(config);
         let object = Arc::clone(&self.object);
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {

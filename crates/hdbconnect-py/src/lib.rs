@@ -8,10 +8,11 @@
 //! # Example
 //!
 //! ```python
-//! import pyhdb_rs
+//! from pyhdb_rs import ConnectionBuilder
+//! import polars as pl
 //!
 //! # Connect to HANA
-//! conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015")
+//! conn = ConnectionBuilder.from_url("hdbsql://user:pass@host:30015").build()
 //!
 //! # Execute query
 //! cursor = conn.cursor()
@@ -21,8 +22,9 @@
 //! for row in cursor:
 //!     print(row)
 //!
-//! # Or get as Polars DataFrame
-//! df = conn.execute_polars("SELECT * FROM USERS")
+//! # Or get as Polars DataFrame via Arrow
+//! reader = conn.execute_arrow("SELECT * FROM USERS")
+//! df = pl.from_arrow(reader)
 //!
 //! conn.close()
 //! ```
@@ -47,7 +49,7 @@ pub mod async_support;
 pub use async_support::{
     AsyncPyConnection, AsyncPyCursor, PooledConnection, PyConnectionPool, PyConnectionPoolBuilder,
 };
-pub use config::PyConnectionConfig;
+pub use config::{PyArrowConfig, PyConnectionConfig};
 #[cfg(feature = "async")]
 pub use connection::PyAsyncConnectionBuilder;
 pub use connection::{PyCacheStats, PyConnection, PyConnectionBuilder};
@@ -122,6 +124,7 @@ fn pyhdb_rs_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCursor>()?;
     m.add_class::<PyRecordBatchReader>()?;
     m.add_class::<PyConnectionConfig>()?;
+    m.add_class::<PyArrowConfig>()?;
     m.add_class::<PyCacheStats>()?;
 
     // Builder API classes

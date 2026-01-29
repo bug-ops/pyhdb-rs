@@ -6,6 +6,7 @@ use parking_lot::Mutex;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyFloat, PyInt, PyList, PySequence, PyString, PyTuple};
 
+use crate::config::{DEFAULT_ARROW_BATCH_SIZE, PyArrowConfig};
 use crate::connection::{ConnectionInner, SharedConnection};
 use crate::cursor::state::ColumnDescription;
 use crate::error::PyHdbError;
@@ -251,8 +252,36 @@ impl PyCursor {
     }
 
     /// Get results as Arrow `RecordBatchReader`.
-    #[pyo3(signature = (batch_size=65536))]
-    fn fetch_arrow(&self, py: Python<'_>, batch_size: usize) -> PyResult<PyRecordBatchReader> {
+    ///
+    /// Args:
+    ///     config: Optional Arrow configuration (`batch_size`, etc.)
+    ///
+    /// Returns:
+    ///     `RecordBatchReader` for streaming results
+    ///
+    /// Example:
+    ///     ```python
+    ///     from pyhdb_rs import ArrowConfig
+    ///     import polars as pl
+    ///
+    ///     cursor.execute("SELECT * FROM T")
+    ///
+    ///     # With default config
+    ///     reader = cursor.fetch_arrow()
+    ///     df = pl.from_arrow(reader)
+    ///
+    ///     # With custom batch size
+    ///     config = ArrowConfig(batch_size=10000)
+    ///     reader = cursor.fetch_arrow(config=config)
+    ///     ```
+    #[pyo3(signature = (config=None))]
+    fn fetch_arrow(
+        &self,
+        py: Python<'_>,
+        config: Option<&PyArrowConfig>,
+    ) -> PyResult<PyRecordBatchReader> {
+        let batch_size = config.map_or(DEFAULT_ARROW_BATCH_SIZE, PyArrowConfig::batch_size);
+
         // Extract result_set while holding lock briefly
         let result_set = {
             let mut guard = self.inner.lock();
@@ -272,17 +301,33 @@ impl PyCursor {
     ///
     /// Args:
     ///     sql: SQL query string
-    ///     `batch_size`: Rows per batch (default: 65536)
+    ///     config: Optional Arrow configuration (`batch_size`, etc.)
     ///
     /// Returns:
     ///     `RecordBatchReader` for streaming results
-    #[pyo3(signature = (sql, batch_size=65536))]
+    ///
+    /// Example:
+    ///     ```python
+    ///     from pyhdb_rs import ArrowConfig
+    ///     import polars as pl
+    ///
+    ///     # With default config
+    ///     reader = cursor.execute_arrow("SELECT * FROM T")
+    ///     df = pl.from_arrow(reader)
+    ///
+    ///     # With custom batch size
+    ///     config = ArrowConfig(batch_size=10000)
+    ///     reader = cursor.execute_arrow("SELECT * FROM T", config=config)
+    ///     ```
+    #[pyo3(signature = (sql, config=None))]
     fn execute_arrow(
         &self,
         py: Python<'_>,
         sql: &str,
-        batch_size: usize,
+        config: Option<&PyArrowConfig>,
     ) -> PyResult<PyRecordBatchReader> {
+        let batch_size = config.map_or(DEFAULT_ARROW_BATCH_SIZE, PyArrowConfig::batch_size);
+
         let result_set = {
             let mut conn_guard = self.connection.lock();
             match &mut *conn_guard {

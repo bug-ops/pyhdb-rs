@@ -41,20 +41,6 @@ class TestAsyncModuleImports:
 
         assert hasattr(aio, "ASYNC_AVAILABLE")
 
-    def test_aio_has_connect_function(self) -> None:
-        """Test that aio module has connect function."""
-        from pyhdb_rs import aio
-
-        assert hasattr(aio, "connect")
-        assert callable(aio.connect)
-
-    def test_aio_has_create_pool_function(self) -> None:
-        """Test that aio module has create_pool function."""
-        from pyhdb_rs import aio
-
-        assert hasattr(aio, "create_pool")
-        assert callable(aio.create_pool)
-
 
 class TestAsyncClassExports:
     """Tests for async class exports."""
@@ -92,12 +78,6 @@ class TestAsyncClassExports:
 
 class TestAsyncConnectionClassMethods:
     """Tests for AsyncConnection class method existence."""
-
-    def test_async_connection_has_connect_classmethod(self) -> None:
-        """Test that AsyncConnection has connect classmethod."""
-        from pyhdb_rs.aio import AsyncConnection
-
-        assert hasattr(AsyncConnection, "connect")
 
     def test_async_connection_has_cursor_method(self) -> None:
         """Test that AsyncConnection has cursor method."""
@@ -351,18 +331,6 @@ class TestAioModuleAll:
 
         assert "ASYNC_AVAILABLE" in aio.__all__
 
-    def test_aio_all_contains_connect(self) -> None:
-        """Test that __all__ contains connect."""
-        from pyhdb_rs import aio
-
-        assert "connect" in aio.__all__
-
-    def test_aio_all_contains_create_pool(self) -> None:
-        """Test that __all__ contains create_pool."""
-        from pyhdb_rs import aio
-
-        assert "create_pool" in aio.__all__
-
     def test_aio_all_contains_async_connection(self) -> None:
         """Test that __all__ contains AsyncConnection."""
         from pyhdb_rs import aio
@@ -394,48 +362,13 @@ class TestAioModuleAll:
         assert "PoolStatus" in aio.__all__
 
 
-class TestAioPolarsModule:
-    """Tests for aio polars module."""
-
-    def test_import_aio_polars_module(self) -> None:
-        """Test that aio.polars module can be imported."""
-        from pyhdb_rs.aio import polars
-
-        assert polars is not None
-
-    def test_aio_polars_has_read_hana_async(self) -> None:
-        """Test that aio.polars has read_hana_async function."""
-        from pyhdb_rs.aio.polars import read_hana_async
-
-        assert callable(read_hana_async)
-
-    def test_aio_polars_has_read_hana_pooled(self) -> None:
-        """Test that aio.polars has read_hana_pooled function."""
-        from pyhdb_rs.aio.polars import read_hana_pooled
-
-        assert callable(read_hana_pooled)
-
-
-class TestConnectWithoutAsync:
-    """Tests for connect function behavior without async runtime."""
-
-    @pytest.mark.asyncio
-    async def test_connect_invalid_url_raises_interface_error(self) -> None:
-        """Test that connect with invalid URL raises InterfaceError."""
-        import pyhdb_rs
-        from pyhdb_rs.aio import connect
-
-        with pytest.raises(pyhdb_rs.InterfaceError):
-            await connect("invalid://url")
-
-
 class TestCreatePoolErrors:
     """Tests for create_pool function error handling."""
 
     def test_create_pool_invalid_url_raises_error(self) -> None:
         """Test that create_pool with invalid URL raises error."""
         import pyhdb_rs
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         with pytest.raises((pyhdb_rs.InterfaceError, pyhdb_rs.OperationalError)):
             create_pool("invalid://url")

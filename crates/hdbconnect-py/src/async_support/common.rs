@@ -5,6 +5,7 @@
 
 use pyo3::prelude::*;
 
+use crate::config::{DEFAULT_ARROW_BATCH_SIZE, PyArrowConfig};
 use crate::error::PyHdbError;
 use crate::reader::PyRecordBatchReader;
 // Re-export from centralized utils module
@@ -52,6 +53,12 @@ pub async fn commit_impl(connection: &mut hdbconnect_async::Connection) -> PyRes
 pub async fn rollback_impl(connection: &mut hdbconnect_async::Connection) -> PyResult<()> {
     connection.rollback().await.map_err(PyHdbError::from)?;
     Ok(())
+}
+
+/// Extracts batch size from optional config, using default if not provided.
+#[must_use]
+pub fn get_batch_size(config: Option<&PyArrowConfig>) -> usize {
+    config.map_or(DEFAULT_ARROW_BATCH_SIZE, PyArrowConfig::batch_size)
 }
 
 /// Executes a query and returns an Arrow `RecordBatchReader`.
@@ -143,5 +150,16 @@ mod tests {
     fn test_validate_non_negative_f64_negative() {
         let result = validate_non_negative_f64(Some(-1.0), "read_timeout");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_batch_size_default() {
+        assert_eq!(get_batch_size(None), DEFAULT_ARROW_BATCH_SIZE);
+    }
+
+    #[test]
+    fn test_get_batch_size_custom() {
+        let config = PyArrowConfig::default();
+        assert_eq!(get_batch_size(Some(&config)), DEFAULT_ARROW_BATCH_SIZE);
     }
 }

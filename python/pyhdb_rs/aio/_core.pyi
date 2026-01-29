@@ -1,7 +1,16 @@
-"""Type stubs for async Rust extension module."""
+"""Type stubs for async Rust extension module.
 
-from collections.abc import Sequence
-from typing import Any
+This module provides type hints for the async API components.
+All async methods use ArrowConfig for batch configuration (not batch_size parameter).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Sequence
+from types import TracebackType
+from typing import Any, Literal, Self
+
+from pyhdb_rs._core import ArrowConfig, CacheStats, ConnectionConfig, RecordBatchReader, TlsConfig
 
 # Feature flag
 ASYNC_AVAILABLE: bool
@@ -9,23 +18,19 @@ ASYNC_AVAILABLE: bool
 class PoolStatus:
     """Pool status information."""
 
-    size: int
-    available: int
-    max_size: int
+    @property
+    def size(self) -> int: ...
+    @property
+    def available(self) -> int: ...
+    @property
+    def max_size(self) -> int: ...
+    def __repr__(self) -> str: ...
 
 class AsyncConnection:
-    """Async connection to SAP HANA database."""
+    """Async connection to SAP HANA database.
 
-    @classmethod
-    async def connect(
-        cls,
-        url: str,
-        *,
-        autocommit: bool = True,
-        statement_cache_size: int = 0,
-    ) -> AsyncConnection:
-        """Connect to HANA database asynchronously."""
-        ...
+    Use AsyncConnectionBuilder to create instances.
+    """
 
     def cursor(self) -> AsyncCursor:
         """Create a new cursor."""
@@ -49,20 +54,78 @@ class AsyncConnection:
         ...
 
     @autocommit.setter
-    async def autocommit(self, value: bool) -> None:
+    def autocommit(self, value: bool) -> None:
         """Set autocommit mode."""
+        ...
+
+    @property
+    def is_connected(self) -> Awaitable[bool]:
+        """Check if connection is open (async property)."""
+        ...
+
+    @property
+    def fetch_size(self) -> Awaitable[int]:
+        """Current fetch size (async property)."""
+        ...
+
+    async def set_fetch_size(self, value: int) -> None:
+        """Set fetch size at runtime."""
+        ...
+
+    @property
+    def read_timeout(self) -> Awaitable[float | None]:
+        """Current read timeout in seconds (async property)."""
+        ...
+
+    async def set_read_timeout(self, value: float | None) -> None:
+        """Set read timeout at runtime."""
+        ...
+
+    @property
+    def lob_read_length(self) -> Awaitable[int]:
+        """Current LOB read length (async property)."""
+        ...
+
+    async def set_lob_read_length(self, value: int) -> None:
+        """Set LOB read length at runtime."""
+        ...
+
+    @property
+    def lob_write_length(self) -> Awaitable[int]:
+        """Current LOB write length (async property)."""
+        ...
+
+    async def set_lob_write_length(self, value: int) -> None:
+        """Set LOB write length at runtime."""
+        ...
+
+    async def is_valid(self, check_connection: bool = True) -> bool:
+        """Check if connection is valid.
+
+        Args:
+            check_connection: If True, executes SELECT 1 FROM DUMMY to verify.
+        """
         ...
 
     async def execute_arrow(
         self,
         sql: str,
-        batch_size: int = 65536,
-    ) -> Any:
-        """Execute query and return Arrow RecordBatchReader."""
+        config: ArrowConfig | None = None,
+    ) -> RecordBatchReader:
+        """Execute query and return Arrow RecordBatchReader.
+
+        Args:
+            sql: SQL query string
+            config: Optional ArrowConfig for batch size configuration
+        """
         ...
 
-    async def execute_polars(self, sql: str) -> Any:
-        """Execute query and return Polars DataFrame."""
+    async def cache_stats(self) -> CacheStats:
+        """Get prepared statement cache statistics."""
+        ...
+
+    async def clear_cache(self) -> None:
+        """Clear the prepared statement cache."""
         ...
 
     async def __aenter__(self) -> AsyncConnection:
@@ -71,23 +134,53 @@ class AsyncConnection:
 
     async def __aexit__(
         self,
-        exc_type: type | None,
+        exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: Any | None,
-    ) -> bool:
+        exc_tb: TracebackType | None,
+    ) -> Literal[False]:
         """Async context manager exit."""
         ...
+
+    def __repr__(self) -> str: ...
+
+class AsyncConnectionBuilder:
+    """Builder for async SAP HANA connections with TLS support.
+
+    Example::
+
+        conn = await (AsyncConnectionBuilder()
+            .host("hana.example.com")
+            .credentials("SYSTEM", "password")
+            .build())
+    """
+
+    def __init__(self) -> None: ...
+    @classmethod
+    def from_url(cls, url: str) -> AsyncConnectionBuilder: ...
+    def host(self, hostname: str) -> Self: ...
+    def port(self, port: int) -> Self: ...
+    def credentials(self, user: str, password: str) -> Self: ...
+    def database(self, name: str) -> Self: ...
+    def tls(self, config: TlsConfig) -> Self: ...
+    def config(self, config: ConnectionConfig) -> Self: ...
+    def autocommit(self, enabled: bool) -> Self: ...
+    def network_group(self, group: str) -> Self: ...
+    def build(self) -> Awaitable[AsyncConnection]: ...
+    def __repr__(self) -> str: ...
 
 class AsyncCursor:
     """Async cursor for query execution.
 
     Note: fetch methods (fetchone, fetchmany, fetchall) raise NotSupportedError.
-    Use connection.execute_arrow() or execute_polars() for data retrieval.
+    Use connection.execute_arrow() for data retrieval.
     """
 
-    rowcount: int
-    arraysize: int
-
+    @property
+    def rowcount(self) -> int: ...
+    @property
+    def arraysize(self) -> int: ...
+    @arraysize.setter
+    def arraysize(self, value: int) -> None: ...
     @property
     def description(self) -> None:
         """Column descriptions - always None in async cursor."""
@@ -136,35 +229,40 @@ class AsyncCursor:
         """Async iterator protocol."""
         ...
 
-    def __anext__(self) -> tuple[Any, ...] | None:
-        """Fetch next row - always returns None (StopAsyncIteration)."""
+    async def __anext__(self) -> tuple[Any, ...]:
+        """Fetch next row."""
         ...
 
-    def __aenter__(self) -> AsyncCursor:
+    async def __aenter__(self) -> AsyncCursor:
         """Async context manager entry."""
         ...
 
     async def __aexit__(
         self,
-        exc_type: type | None,
+        exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: Any | None,
-    ) -> bool:
+        exc_tb: TracebackType | None,
+    ) -> Literal[False]:
         """Async context manager exit."""
         ...
 
-class ConnectionPool:
-    """Connection pool for async HANA connections."""
+    def __repr__(self) -> str: ...
 
-    def __init__(
-        self,
-        url: str,
-        *,
-        max_size: int = 10,
-        connection_timeout: int = 30,
-    ) -> None:
-        """Create a new connection pool."""
-        ...
+class ConnectionPool:
+    """Connection pool for async HANA connections.
+
+    Use ConnectionPoolBuilder to create instances.
+
+    Example::
+
+        from pyhdb_rs.aio import ConnectionPoolBuilder
+
+        pool = (ConnectionPoolBuilder()
+            .url("hdbsql://user:pass@host:30015")
+            .max_size(10)
+            .tls(TlsConfig.with_system_roots())
+            .build())
+    """
 
     async def acquire(self) -> PooledConnection:
         """Acquire a connection from the pool."""
@@ -184,31 +282,88 @@ class ConnectionPool:
         """Close all connections in the pool."""
         ...
 
+    def __repr__(self) -> str: ...
+
+class ConnectionPoolBuilder:
+    """Builder for async connection pools.
+
+    Example::
+
+        pool = (ConnectionPoolBuilder()
+            .url("hdbsql://user:pass@host:30015")
+            .max_size(20)
+            .tls(TlsConfig.with_system_roots())
+            .build())
+    """
+
+    def __init__(self) -> None: ...
+    def url(self, url: str) -> Self: ...
+    def max_size(self, size: int) -> Self: ...
+    def min_idle(self, size: int) -> Self: ...
+    def connection_timeout(self, seconds: int) -> Self: ...
+    def config(self, config: ConnectionConfig) -> Self: ...
+    def tls(self, config: TlsConfig) -> Self: ...
+    def network_group(self, group: str) -> Self: ...
+    def build(self) -> ConnectionPool: ...
+    def __repr__(self) -> str: ...
+
 class PooledConnection:
     """A connection borrowed from the pool.
 
-    Connection is automatically returned to the pool when __aexit__ is called
-    or when the object is garbage collected.
+    Connection is automatically returned to the pool when __aexit__ is called.
     """
+
+    @property
+    def fetch_size(self) -> Awaitable[int]:
+        """Current fetch size (async property)."""
+        ...
+
+    async def set_fetch_size(self, value: int) -> None:
+        """Set fetch size at runtime."""
+        ...
+
+    @property
+    def read_timeout(self) -> Awaitable[float | None]:
+        """Current read timeout in seconds (async property)."""
+        ...
+
+    async def set_read_timeout(self, value: float | None) -> None:
+        """Set read timeout at runtime."""
+        ...
+
+    @property
+    def lob_read_length(self) -> Awaitable[int]:
+        """Current LOB read length (async property)."""
+        ...
+
+    async def set_lob_read_length(self, value: int) -> None:
+        """Set LOB read length at runtime."""
+        ...
+
+    @property
+    def lob_write_length(self) -> Awaitable[int]:
+        """Current LOB write length (async property)."""
+        ...
+
+    async def set_lob_write_length(self, value: int) -> None:
+        """Set LOB write length at runtime."""
+        ...
 
     async def execute_arrow(
         self,
         sql: str,
-        batch_size: int = 65536,
-    ) -> Any:
-        """Execute query and return Arrow RecordBatchReader."""
-        ...
+        config: ArrowConfig | None = None,
+    ) -> RecordBatchReader:
+        """Execute query and return Arrow RecordBatchReader.
 
-    async def execute_polars(self, sql: str) -> Any:
-        """Execute query and return Polars DataFrame."""
+        Args:
+            sql: SQL query string
+            config: Optional ArrowConfig for batch size configuration
+        """
         ...
 
     async def cursor(self) -> AsyncCursor:
-        """Create a cursor for this connection.
-
-        Note: Cursor fetch methods raise NotSupportedError.
-        Use execute_arrow() or execute_polars() instead.
-        """
+        """Create a cursor for this connection."""
         ...
 
     async def commit(self) -> None:
@@ -219,15 +374,29 @@ class PooledConnection:
         """Rollback the current transaction."""
         ...
 
-    def __aenter__(self) -> PooledConnection:
+    async def is_valid(self, check_connection: bool = True) -> bool:
+        """Check if pooled connection is valid."""
+        ...
+
+    async def cache_stats(self) -> CacheStats:
+        """Get prepared statement cache statistics."""
+        ...
+
+    async def clear_cache(self) -> None:
+        """Clear the prepared statement cache."""
+        ...
+
+    async def __aenter__(self) -> PooledConnection:
         """Async context manager entry."""
         ...
 
     async def __aexit__(
         self,
-        exc_type: type | None,
+        exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: Any | None,
-    ) -> bool:
+        exc_tb: TracebackType | None,
+    ) -> Literal[False]:
         """Async context manager exit - returns connection to pool."""
         ...
+
+    async def __repr__(self) -> str: ...

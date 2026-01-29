@@ -47,8 +47,6 @@ class TestAsyncImports:
         from pyhdb_rs import aio
 
         assert hasattr(aio, "ASYNC_AVAILABLE")
-        assert hasattr(aio, "connect")
-        assert hasattr(aio, "create_pool")
 
     def test_import_async_classes(self):
         """Test importing async classes."""
@@ -74,17 +72,6 @@ class TestAsyncImports:
         # Both should be True when async is available
         assert ASYNC_AVAILABLE is True
         assert AIO_ASYNC_AVAILABLE is True
-
-
-class TestAsyncPolarsImports:
-    """Test that async polars module imports correctly."""
-
-    def test_import_polars_functions(self):
-        """Test importing polars helper functions."""
-        from pyhdb_rs.aio.polars import read_hana_async, read_hana_pooled
-
-        assert callable(read_hana_async)
-        assert callable(read_hana_pooled)
 
 
 @pytest.mark.skipif(
@@ -149,7 +136,7 @@ class TestAsyncPool:
 
     def test_create_pool(self, hana_url):
         """Test pool creation."""
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         pool = create_pool(hana_url, max_size=5)
         assert pool is not None
@@ -158,7 +145,7 @@ class TestAsyncPool:
     @pytest.mark.asyncio
     async def test_pool_acquire_release(self, hana_url):
         """Test acquiring and releasing connections from pool."""
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         pool = create_pool(hana_url, max_size=2)
 
@@ -173,7 +160,7 @@ class TestAsyncPool:
     @pytest.mark.asyncio
     async def test_pool_status(self, hana_url):
         """Test pool status reporting."""
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         pool = create_pool(hana_url, max_size=3)
         status = pool.status

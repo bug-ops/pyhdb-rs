@@ -1,120 +1,159 @@
-"""Pandas helper tests for pyhdb_rs."""
+"""Tests for pandas integration via execute_arrow() API.
+
+These tests verify that the execute_arrow() API works correctly with pandas
+for converting HANA query results to pandas DataFrames.
+"""
 
 from __future__ import annotations
-
-import contextlib
 
 import pytest
 
 
-class TestReadHana:
-    """Tests for pyhdb_rs.pandas.read_hana."""
+class TestExecuteArrowPandas:
+    """Tests for execute_arrow() with pandas conversion."""
 
-    def test_read_hana_returns_dataframe(self, hana_uri: str) -> None:
-        """Test that read_hana returns a pandas DataFrame."""
+    def test_execute_arrow_to_pandas_returns_dataframe(self, hana_uri: str) -> None:
+        """Test that execute_arrow() result can be converted to pandas DataFrame."""
         pandas = pytest.importorskip("pandas")
-        pytest.importorskip("pyarrow")
-        import pyhdb_rs.pandas as hdb
+        pyarrow = pytest.importorskip("pyarrow")
+        from pyhdb_rs import ConnectionBuilder
 
-        df = hdb.read_hana("SELECT 1 AS value FROM DUMMY", hana_uri)
-        assert isinstance(df, pandas.DataFrame)
-        assert len(df) == 1
-
-    def test_read_hana_with_batch_size(self, hana_uri: str) -> None:
-        """Test read_hana with custom batch size."""
-        pandas = pytest.importorskip("pandas")
-        pytest.importorskip("pyarrow")
-        import pyhdb_rs.pandas as hdb
-
-        df = hdb.read_hana("SELECT 1 AS value FROM DUMMY", hana_uri, batch_size=100)
-        assert isinstance(df, pandas.DataFrame)
-        assert len(df) == 1
-
-    def test_read_hana_multiple_columns(self, hana_uri: str) -> None:
-        """Test read_hana with multiple columns."""
-        pytest.importorskip("pandas")
-        pytest.importorskip("pyarrow")
-        import pyhdb_rs.pandas as hdb
-
-        df = hdb.read_hana(
-            "SELECT 1 AS int_col, 'hello' AS str_col FROM DUMMY",
-            hana_uri,
-        )
-        assert len(df.columns) == 2
-
-
-class TestToHana:
-    """Tests for pyhdb_rs.pandas.to_hana.
-
-    These tests require a writable HANA schema.
-    """
-
-    @pytest.fixture
-    def test_table_name(self) -> str:
-        """Generate a unique test table name."""
-        import uuid
-
-        return f"TEST_PANDAS_{uuid.uuid4().hex[:8].upper()}"
-
-    def test_to_hana_replace(self, hana_uri: str, test_table_name: str) -> None:
-        """Test to_hana with if_exists='replace'."""
-        pandas = pytest.importorskip("pandas")
-        pytest.importorskip("pyarrow")
-        import pyhdb_rs
-        import pyhdb_rs.pandas as hdb
-
-        conn = pyhdb_rs.connect(hana_uri)
-
+        conn = ConnectionBuilder.from_url(hana_uri).build()
         try:
-            df = pandas.DataFrame(
-                {
-                    "id": [1, 2, 3],
-                    "value": [10, 20, 30],
-                }
-            )
-
-            rows = hdb.to_hana(df, test_table_name, hana_uri, if_exists="replace")
-            assert rows == 3
-
-            result = hdb.read_hana(f"SELECT * FROM {test_table_name}", hana_uri)
-            assert len(result) == 3
+            reader = conn.execute_arrow("SELECT 1 AS value FROM DUMMY")
+            pa_reader = pyarrow.RecordBatchReader.from_stream(reader)
+            df = pa_reader.read_all().to_pandas()
+            assert isinstance(df, pandas.DataFrame)
+            assert len(df) == 1
         finally:
-            cursor = conn.cursor()
-            with contextlib.suppress(Exception):
-                cursor.execute(f"DROP TABLE {test_table_name}")
             conn.close()
 
-    def test_to_hana_append(self, hana_uri: str, test_table_name: str) -> None:
-        """Test to_hana with if_exists='append'."""
+    def test_execute_arrow_with_arrow_config(self, hana_uri: str) -> None:
+        """Test execute_arrow with ArrowConfig for custom batch size."""
         pandas = pytest.importorskip("pandas")
-        pytest.importorskip("pyarrow")
-        import pyhdb_rs
-        import pyhdb_rs.pandas as hdb
+        pyarrow = pytest.importorskip("pyarrow")
+        from pyhdb_rs import ArrowConfig, ConnectionBuilder
 
-        conn = pyhdb_rs.connect(hana_uri)
-
+        conn = ConnectionBuilder.from_url(hana_uri).build()
         try:
-            df1 = pandas.DataFrame(
-                {
-                    "id": [1, 2],
-                    "value": [10, 20],
-                }
-            )
-            hdb.to_hana(df1, test_table_name, hana_uri, if_exists="replace")
-
-            df2 = pandas.DataFrame(
-                {
-                    "id": [3, 4],
-                    "value": [30, 40],
-                }
-            )
-            rows = hdb.to_hana(df2, test_table_name, hana_uri, if_exists="append")
-            assert rows == 2
-
-            result = hdb.read_hana(f"SELECT * FROM {test_table_name}", hana_uri)
-            assert len(result) == 4
+            config = ArrowConfig(batch_size=100)
+            reader = conn.execute_arrow("SELECT 1 AS value FROM DUMMY", config=config)
+            pa_reader = pyarrow.RecordBatchReader.from_stream(reader)
+            df = pa_reader.read_all().to_pandas()
+            assert isinstance(df, pandas.DataFrame)
+            assert len(df) == 1
         finally:
+            conn.close()
+
+    def test_execute_arrow_multiple_columns(self, hana_uri: str) -> None:
+        """Test execute_arrow with multiple columns."""
+        pytest.importorskip("pandas")
+        pyarrow = pytest.importorskip("pyarrow")
+        from pyhdb_rs import ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
+            reader = conn.execute_arrow("SELECT 1 AS int_col, 'hello' AS str_col FROM DUMMY")
+            pa_reader = pyarrow.RecordBatchReader.from_stream(reader)
+            df = pa_reader.read_all().to_pandas()
+            assert len(df.columns) == 2
+        finally:
+            conn.close()
+
+
+class TestCursorFetchArrowPandas:
+    """Tests for cursor.fetch_arrow() with pandas conversion."""
+
+    def test_cursor_fetch_arrow_to_pandas(self, hana_uri: str) -> None:
+        """Test that cursor.fetch_arrow() can be converted to pandas DataFrame."""
+        pandas = pytest.importorskip("pandas")
+        pyarrow = pytest.importorskip("pyarrow")
+        from pyhdb_rs import ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
             cursor = conn.cursor()
-            with contextlib.suppress(Exception):
-                cursor.execute(f"DROP TABLE {test_table_name}")
+            cursor.execute("SELECT 1 AS value FROM DUMMY")
+            reader = cursor.fetch_arrow()
+            pa_reader = pyarrow.RecordBatchReader.from_stream(reader)
+            df = pa_reader.read_all().to_pandas()
+            assert isinstance(df, pandas.DataFrame)
+            assert len(df) == 1
+        finally:
+            conn.close()
+
+    def test_cursor_fetch_arrow_with_arrow_config(self, hana_uri: str) -> None:
+        """Test cursor.fetch_arrow() with ArrowConfig."""
+        pandas = pytest.importorskip("pandas")
+        pyarrow = pytest.importorskip("pyarrow")
+        from pyhdb_rs import ArrowConfig, ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 AS value FROM DUMMY")
+            config = ArrowConfig(batch_size=100)
+            reader = cursor.fetch_arrow(config=config)
+            pa_reader = pyarrow.RecordBatchReader.from_stream(reader)
+            df = pa_reader.read_all().to_pandas()
+            assert isinstance(df, pandas.DataFrame)
+            assert len(df) == 1
+        finally:
+            conn.close()
+
+    def test_cursor_fetch_arrow_with_parameters(self, hana_uri: str) -> None:
+        """Test cursor with parameters followed by fetch_arrow."""
+        pytest.importorskip("pandas")
+        pyarrow = pytest.importorskip("pyarrow")
+        from pyhdb_rs import ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT ? AS value FROM DUMMY", [42])
+            reader = cursor.fetch_arrow()
+            pa_reader = pyarrow.RecordBatchReader.from_stream(reader)
+            df = pa_reader.read_all().to_pandas()
+            assert len(df) == 1
+            assert df["VALUE"][0] == 42
+        finally:
+            conn.close()
+
+
+class TestCursorExecuteArrowPandas:
+    """Tests for cursor.execute_arrow() with pandas conversion."""
+
+    def test_cursor_execute_arrow_to_pandas(self, hana_uri: str) -> None:
+        """Test that cursor.execute_arrow() can be converted to pandas DataFrame."""
+        pandas = pytest.importorskip("pandas")
+        pyarrow = pytest.importorskip("pyarrow")
+        from pyhdb_rs import ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
+            cursor = conn.cursor()
+            reader = cursor.execute_arrow("SELECT 1 AS value FROM DUMMY")
+            pa_reader = pyarrow.RecordBatchReader.from_stream(reader)
+            df = pa_reader.read_all().to_pandas()
+            assert isinstance(df, pandas.DataFrame)
+            assert len(df) == 1
+        finally:
+            conn.close()
+
+    def test_cursor_execute_arrow_with_arrow_config(self, hana_uri: str) -> None:
+        """Test cursor.execute_arrow() with ArrowConfig."""
+        pandas = pytest.importorskip("pandas")
+        pyarrow = pytest.importorskip("pyarrow")
+        from pyhdb_rs import ArrowConfig, ConnectionBuilder
+
+        conn = ConnectionBuilder.from_url(hana_uri).build()
+        try:
+            cursor = conn.cursor()
+            config = ArrowConfig(batch_size=100)
+            reader = cursor.execute_arrow("SELECT 1 AS value FROM DUMMY", config=config)
+            pa_reader = pyarrow.RecordBatchReader.from_stream(reader)
+            df = pa_reader.read_all().to_pandas()
+            assert isinstance(df, pandas.DataFrame)
+            assert len(df) == 1
+        finally:
             conn.close()
