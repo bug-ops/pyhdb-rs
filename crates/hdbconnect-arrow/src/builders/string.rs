@@ -91,10 +91,14 @@ impl HanaCompatibleBuilder for StringBuilderWrapper {
 }
 
 /// Builder for Arrow `LargeUtf8` arrays (CLOB, NCLOB).
+///
+/// Supports eager materialization of CLOB and NCLOB LOB values with optional
+/// size limits to prevent OOM conditions.
 #[derive(Debug)]
 pub struct LargeStringBuilderWrapper {
     builder: LargeStringBuilder,
     len: usize,
+    max_lob_bytes: Option<usize>,
 }
 
 impl LargeStringBuilderWrapper {
@@ -104,6 +108,7 @@ impl LargeStringBuilderWrapper {
         Self {
             builder: LargeStringBuilder::with_capacity(capacity, data_capacity),
             len: 0,
+            max_lob_bytes: None,
         }
     }
 
@@ -111,6 +116,51 @@ impl LargeStringBuilderWrapper {
     #[must_use]
     pub fn default_capacity() -> Self {
         Self::new(1024, 1024 * 1024) // 1MB default for LOBs
+    }
+
+    /// Set the maximum LOB size in bytes.
+    ///
+    /// LOB values exceeding this size will cause an error during conversion.
+    #[must_use]
+    pub const fn with_max_lob_bytes(mut self, max: usize) -> Self {
+        self.max_lob_bytes = Some(max);
+        self
+    }
+
+    /// Materialize a CLOB value with size checking.
+    fn materialize_clob(&self, clob: hdbconnect::types::CLob) -> Result<String> {
+        if let Some(max) = self.max_lob_bytes {
+            // Intentional truncation: LOBs > usize::MAX are rejected anyway by size check
+            #[allow(clippy::cast_possible_truncation)]
+            let lob_size = clob.total_byte_length() as usize;
+            if lob_size > max {
+                return Err(crate::ArrowConversionError::lob_streaming(format!(
+                    "CLOB size {lob_size} bytes exceeds max_lob_bytes limit {max} bytes",
+                )));
+            }
+        }
+
+        clob.into_string().map_err(|e| {
+            crate::ArrowConversionError::lob_streaming(format!("CLOB read failed: {e}"))
+        })
+    }
+
+    /// Materialize an NCLOB value with size checking.
+    fn materialize_nclob(&self, nclob: hdbconnect::types::NCLob) -> Result<String> {
+        if let Some(max) = self.max_lob_bytes {
+            // Intentional truncation: LOBs > usize::MAX are rejected anyway by size check
+            #[allow(clippy::cast_possible_truncation)]
+            let lob_size = nclob.total_byte_length() as usize;
+            if lob_size > max {
+                return Err(crate::ArrowConversionError::lob_streaming(format!(
+                    "NCLOB size {lob_size} bytes exceeds max_lob_bytes limit {max} bytes",
+                )));
+            }
+        }
+
+        nclob.into_string().map_err(|e| {
+            crate::ArrowConversionError::lob_streaming(format!("NCLOB read failed: {e}"))
+        })
     }
 }
 
@@ -124,10 +174,22 @@ impl HanaCompatibleBuilder for LargeStringBuilderWrapper {
             HdbValue::STRING(s) => {
                 self.builder.append_value(s);
             }
-            // LOBs are handled differently in hdbconnect 0.32+
-            // They require async reading which is beyond this sync builder
+            HdbValue::SYNC_CLOB(clob) => {
+                let content = self.materialize_clob(clob.clone())?;
+                self.builder.append_value(&content);
+            }
+            HdbValue::SYNC_NCLOB(nclob) => {
+                let content = self.materialize_nclob(nclob.clone())?;
+                self.builder.append_value(&content);
+            }
             other => {
-                self.builder.append_value(format!("{other:?}"));
+                return Err(crate::ArrowConversionError::value_conversion(
+                    "large_string",
+                    format!(
+                        "cannot convert {:?} to LargeUtf8",
+                        std::mem::discriminant(other)
+                    ),
+                ));
             }
         }
         self.len += 1;
@@ -223,10 +285,14 @@ impl HanaCompatibleBuilder for BinaryBuilderWrapper {
 }
 
 /// Builder for Arrow `LargeBinary` arrays (BLOB).
+///
+/// Supports eager materialization of BLOB LOB values with optional
+/// size limits to prevent OOM conditions.
 #[derive(Debug)]
 pub struct LargeBinaryBuilderWrapper {
     builder: LargeBinaryBuilder,
     len: usize,
+    max_lob_bytes: Option<usize>,
 }
 
 impl LargeBinaryBuilderWrapper {
@@ -236,6 +302,7 @@ impl LargeBinaryBuilderWrapper {
         Self {
             builder: LargeBinaryBuilder::with_capacity(capacity, data_capacity),
             len: 0,
+            max_lob_bytes: None,
         }
     }
 
@@ -243,6 +310,33 @@ impl LargeBinaryBuilderWrapper {
     #[must_use]
     pub fn default_capacity() -> Self {
         Self::new(1024, 1024 * 1024) // 1MB default for BLOBs
+    }
+
+    /// Set the maximum LOB size in bytes.
+    ///
+    /// LOB values exceeding this size will cause an error during conversion.
+    #[must_use]
+    pub const fn with_max_lob_bytes(mut self, max: usize) -> Self {
+        self.max_lob_bytes = Some(max);
+        self
+    }
+
+    /// Materialize a BLOB value with size checking.
+    fn materialize_blob(&self, blob: hdbconnect::types::BLob) -> Result<Vec<u8>> {
+        if let Some(max) = self.max_lob_bytes {
+            // Intentional truncation: LOBs > usize::MAX are rejected anyway by size check
+            #[allow(clippy::cast_possible_truncation)]
+            let lob_size = blob.total_byte_length() as usize;
+            if lob_size > max {
+                return Err(crate::ArrowConversionError::lob_streaming(format!(
+                    "BLOB size {lob_size} bytes exceeds max_lob_bytes limit {max} bytes",
+                )));
+            }
+        }
+
+        blob.into_bytes().map_err(|e| {
+            crate::ArrowConversionError::lob_streaming(format!("BLOB read failed: {e}"))
+        })
     }
 }
 
@@ -256,11 +350,17 @@ impl HanaCompatibleBuilder for LargeBinaryBuilderWrapper {
             HdbValue::BINARY(bytes) => {
                 self.builder.append_value(bytes);
             }
-            // BLOBs are handled differently in hdbconnect 0.32+
+            HdbValue::SYNC_BLOB(blob) => {
+                let content = self.materialize_blob(blob.clone())?;
+                self.builder.append_value(&content);
+            }
             other => {
                 return Err(crate::ArrowConversionError::value_conversion(
                     "large_binary",
-                    format!("cannot convert {other:?} to binary"),
+                    format!(
+                        "cannot convert {:?} to LargeBinary",
+                        std::mem::discriminant(other)
+                    ),
                 ));
             }
         }
@@ -473,12 +573,19 @@ mod tests {
     fn test_large_string_builder_new() {
         let builder = LargeStringBuilderWrapper::new(10, 1000);
         assert_eq!(builder.len(), 0);
+        assert!(builder.max_lob_bytes.is_none());
     }
 
     #[test]
     fn test_large_string_builder_default_capacity() {
         let builder = LargeStringBuilderWrapper::default_capacity();
         assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_large_string_builder_with_max_lob_bytes() {
+        let builder = LargeStringBuilderWrapper::new(10, 1000).with_max_lob_bytes(1_000_000);
+        assert_eq!(builder.max_lob_bytes, Some(1_000_000));
     }
 
     #[test]
@@ -504,15 +611,13 @@ mod tests {
     }
 
     #[test]
-    fn test_large_string_builder_append_non_string_type() {
+    fn test_large_string_builder_reject_non_string_type() {
         let mut builder = LargeStringBuilderWrapper::new(10, 1000);
-        builder
-            .append_hana_value(&HdbValue::BIGINT(123456789))
-            .unwrap();
+        let result = builder.append_hana_value(&HdbValue::BIGINT(123456789));
 
-        let array = builder.finish();
-        let large_string_array = array.as_any().downcast_ref::<LargeStringArray>().unwrap();
-        assert!(large_string_array.value(0).contains("BIGINT"));
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.is_value_conversion());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -603,12 +708,19 @@ mod tests {
     fn test_large_binary_builder_new() {
         let builder = LargeBinaryBuilderWrapper::new(10, 1000);
         assert_eq!(builder.len(), 0);
+        assert!(builder.max_lob_bytes.is_none());
     }
 
     #[test]
     fn test_large_binary_builder_default_capacity() {
         let builder = LargeBinaryBuilderWrapper::default_capacity();
         assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_large_binary_builder_with_max_lob_bytes() {
+        let builder = LargeBinaryBuilderWrapper::new(10, 1000).with_max_lob_bytes(1_000_000);
+        assert_eq!(builder.max_lob_bytes, Some(1_000_000));
     }
 
     #[test]

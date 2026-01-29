@@ -108,6 +108,28 @@ pub fn hana_value_to_python<'py>(
         // Timestamp types: convert to Python datetime.datetime
         HdbValue::LONGDATE(ts) => parse_timestamp_to_python(py, &ts.to_string()),
         HdbValue::SECONDDATE(sd) => parse_timestamp_to_python(py, &sd.to_string()),
+        // LOB types: materialize and convert to Python str/bytes
+        HdbValue::SYNC_CLOB(clob) => {
+            let content = clob
+                .clone()
+                .into_string()
+                .map_err(|e| PyHdbError::data(format!("CLOB read failed: {e}")))?;
+            Ok(content.into_pyobject(py)?.clone().into_any())
+        }
+        HdbValue::SYNC_NCLOB(nclob) => {
+            let content = nclob
+                .clone()
+                .into_string()
+                .map_err(|e| PyHdbError::data(format!("NCLOB read failed: {e}")))?;
+            Ok(content.into_pyobject(py)?.clone().into_any())
+        }
+        HdbValue::SYNC_BLOB(blob) => {
+            let content = blob
+                .clone()
+                .into_bytes()
+                .map_err(|e| PyHdbError::data(format!("BLOB read failed: {e}")))?;
+            Ok(PyBytes::new(py, &content).clone().into_any())
+        }
         // Fallback for other types: Debug representation
         other => {
             let s = format!("{other:?}");

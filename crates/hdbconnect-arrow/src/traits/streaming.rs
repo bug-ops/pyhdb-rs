@@ -122,6 +122,15 @@ pub struct BatchConfig {
     /// When true, numeric types may be widened (e.g., INT to BIGINT)
     /// to avoid precision loss. Default: false.
     pub coerce_types: bool,
+
+    /// Maximum LOB size in bytes before rejecting.
+    ///
+    /// When set, LOB values exceeding this size will trigger an error
+    /// instead of being materialized. This prevents OOM conditions
+    /// when processing result sets with large LOB values.
+    ///
+    /// Default: None (no limit).
+    pub max_lob_bytes: Option<usize>,
 }
 
 impl Default for BatchConfig {
@@ -132,6 +141,7 @@ impl Default for BatchConfig {
             string_capacity: 1024 * 1024, // 1MB
             binary_capacity: 1024 * 1024, // 1MB
             coerce_types: false,
+            max_lob_bytes: None,
         }
     }
 }
@@ -188,6 +198,16 @@ impl BatchConfig {
         self
     }
 
+    /// Set the maximum LOB size in bytes.
+    ///
+    /// LOB values exceeding this size will cause an error during conversion.
+    /// Set to `None` to disable the limit (default).
+    #[must_use]
+    pub const fn max_lob_bytes(mut self, max: Option<usize>) -> Self {
+        self.max_lob_bytes = max;
+        self
+    }
+
     /// Create a configuration optimized for small result sets.
     ///
     /// Uses smaller batch size and buffer capacities.
@@ -206,6 +226,7 @@ impl BatchConfig {
             string_capacity: 64 * 1024, // 64KB
             binary_capacity: 64 * 1024, // 64KB
             coerce_types: false,
+            max_lob_bytes: None,
         }
     }
 
@@ -228,6 +249,7 @@ impl BatchConfig {
             string_capacity: 8 * 1024 * 1024, // 8MB
             binary_capacity: 8 * 1024 * 1024, // 8MB
             coerce_types: false,
+            max_lob_bytes: None,
         }
     }
 }
@@ -246,6 +268,7 @@ mod tests {
         assert_eq!(config.batch_size.get(), 65536);
         assert_eq!(config.string_capacity, 1024 * 1024);
         assert!(!config.coerce_types);
+        assert!(config.max_lob_bytes.is_none());
     }
 
     #[test]
@@ -316,6 +339,41 @@ mod tests {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // BatchConfig max_lob_bytes Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_batch_config_max_lob_bytes_none() {
+        let config = BatchConfig::default();
+        assert!(config.max_lob_bytes.is_none());
+    }
+
+    #[test]
+    fn test_batch_config_max_lob_bytes_some() {
+        let config = BatchConfig::default().max_lob_bytes(Some(50_000_000));
+        assert_eq!(config.max_lob_bytes, Some(50_000_000));
+    }
+
+    #[test]
+    fn test_batch_config_max_lob_bytes_reset_to_none() {
+        let config = BatchConfig::default()
+            .max_lob_bytes(Some(1000))
+            .max_lob_bytes(None);
+        assert!(config.max_lob_bytes.is_none());
+    }
+
+    #[test]
+    fn test_batch_config_max_lob_bytes_chaining() {
+        let config = BatchConfig::with_batch_size(1000)
+            .string_capacity(500)
+            .max_lob_bytes(Some(10_000_000));
+
+        assert_eq!(config.batch_size.get(), 1000);
+        assert_eq!(config.string_capacity, 500);
+        assert_eq!(config.max_lob_bytes, Some(10_000_000));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // BatchConfig Preset Tests
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -323,9 +381,11 @@ mod tests {
     fn test_batch_config_presets() {
         let small = BatchConfig::small();
         assert_eq!(small.batch_size.get(), 1024);
+        assert!(small.max_lob_bytes.is_none());
 
         let large = BatchConfig::large();
         assert_eq!(large.batch_size.get(), 131072);
+        assert!(large.max_lob_bytes.is_none());
     }
 
     #[test]
@@ -403,13 +463,16 @@ mod tests {
 
     #[test]
     fn test_batch_config_clone() {
-        let config1 = BatchConfig::with_batch_size(100).string_capacity(200);
+        let config1 = BatchConfig::with_batch_size(100)
+            .string_capacity(200)
+            .max_lob_bytes(Some(1000));
         let config2 = config1.clone();
 
         assert_eq!(config1.batch_size, config2.batch_size);
         assert_eq!(config1.string_capacity, config2.string_capacity);
         assert_eq!(config1.binary_capacity, config2.binary_capacity);
         assert_eq!(config1.coerce_types, config2.coerce_types);
+        assert_eq!(config1.max_lob_bytes, config2.max_lob_bytes);
     }
 
     #[test]
@@ -418,6 +481,7 @@ mod tests {
         let debug_str = format!("{:?}", config);
         assert!(debug_str.contains("BatchConfig"));
         assert!(debug_str.contains("batch_size"));
+        assert!(debug_str.contains("max_lob_bytes"));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
