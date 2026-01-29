@@ -32,6 +32,7 @@ use pyo3::prelude::*;
 pub mod config;
 pub mod connection;
 pub mod cursor;
+pub mod cursor_holdability;
 pub mod error;
 mod private;
 pub mod reader;
@@ -50,6 +51,7 @@ pub use config::PyConnectionConfig;
 pub use connection::PyAsyncConnectionBuilder;
 pub use connection::{PyCacheStats, PyConnection, PyConnectionBuilder};
 pub use cursor::PyCursor;
+pub use cursor_holdability::PyCursorHoldability;
 pub use error::PyHdbError;
 pub use reader::PyRecordBatchReader;
 pub use tls::PyTlsConfig;
@@ -124,6 +126,7 @@ fn pyhdb_rs_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Builder API classes
     m.add_class::<PyTlsConfig>()?;
     m.add_class::<PyConnectionBuilder>()?;
+    m.add_class::<PyCursorHoldability>()?;
 
     // Async classes (when feature enabled)
     #[cfg(feature = "async")]

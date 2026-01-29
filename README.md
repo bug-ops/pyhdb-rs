@@ -258,6 +258,58 @@ async def main():
 asyncio.run(main())
 ```
 
+## Cursor Holdability
+
+Control result set behavior across transaction boundaries with `CursorHoldability`:
+
+```python
+from pyhdb_rs import ConnectionBuilder, CursorHoldability
+
+# Keep cursors open across commits and rollbacks
+conn = (ConnectionBuilder()
+    .host("hana.example.com")
+    .credentials("SYSTEM", "password")
+    .cursor_holdability(CursorHoldability.CommitAndRollback)
+    .build())
+```
+
+**Variants:**
+- `CursorHoldability.None` - Cursor closed on commit and rollback (default)
+- `CursorHoldability.Commit` - Cursor held across commits, closed on rollback
+- `CursorHoldability.Rollback` - Cursor held across rollbacks, closed on commit
+- `CursorHoldability.CommitAndRollback` - Cursor held across both
+
+This is useful for applications that iterate over result sets while performing transactions.
+
+## High Availability (Scale-Out)
+
+For HANA Scale-Out and HA deployments, use `network_group` to route connections:
+
+```python
+from pyhdb_rs import ConnectionBuilder
+
+# Route to specific network group in HA setup
+conn = (ConnectionBuilder()
+    .host("hana.example.com")
+    .credentials("SYSTEM", "password")
+    .network_group("internal")
+    .build())
+```
+
+For async connection pools:
+
+```python
+from pyhdb_rs.aio import ConnectionPoolBuilder
+
+pool = (ConnectionPoolBuilder()
+    .url("hdbsql://user:pass@host:30015")
+    .network_group("ha-group")
+    .max_size(20)
+    .build())
+```
+
+The `network_group` parameter specifies which network interface to use when connecting to HANA systems with multiple network configurations.
+
 ## Async support
 
 pyhdb-rs supports async/await operations for non-blocking database access.

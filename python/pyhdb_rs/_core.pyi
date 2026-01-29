@@ -6,6 +6,7 @@ This file provides type hints for IDE support and static analysis.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Iterator, Sequence
+from enum import IntEnum
 from types import TracebackType
 from typing import Any, Literal, Self
 
@@ -24,6 +25,36 @@ paramstyle: Literal["qmark"]
 
 __version__: str
 """Package version string."""
+
+# =====================================================================
+# CursorHoldability
+# =====================================================================
+
+class CursorHoldability(IntEnum):
+    """Controls result set behavior across transaction boundaries.
+
+    Determines whether cursors remain open after COMMIT or ROLLBACK operations.
+    This affects how result sets behave in transaction-heavy applications.
+
+    Example::
+
+        from pyhdb_rs import ConnectionBuilder, CursorHoldability
+
+        conn = (ConnectionBuilder()
+            .host("hana.example.com")
+            .credentials("SYSTEM", "password")
+            .cursor_holdability(CursorHoldability.CommitAndRollback)
+            .build())
+    """
+
+    # Cursor closed on commit and rollback (default).
+    None_ = 0
+    # Cursor held across commits.
+    Commit = 1
+    # Cursor held across rollbacks.
+    Rollback = 2
+    # Cursor held across both commit and rollback.
+    CommitAndRollback = 3
 
 # =====================================================================
 # TlsConfig
@@ -291,6 +322,42 @@ class ConnectionBuilder:
         """
         ...
 
+    def cursor_holdability(self, holdability: CursorHoldability) -> Self:
+        """Set cursor holdability for transaction behavior.
+
+        Controls whether result set cursors remain open after COMMIT
+        or ROLLBACK operations.
+
+        Args:
+            holdability: Cursor holdability setting.
+
+        Returns:
+            Self for method chaining.
+
+        Example::
+
+            builder.cursor_holdability(CursorHoldability.CommitAndRollback)
+        """
+        ...
+
+    def network_group(self, group: str) -> Self:
+        """Set network group for HANA Scale-Out/HA deployments.
+
+        Specifies which network interface to use when connecting
+        to HANA systems with multiple network configurations.
+
+        Args:
+            group: Network group name.
+
+        Returns:
+            Self for method chaining.
+
+        Example::
+
+            builder.network_group("internal")
+        """
+        ...
+
     def build(self) -> Connection:
         """Build and connect synchronously.
 
@@ -431,6 +498,42 @@ class AsyncConnectionBuilder:
 
         Returns:
             Self for method chaining.
+        """
+        ...
+
+    def cursor_holdability(self, holdability: CursorHoldability) -> Self:
+        """Set cursor holdability for transaction behavior.
+
+        Controls whether result set cursors remain open after COMMIT
+        or ROLLBACK operations.
+
+        Args:
+            holdability: Cursor holdability setting.
+
+        Returns:
+            Self for method chaining.
+
+        Example::
+
+            builder.cursor_holdability(CursorHoldability.CommitAndRollback)
+        """
+        ...
+
+    def network_group(self, group: str) -> Self:
+        """Set network group for HANA Scale-Out/HA deployments.
+
+        Specifies which network interface to use when connecting
+        to HANA systems with multiple network configurations.
+
+        Args:
+            group: Network group name.
+
+        Returns:
+            Self for method chaining.
+
+        Example::
+
+            builder.network_group("internal")
         """
         ...
 
@@ -1109,7 +1212,6 @@ class AsyncConnection:
         *,
         autocommit: bool = True,
         config: ConnectionConfig | None = None,
-        statement_cache_size: int = 0,
     ) -> AsyncConnection:
         """Connect to HANA database asynchronously."""
         ...
@@ -1204,6 +1306,112 @@ class ConnectionPool:
     @property
     def max_size(self) -> int: ...
     async def close(self) -> None: ...
+    def __repr__(self) -> str: ...
+
+class ConnectionPoolBuilder:
+    """Builder for async connection pools.
+
+    Example::
+
+        pool = (ConnectionPoolBuilder()
+            .url("hdbsql://user:pass@host:30015")
+            .max_size(20)
+            .network_group("ha-group")
+            .build())
+    """
+
+    def __init__(self) -> None:
+        """Create a new pool builder with default settings."""
+        ...
+
+    def url(self, url: str) -> Self:
+        """Set the connection URL.
+
+        Args:
+            url: Connection URL in format hdbsql://user:pass@host:port
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def max_size(self, size: int) -> Self:
+        """Set maximum pool size.
+
+        Args:
+            size: Maximum number of connections in the pool.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def min_idle(self, size: int) -> Self:
+        """Set minimum idle connections.
+
+        Args:
+            size: Minimum idle connections to maintain.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def connection_timeout(self, seconds: int) -> Self:
+        """Set connection acquisition timeout.
+
+        Args:
+            seconds: Timeout in seconds.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def config(self, config: ConnectionConfig) -> Self:
+        """Apply connection configuration.
+
+        Args:
+            config: Connection configuration.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def tls(self, config: TlsConfig) -> Self:
+        """Configure TLS for pool connections.
+
+        Args:
+            config: TLS configuration.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def network_group(self, group: str) -> Self:
+        """Set network group for HANA Scale-Out/HA deployments.
+
+        Args:
+            group: Network group name.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def build(self) -> ConnectionPool:
+        """Build the connection pool.
+
+        Returns:
+            ConnectionPool instance.
+
+        Raises:
+            InterfaceError: If URL not set.
+        """
+        ...
+
     def __repr__(self) -> str: ...
 
 class PooledConnection:

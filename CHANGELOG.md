@@ -20,12 +20,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `TlsConfig.with_system_roots()` - Use system root certificates
   - `TlsConfig.insecure()` - Skip verification (development only)
 - Auto-TLS detection: `hdbsqls://` scheme automatically enables system root certificates
+- **CursorHoldability enum** for transaction control
+  - `CursorHoldability.None` - Cursor closed on commit and rollback (default)
+  - `CursorHoldability.Commit` - Cursor held across commits
+  - `CursorHoldability.Rollback` - Cursor held across rollbacks
+  - `CursorHoldability.CommitAndRollback` - Cursor held across both operations
+  - Integrated with `ConnectionBuilder`, `AsyncConnectionBuilder`
+- **network_group parameter** for HANA Scale-Out and HA deployments
+  - Available in `ConnectionBuilder`, `AsyncConnectionBuilder`, `ConnectionPoolBuilder`
+  - Enables routing connections to specific HANA nodes in clustered environments
 
 ### Changed
 
 - **BREAKING**: Removed deprecated `statement_cache_size` parameter from `pyhdb_rs.aio.connect()`
   - Migration: Use `ConnectionConfig(max_cached_statements=N)` instead
   - The parameter was ignored since v0.2.5 and existed only for backward compatibility
+
+### Fixed
+
+- Fix database field ignored in internal typestate builder (builder.rs)
+  - Database name from URL or `.database()` method was not passed to hdbconnect
 
 ### Removed
 

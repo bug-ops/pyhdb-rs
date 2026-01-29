@@ -37,6 +37,7 @@ use pyo3::types::PyType;
 
 use crate::config::PyConnectionConfig;
 use crate::connection::wrapper::{ConnectionInner, PyConnection};
+use crate::cursor_holdability::PyCursorHoldability;
 use crate::error::PyHdbError;
 use crate::tls::{PyTlsConfig, TlsConfigInner};
 use crate::types::prepared_cache::{DEFAULT_CACHE_CAPACITY, PreparedStatementCache};
@@ -82,6 +83,8 @@ pub struct PyConnectionBuilder {
     database: Option<String>,
     tls_config: Option<PyTlsConfig>,
     connection_config: Option<PyConnectionConfig>,
+    cursor_holdability: Option<PyCursorHoldability>,
+    network_group: Option<String>,
 }
 
 impl Default for PyConnectionBuilder {
@@ -106,6 +109,8 @@ impl PyConnectionBuilder {
             database: None,
             tls_config: None,
             connection_config: None,
+            cursor_holdability: None,
+            network_group: None,
         }
     }
 
@@ -176,6 +181,8 @@ impl PyConnectionBuilder {
             database,
             tls_config,
             connection_config: None,
+            cursor_holdability: None,
+            network_group: None,
         })
     }
 
@@ -276,6 +283,52 @@ impl PyConnectionBuilder {
         slf
     }
 
+    /// Set cursor holdability for transaction behavior.
+    ///
+    /// Controls whether result set cursors remain open after COMMIT or ROLLBACK.
+    ///
+    /// Args:
+    ///     holdability: Cursor holdability mode (see `CursorHoldability` enum).
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    ///
+    /// Example:
+    ///     ```python
+    ///     from pyhdb_rs import CursorHoldability
+    ///     builder.cursor_holdability(CursorHoldability.CommitAndRollback)
+    ///     ```
+    #[pyo3(text_signature = "(self, holdability)")]
+    fn cursor_holdability(
+        mut slf: PyRefMut<'_, Self>,
+        holdability: PyCursorHoldability,
+    ) -> PyRefMut<'_, Self> {
+        slf.cursor_holdability = Some(holdability);
+        slf
+    }
+
+    /// Set the network group for HANA Scale-Out and HA deployments.
+    ///
+    /// Network groups allow routing connections to specific HANA nodes in
+    /// scale-out or high-availability configurations.
+    ///
+    /// Args:
+    ///     group: Network group name configured in HANA.
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    ///
+    /// Example:
+    ///     ```python
+    ///     # Route to specific network group for HA
+    ///     builder.network_group("analytics_group")
+    ///     ```
+    #[pyo3(text_signature = "(self, group)")]
+    fn network_group<'py>(mut slf: PyRefMut<'py, Self>, group: &str) -> PyRefMut<'py, Self> {
+        slf.network_group = Some(group.to_string());
+        slf
+    }
+
     /// Build and connect synchronously.
     ///
     /// Returns:
@@ -315,6 +368,10 @@ impl PyConnectionBuilder {
             builder.dbname(db);
         }
 
+        if let Some(ng) = &self.network_group {
+            builder.network_group(ng);
+        }
+
         if let Some(tls) = &self.tls_config {
             tls.apply_to_builder_mut(&mut builder);
         }
@@ -324,13 +381,25 @@ impl PyConnectionBuilder {
             .map_err(|e| PyHdbError::interface(e.to_string()))?;
 
         let (conn, cache_size) = if let Some(cfg) = &self.connection_config {
-            let hdb_config = cfg.to_hdbconnect_config();
+            let mut hdb_config = cfg.to_hdbconnect_config();
+
+            if let Some(holdability) = self.cursor_holdability {
+                hdb_config.set_cursor_holdability(holdability.into());
+            }
+
             let connection = hdbconnect::Connection::with_configuration(params, &hdb_config)
                 .map_err(|e| PyHdbError::operational(e.to_string()))?;
             (connection, cfg.statement_cache_size())
         } else {
-            let connection = hdbconnect::Connection::new(params)
-                .map_err(|e| PyHdbError::operational(e.to_string()))?;
+            let connection = if let Some(holdability) = self.cursor_holdability {
+                let mut hdb_config = hdbconnect::ConnectionConfiguration::default();
+                hdb_config.set_cursor_holdability(holdability.into());
+                hdbconnect::Connection::with_configuration(params, &hdb_config)
+                    .map_err(|e| PyHdbError::operational(e.to_string()))?
+            } else {
+                hdbconnect::Connection::new(params)
+                    .map_err(|e| PyHdbError::operational(e.to_string()))?
+            };
             (connection, DEFAULT_CACHE_CAPACITY)
         };
 
@@ -381,6 +450,8 @@ pub struct PyAsyncConnectionBuilder {
     tls_config: Option<PyTlsConfig>,
     connection_config: Option<PyConnectionConfig>,
     autocommit: bool,
+    cursor_holdability: Option<PyCursorHoldability>,
+    network_group: Option<String>,
 }
 
 #[cfg(feature = "async")]
@@ -406,6 +477,8 @@ impl PyAsyncConnectionBuilder {
             tls_config: None,
             connection_config: None,
             autocommit: true,
+            cursor_holdability: None,
+            network_group: None,
         }
     }
 
@@ -458,6 +531,8 @@ impl PyAsyncConnectionBuilder {
             tls_config,
             connection_config: None,
             autocommit: true,
+            cursor_holdability: None,
+            network_group: None,
         })
     }
 
@@ -515,6 +590,37 @@ impl PyAsyncConnectionBuilder {
         slf
     }
 
+    /// Set cursor holdability for transaction behavior.
+    ///
+    /// Controls whether result set cursors remain open after COMMIT or ROLLBACK.
+    ///
+    /// Args:
+    ///     holdability: Cursor holdability mode (see `CursorHoldability` enum).
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    #[pyo3(text_signature = "(self, holdability)")]
+    fn cursor_holdability(
+        mut slf: PyRefMut<'_, Self>,
+        holdability: PyCursorHoldability,
+    ) -> PyRefMut<'_, Self> {
+        slf.cursor_holdability = Some(holdability);
+        slf
+    }
+
+    /// Set the network group for HANA Scale-Out and HA deployments.
+    ///
+    /// Args:
+    ///     group: Network group name configured in HANA.
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    #[pyo3(text_signature = "(self, group)")]
+    fn network_group<'py>(mut slf: PyRefMut<'py, Self>, group: &str) -> PyRefMut<'py, Self> {
+        slf.network_group = Some(group.to_string());
+        slf
+    }
+
     /// Build and connect asynchronously.
     ///
     /// Returns:
@@ -547,6 +653,8 @@ impl PyAsyncConnectionBuilder {
         let tls_config = self.tls_config.clone();
         let connection_config = self.connection_config.clone();
         let autocommit = self.autocommit;
+        let cursor_holdability = self.cursor_holdability;
+        let network_group = self.network_group.clone();
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut builder = hdbconnect_async::ConnectParams::builder();
@@ -559,6 +667,10 @@ impl PyAsyncConnectionBuilder {
                 builder.dbname(db);
             }
 
+            if let Some(ng) = &network_group {
+                builder.network_group(ng);
+            }
+
             if let Some(tls) = &tls_config {
                 apply_tls_to_async_builder_mut(tls, &mut builder);
             }
@@ -568,15 +680,28 @@ impl PyAsyncConnectionBuilder {
                 .map_err(|e| PyHdbError::interface(e.to_string()))?;
 
             let (connection, cache_size) = if let Some(cfg) = &connection_config {
-                let hdb_config = cfg.to_hdbconnect_config();
+                let mut hdb_config = cfg.to_hdbconnect_config();
+
+                if let Some(holdability) = cursor_holdability {
+                    hdb_config.set_cursor_holdability(holdability.into());
+                }
+
                 let conn = hdbconnect_async::Connection::with_configuration(params, &hdb_config)
                     .await
                     .map_err(|e| PyHdbError::operational(e.to_string()))?;
                 (conn, cfg.statement_cache_size())
             } else {
-                let conn = hdbconnect_async::Connection::new(params)
-                    .await
-                    .map_err(|e| PyHdbError::operational(e.to_string()))?;
+                let conn = if let Some(holdability) = cursor_holdability {
+                    let mut hdb_config = hdbconnect_async::ConnectionConfiguration::default();
+                    hdb_config.set_cursor_holdability(holdability.into());
+                    hdbconnect_async::Connection::with_configuration(params, &hdb_config)
+                        .await
+                        .map_err(|e| PyHdbError::operational(e.to_string()))?
+                } else {
+                    hdbconnect_async::Connection::new(params)
+                        .await
+                        .map_err(|e| PyHdbError::operational(e.to_string()))?
+                };
                 (conn, DEFAULT_CACHE_CAPACITY)
             };
 
@@ -648,6 +773,8 @@ mod tests {
         assert!(builder.database.is_none());
         assert!(builder.tls_config.is_none());
         assert!(builder.connection_config.is_none());
+        assert!(builder.cursor_holdability.is_none());
+        assert!(builder.network_group.is_none());
     }
 
     #[test]
@@ -667,6 +794,8 @@ mod tests {
             database: None,
             tls_config: None,
             connection_config: None,
+            cursor_holdability: None,
+            network_group: None,
         };
 
         let result = builder.build();
@@ -683,6 +812,8 @@ mod tests {
             database: None,
             tls_config: None,
             connection_config: None,
+            cursor_holdability: None,
+            network_group: None,
         };
 
         let result = builder.build();
@@ -699,12 +830,16 @@ mod tests {
             database: Some("mydb".to_string()),
             tls_config: None,
             connection_config: None,
+            cursor_holdability: Some(PyCursorHoldability::Commit),
+            network_group: Some("test_group".to_string()),
         };
 
         let cloned = builder.clone();
         assert_eq!(cloned.host, builder.host);
         assert_eq!(cloned.port, builder.port);
         assert_eq!(cloned.user, builder.user);
+        assert_eq!(cloned.cursor_holdability, builder.cursor_holdability);
+        assert_eq!(cloned.network_group, builder.network_group);
     }
 
     #[test]
@@ -724,6 +859,8 @@ mod tests {
             database: None,
             tls_config: None,
             connection_config: None,
+            cursor_holdability: None,
+            network_group: None,
         };
 
         let repr = builder.__repr__();
@@ -757,6 +894,8 @@ mod tests {
         assert!(builder.tls_config.is_none());
         assert!(builder.connection_config.is_none());
         assert!(builder.autocommit);
+        assert!(builder.cursor_holdability.is_none());
+        assert!(builder.network_group.is_none());
     }
 
     #[cfg(feature = "async")]
@@ -780,11 +919,36 @@ mod tests {
             tls_config: None,
             connection_config: None,
             autocommit: false,
+            cursor_holdability: None,
+            network_group: None,
         };
 
         let repr = builder.__repr__();
         assert!(repr.contains("AsyncConnectionBuilder"));
         assert!(repr.contains("localhost"));
         assert!(repr.contains("autocommit=false"));
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_py_async_builder_clone() {
+        let builder = PyAsyncConnectionBuilder {
+            host: Some("localhost".to_string()),
+            port: 30015,
+            user: Some("user".to_string()),
+            password: Some("pass".to_string()),
+            database: Some("mydb".to_string()),
+            tls_config: None,
+            connection_config: None,
+            autocommit: false,
+            cursor_holdability: Some(PyCursorHoldability::CommitAndRollback),
+            network_group: Some("ha_group".to_string()),
+        };
+
+        let cloned = builder.clone();
+        assert_eq!(cloned.host, builder.host);
+        assert_eq!(cloned.autocommit, builder.autocommit);
+        assert_eq!(cloned.cursor_holdability, builder.cursor_holdability);
+        assert_eq!(cloned.network_group, builder.network_group);
     }
 }

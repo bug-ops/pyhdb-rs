@@ -108,6 +108,7 @@ pub struct HanaConnectionManager {
     config: Option<ConnectionConfiguration>,
     cache_size: usize,
     tls_config: Option<TlsConfigInner>,
+    network_group: Option<String>,
 }
 
 impl HanaConnectionManager {
@@ -117,6 +118,7 @@ impl HanaConnectionManager {
             config: None,
             cache_size: DEFAULT_CACHE_CAPACITY,
             tls_config: None,
+            network_group: None,
         }
     }
 
@@ -130,6 +132,7 @@ impl HanaConnectionManager {
             config: Some(config),
             cache_size,
             tls_config: None,
+            network_group: None,
         }
     }
 
@@ -144,7 +147,13 @@ impl HanaConnectionManager {
             config,
             cache_size,
             tls_config: Some(tls_config),
+            network_group: None,
         }
+    }
+
+    pub(crate) fn with_network_group(mut self, network_group: String) -> Self {
+        self.network_group = Some(network_group);
+        self
     }
 }
 
@@ -191,6 +200,10 @@ impl Manager for HanaConnectionManager {
 
         if let Some(db) = &database {
             builder.dbname(db);
+        }
+
+        if let Some(ng) = &self.network_group {
+            builder.network_group(ng);
         }
 
         // Apply TLS from explicit config, or from URL scheme
@@ -443,6 +456,7 @@ impl PyConnectionPool {
 ///     .connection_timeout(60)
 ///     .tls(TlsConfig.with_system_roots())
 ///     .config(ConnectionConfig(fetch_size=50000))
+///     .network_group("analytics_group")
 ///     .build())
 /// ```
 #[pyclass(name = "ConnectionPoolBuilder", module = "hdbconnect.aio")]
@@ -454,6 +468,7 @@ pub struct PyConnectionPoolBuilder {
     connection_timeout: u64,
     config: Option<PyConnectionConfig>,
     tls_config: Option<PyTlsConfig>,
+    network_group: Option<String>,
 }
 
 #[pymethods]
@@ -474,6 +489,7 @@ impl PyConnectionPoolBuilder {
             connection_timeout: 30,
             config: None,
             tls_config: None,
+            network_group: None,
         }
     }
 
@@ -565,6 +581,28 @@ impl PyConnectionPoolBuilder {
         slf
     }
 
+    /// Set the network group for HANA Scale-Out and HA deployments.
+    ///
+    /// Network groups allow routing connections to specific HANA nodes in
+    /// scale-out or high-availability configurations.
+    ///
+    /// Args:
+    ///     group: Network group name configured in HANA.
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    ///
+    /// Example:
+    ///     ```python
+    ///     # Route pool connections to specific network group
+    ///     builder.network_group("analytics_group")
+    ///     ```
+    #[pyo3(text_signature = "(self, group)")]
+    fn network_group<'py>(mut slf: PyRefMut<'py, Self>, group: &str) -> PyRefMut<'py, Self> {
+        slf.network_group = Some(group.to_string());
+        slf
+    }
+
     /// Build the connection pool.
     ///
     /// Returns:
@@ -591,7 +629,7 @@ impl PyConnectionPoolBuilder {
             .into());
         }
 
-        let manager = match (&self.config, &self.tls_config) {
+        let mut manager = match (&self.config, &self.tls_config) {
             (None, None) => HanaConnectionManager::new(&url),
             (Some(cfg), None) => HanaConnectionManager::with_config(
                 &url,
@@ -611,6 +649,10 @@ impl PyConnectionPoolBuilder {
                 tls.inner.clone(),
             ),
         };
+
+        if let Some(ng) = &self.network_group {
+            manager = manager.with_network_group(ng.clone());
+        }
 
         let pool = Pool::builder(manager)
             .max_size(self.max_size)
@@ -1042,6 +1084,7 @@ mod tests {
         let debug_str = format!("{manager:?}");
         assert!(debug_str.contains("HanaConnectionManager"));
         assert!(manager.tls_config.is_none());
+        assert!(manager.network_group.is_none());
     }
 
     #[test]
@@ -1081,6 +1124,13 @@ mod tests {
         assert!(manager.config.is_some());
         assert!(manager.tls_config.is_some());
         assert_eq!(manager.cache_size, 64);
+    }
+
+    #[test]
+    fn test_hana_connection_manager_with_network_group() {
+        let manager = HanaConnectionManager::new("hdbsql://user:pass@host:30015")
+            .with_network_group("analytics_group".to_string());
+        assert_eq!(manager.network_group, Some("analytics_group".to_string()));
     }
 
     #[test]
@@ -1136,6 +1186,7 @@ mod tests {
         assert_eq!(builder.connection_timeout, 30);
         assert!(builder.config.is_none());
         assert!(builder.tls_config.is_none());
+        assert!(builder.network_group.is_none());
     }
 
     #[test]
@@ -1161,6 +1212,7 @@ mod tests {
             connection_timeout: 30,
             config: None,
             tls_config: None,
+            network_group: None,
         };
 
         let result = builder.build();
@@ -1178,9 +1230,25 @@ mod tests {
             tls_config: Some(PyTlsConfig {
                 inner: TlsConfigInner::RootCertificates,
             }),
+            network_group: None,
         };
 
         assert!(builder.tls_config.is_some());
+    }
+
+    #[test]
+    fn test_pool_builder_with_network_group() {
+        let builder = PyConnectionPoolBuilder {
+            url: Some("hdbsql://user:pass@host:30015".to_string()),
+            max_size: 10,
+            min_idle: None,
+            connection_timeout: 30,
+            config: None,
+            tls_config: None,
+            network_group: Some("ha_group".to_string()),
+        };
+
+        assert_eq!(builder.network_group, Some("ha_group".to_string()));
     }
 
     #[test]
@@ -1192,6 +1260,7 @@ mod tests {
             connection_timeout: 60,
             config: None,
             tls_config: None,
+            network_group: Some("test_group".to_string()),
         };
 
         let cloned = builder.clone();
@@ -1199,6 +1268,7 @@ mod tests {
         assert_eq!(cloned.max_size, 20);
         assert_eq!(cloned.min_idle, Some(5));
         assert_eq!(cloned.connection_timeout, 60);
+        assert_eq!(cloned.network_group, Some("test_group".to_string()));
     }
 
     #[test]
@@ -1217,6 +1287,7 @@ mod tests {
             connection_timeout: 30,
             config: None,
             tls_config: None,
+            network_group: None,
         };
 
         let repr = builder.__repr__();
@@ -1243,6 +1314,7 @@ mod tests {
             tls_config: Some(PyTlsConfig {
                 inner: TlsConfigInner::RootCertificates,
             }),
+            network_group: None,
         };
 
         let repr = builder.__repr__();
