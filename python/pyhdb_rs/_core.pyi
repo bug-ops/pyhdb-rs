@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Iterator, Sequence
 from types import TracebackType
-from typing import Any, Literal
+from typing import Any, Literal, Self
 
 # =====================================================================
 # DB-API 2.0 Module Attributes
@@ -24,6 +24,436 @@ paramstyle: Literal["qmark"]
 
 __version__: str
 """Package version string."""
+
+# =====================================================================
+# TlsConfig
+# =====================================================================
+
+class TlsConfig:
+    """TLS configuration for secure SAP HANA connections.
+
+    Choose ONE of the factory methods to specify the certificate source.
+    This class is immutable once created.
+
+    Example::
+
+        # Load certificates from a directory
+        tls = TlsConfig.from_directory("/etc/hana/certs")
+
+        # Load from environment variable
+        tls = TlsConfig.from_environment("HANA_CA_CERT")
+
+        # Use certificate content directly
+        with open("ca.pem") as f:
+            tls = TlsConfig.from_certificate(f.read())
+
+        # Use system root certificates
+        tls = TlsConfig.with_system_roots()
+
+        # Development only: skip verification (INSECURE)
+        tls = TlsConfig.insecure()
+    """
+
+    @classmethod
+    def from_directory(cls, path: str) -> TlsConfig:
+        """Load server certificates from PEM files in a directory.
+
+        The directory should contain one or more `.pem` files with CA certificates.
+
+        Args:
+            path: Path to directory containing PEM certificate files.
+
+        Returns:
+            TlsConfig configured to use certificates from the directory.
+
+        Example::
+
+            tls = TlsConfig.from_directory("/etc/hana/certs")
+        """
+        ...
+
+    @classmethod
+    def from_environment(cls, env_var: str) -> TlsConfig:
+        """Load server certificate from an environment variable.
+
+        The environment variable should contain the PEM-encoded certificate content.
+
+        Args:
+            env_var: Name of environment variable containing PEM certificate.
+
+        Returns:
+            TlsConfig configured to read certificate from environment.
+
+        Example::
+
+            # Set HANA_CA_CERT="-----BEGIN CERTIFICATE-----..."
+            tls = TlsConfig.from_environment("HANA_CA_CERT")
+        """
+        ...
+
+    @classmethod
+    def from_certificate(cls, pem_content: str) -> TlsConfig:
+        """Use certificate directly from a PEM string.
+
+        Args:
+            pem_content: PEM-encoded certificate content.
+
+        Returns:
+            TlsConfig configured with the provided certificate.
+
+        Example::
+
+            with open("ca.pem") as f:
+                tls = TlsConfig.from_certificate(f.read())
+        """
+        ...
+
+    @classmethod
+    def with_system_roots(cls) -> TlsConfig:
+        """Use system root certificates (webpki-roots / mkcert.org).
+
+        This uses the bundled Mozilla root certificates, suitable for
+        connections to HANA instances with certificates signed by
+        well-known certificate authorities.
+
+        Returns:
+            TlsConfig configured to use system root certificates.
+
+        Example::
+
+            tls = TlsConfig.with_system_roots()
+        """
+        ...
+
+    @classmethod
+    def insecure(cls) -> TlsConfig:
+        """TLS without server certificate verification (INSECURE).
+
+        Warning:
+            This disables server certificate verification and should
+            only be used for development/testing with self-signed certificates.
+            Never use in production.
+
+        Returns:
+            TlsConfig configured for insecure TLS.
+
+        Example::
+
+            # Development only!
+            tls = TlsConfig.insecure()
+        """
+        ...
+
+    def __repr__(self) -> str: ...
+
+# =====================================================================
+# ConnectionBuilder
+# =====================================================================
+
+class ConnectionBuilder:
+    """Builder for sync SAP HANA connections with TLS support.
+
+    Use this builder when you need:
+    - TLS configuration with custom certificates
+    - Programmatic connection parameters
+    - Fine-grained control over connection settings
+
+    For simple URL-based connections, use `connect()` function instead.
+
+    Example::
+
+        # Simple connection
+        conn = (ConnectionBuilder()
+            .host("hana.example.com")
+            .port(30015)
+            .credentials("SYSTEM", "password")
+            .build())
+
+        # TLS with custom certificates
+        conn = (ConnectionBuilder()
+            .host("hana.example.com")
+            .credentials("SYSTEM", "password")
+            .tls(TlsConfig.from_directory("/path/to/certs"))
+            .build())
+
+        # From URL with TLS override
+        conn = (ConnectionBuilder.from_url("hdbsql://user:pass@host:30015")
+            .tls(TlsConfig.from_certificate(cert_pem))
+            .build())
+    """
+
+    def __init__(self) -> None:
+        """Create a new connection builder with default settings.
+
+        Default port is 30015 (SAP HANA standard port).
+        """
+        ...
+
+    @classmethod
+    def from_url(cls, url: str) -> ConnectionBuilder:
+        """Create builder from a connection URL.
+
+        The URL provides initial values that can be overridden with builder methods.
+        If the URL scheme is `hdbsqls://`, TLS with system roots is automatically enabled.
+
+        Args:
+            url: Connection URL in format `hdbsql://user:pass@host:port[/database]`
+
+        Returns:
+            ConnectionBuilder initialized with URL values.
+
+        Raises:
+            InterfaceError: If URL is invalid or missing required components.
+
+        Example::
+
+            # Parse URL, then override TLS
+            builder = (ConnectionBuilder.from_url("hdbsql://user:pass@host:30015")
+                .tls(TlsConfig.from_certificate(cert_pem)))
+        """
+        ...
+
+    def host(self, hostname: str) -> Self:
+        """Set the database host.
+
+        Args:
+            hostname: Database server hostname or IP address.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def port(self, port: int) -> Self:
+        """Set the database port.
+
+        Args:
+            port: Database port (default: 30015).
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def credentials(self, user: str, password: str) -> Self:
+        """Set authentication credentials.
+
+        Args:
+            user: Database username.
+            password: Database password.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def database(self, name: str) -> Self:
+        """Set the database/tenant name.
+
+        Args:
+            name: Database or tenant name.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def tls(self, config: TlsConfig) -> Self:
+        """Configure TLS for secure connection.
+
+        Args:
+            config: TLS configuration (use TlsConfig factory methods).
+
+        Returns:
+            Self for method chaining.
+
+        Example::
+
+            builder.tls(TlsConfig.from_directory("/path/to/certs"))
+            builder.tls(TlsConfig.with_system_roots())
+            builder.tls(TlsConfig.insecure())  # Development only!
+        """
+        ...
+
+    def config(self, config: ConnectionConfig) -> Self:
+        """Apply connection configuration (fetch_size, timeouts, etc.).
+
+        Args:
+            config: Connection configuration.
+
+        Returns:
+            Self for method chaining.
+
+        Example::
+
+            config = ConnectionConfig(fetch_size=50000, read_timeout=60.0)
+            builder.config(config)
+        """
+        ...
+
+    def build(self) -> Connection:
+        """Build and connect synchronously.
+
+        Returns:
+            Connection object.
+
+        Raises:
+            InterfaceError: If required parameters (host, credentials) not set.
+            OperationalError: If connection fails.
+
+        Example::
+
+            conn = (ConnectionBuilder()
+                .host("localhost")
+                .credentials("user", "pass")
+                .build())
+        """
+        ...
+
+    def __repr__(self) -> str: ...
+
+# =====================================================================
+# AsyncConnectionBuilder
+# =====================================================================
+
+class AsyncConnectionBuilder:
+    """Builder for async SAP HANA connections with TLS support.
+
+    Same API as `ConnectionBuilder` but produces async connections.
+
+    Example::
+
+        conn = await (AsyncConnectionBuilder()
+            .host("hana.example.com")
+            .credentials("SYSTEM", "password")
+            .tls(TlsConfig.with_system_roots())
+            .build())
+    """
+
+    def __init__(self) -> None:
+        """Create a new async connection builder with default settings.
+
+        Default port is 30015 (SAP HANA standard port).
+        Autocommit is enabled by default.
+        """
+        ...
+
+    @classmethod
+    def from_url(cls, url: str) -> AsyncConnectionBuilder:
+        """Create builder from a connection URL.
+
+        The URL provides initial values that can be overridden with builder methods.
+        If the URL scheme is `hdbsqls://`, TLS with system roots is automatically enabled.
+
+        Args:
+            url: Connection URL in format `hdbsql://user:pass@host:port[/database]`
+
+        Returns:
+            AsyncConnectionBuilder initialized with URL values.
+
+        Raises:
+            InterfaceError: If URL is invalid or missing required components.
+        """
+        ...
+
+    def host(self, hostname: str) -> Self:
+        """Set the database host.
+
+        Args:
+            hostname: Database server hostname or IP address.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def port(self, port: int) -> Self:
+        """Set the database port.
+
+        Args:
+            port: Database port (default: 30015).
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def credentials(self, user: str, password: str) -> Self:
+        """Set authentication credentials.
+
+        Args:
+            user: Database username.
+            password: Database password.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def database(self, name: str) -> Self:
+        """Set the database/tenant name.
+
+        Args:
+            name: Database or tenant name.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def tls(self, config: TlsConfig) -> Self:
+        """Configure TLS for secure connection.
+
+        Args:
+            config: TLS configuration (use TlsConfig factory methods).
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def config(self, config: ConnectionConfig) -> Self:
+        """Apply connection configuration (fetch_size, timeouts, etc.).
+
+        Args:
+            config: Connection configuration.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def autocommit(self, enabled: bool) -> Self:
+        """Set auto-commit mode (default: True).
+
+        Args:
+            enabled: Whether to enable auto-commit.
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
+
+    def build(self) -> Awaitable[AsyncConnection]:
+        """Build and connect asynchronously.
+
+        Returns:
+            Awaitable that resolves to AsyncConnection.
+
+        Raises:
+            InterfaceError: If required parameters (host, credentials) not set.
+            OperationalError: If connection fails.
+
+        Example::
+
+            conn = await (AsyncConnectionBuilder()
+                .host("localhost")
+                .credentials("user", "pass")
+                .build())
+        """
+        ...
+
+    def __repr__(self) -> str: ...
 
 # =====================================================================
 # ConnectionConfig

@@ -184,6 +184,80 @@ result = lf.filter(pl.col("NET_AMOUNT") > 1000).select(["CUSTOMER_NAME", "PRODUC
 > [!TIP]
 > Use `scan_hana()` for lazy evaluation when you need to apply filters or transformations before materializing data.
 
+## TLS/SSL Connections
+
+pyhdb-rs provides flexible TLS configuration via `TlsConfig` and the builder API for secure connections.
+
+### TLS Configuration Options
+
+```python
+from pyhdb_rs import TlsConfig, ConnectionBuilder
+
+# Option 1: Load certificates from a directory (recommended for production)
+tls = TlsConfig.from_directory("/etc/hana/certs")
+
+# Option 2: Load certificate from environment variable
+tls = TlsConfig.from_environment("HANA_CA_CERT")
+
+# Option 3: Use certificate content directly
+with open("/path/to/ca.pem") as f:
+    tls = TlsConfig.from_certificate(f.read())
+
+# Option 4: Use system root certificates (Mozilla roots)
+tls = TlsConfig.with_system_roots()
+
+# Option 5: Skip verification (development only!)
+tls = TlsConfig.insecure()
+```
+
+> [!CAUTION]
+> `TlsConfig.insecure()` disables server certificate verification. Never use in production.
+
+### Builder Pattern for TLS Connections
+
+```python
+from pyhdb_rs import TlsConfig, ConnectionBuilder
+
+# Sync connection with TLS
+conn = (ConnectionBuilder()
+    .host("hana.example.com")
+    .port(30015)
+    .credentials("SYSTEM", "password")
+    .tls(TlsConfig.from_directory("/etc/hana/certs"))
+    .build())
+
+# From URL with TLS override
+conn = (ConnectionBuilder.from_url("hdbsql://user:pass@host:30015")
+    .tls(TlsConfig.from_certificate(cert_pem))
+    .build())
+
+# hdbsqls:// scheme enables TLS with system roots automatically
+conn = ConnectionBuilder.from_url("hdbsqls://user:pass@host:30015").build()
+```
+
+### Async Builder with TLS
+
+```python
+import asyncio
+from pyhdb_rs import TlsConfig
+from pyhdb_rs.aio import AsyncConnectionBuilder
+
+async def main():
+    conn = await (AsyncConnectionBuilder()
+        .host("hana.example.com")
+        .credentials("SYSTEM", "password")
+        .tls(TlsConfig.with_system_roots())
+        .autocommit(False)
+        .build())
+
+    async with conn:
+        cursor = conn.cursor()
+        await cursor.execute("SELECT * FROM DUMMY")
+        print(await cursor.fetchone())
+
+asyncio.run(main())
+```
+
 ## Async support
 
 pyhdb-rs supports async/await operations for non-blocking database access.

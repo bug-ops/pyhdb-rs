@@ -35,18 +35,24 @@ pub mod cursor;
 pub mod error;
 mod private;
 pub mod reader;
+pub mod tls;
 pub mod types;
 
 #[cfg(feature = "async")]
 pub mod async_support;
 
 #[cfg(feature = "async")]
-pub use async_support::{AsyncPyConnection, AsyncPyCursor, PooledConnection, PyConnectionPool};
+pub use async_support::{
+    AsyncPyConnection, AsyncPyCursor, PooledConnection, PyConnectionPool, PyConnectionPoolBuilder,
+};
 pub use config::PyConnectionConfig;
-pub use connection::{PyCacheStats, PyConnection};
+#[cfg(feature = "async")]
+pub use connection::PyAsyncConnectionBuilder;
+pub use connection::{PyCacheStats, PyConnection, PyConnectionBuilder};
 pub use cursor::PyCursor;
 pub use error::PyHdbError;
 pub use reader::PyRecordBatchReader;
+pub use tls::PyTlsConfig;
 
 /// DB-API 2.0 API level.
 const APILEVEL: &str = "2.0";
@@ -115,6 +121,10 @@ fn pyhdb_rs_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyConnectionConfig>()?;
     m.add_class::<PyCacheStats>()?;
 
+    // Builder API classes
+    m.add_class::<PyTlsConfig>()?;
+    m.add_class::<PyConnectionBuilder>()?;
+
     // Async classes (when feature enabled)
     #[cfg(feature = "async")]
     {
@@ -123,6 +133,8 @@ fn pyhdb_rs_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_class::<PyConnectionPool>()?;
         m.add_class::<PooledConnection>()?;
         m.add_class::<async_support::pool::PoolStatus>()?;
+        m.add_class::<PyAsyncConnectionBuilder>()?;
+        m.add_class::<PyConnectionPoolBuilder>()?;
         m.add("ASYNC_AVAILABLE", true)?;
     }
 

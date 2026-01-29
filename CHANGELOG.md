@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0]
+
+### Added
+
+- **Builder-based connection API** with full TLS support
+  - `ConnectionBuilder` for sync connections with method chaining
+  - `AsyncConnectionBuilder` for async connections
+  - `PyConnectionPoolBuilder` for pool configuration
+- **TlsConfig class** for flexible certificate configuration
+  - `TlsConfig.from_directory(path)` - Load certificates from directory
+  - `TlsConfig.from_environment(env_var)` - Load certificate from environment variable
+  - `TlsConfig.from_certificate(pem_content)` - Load certificate from PEM string
+  - `TlsConfig.with_system_roots()` - Use system root certificates
+  - `TlsConfig.insecure()` - Skip verification (development only)
+- Auto-TLS detection: `hdbsqls://` scheme automatically enables system root certificates
+
+### Changed
+
+- **BREAKING**: Removed deprecated `statement_cache_size` parameter from `pyhdb_rs.aio.connect()`
+  - Migration: Use `ConnectionConfig(max_cached_statements=N)` instead
+  - The parameter was ignored since v0.2.5 and existed only for backward compatibility
+
+### Removed
+
+- **BREAKING**: `statement_cache_size` parameter from async `connect()` function
+
 ## [0.2.5]
 
 ### Added
@@ -307,7 +333,8 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[0.2.5]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.4...HEAD
+[0.3.0]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.1...v0.2.2
