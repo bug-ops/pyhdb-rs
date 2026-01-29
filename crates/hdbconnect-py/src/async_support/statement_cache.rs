@@ -222,7 +222,7 @@ impl PreparedStatementCache {
 /// # Deprecation
 ///
 /// This type is deprecated and will be removed in version 0.3.0.
-/// The cache_stats() method now always returns None.
+/// The `cache_stats()` method now always returns None.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CacheStats {
     /// Total number of cache hits.

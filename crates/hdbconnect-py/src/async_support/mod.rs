@@ -56,10 +56,7 @@ pub use common::ConnectionState;
 pub use connection::{AsyncConnectionInner, AsyncPyConnection, SharedAsyncConnection};
 pub use cursor::AsyncPyCursor;
 pub use pool::{HanaConnectionManager, PoolConfig, PooledConnection, PyConnectionPool};
-#[deprecated(
-    since = "0.2.5",
-    note = "Statement cache is deprecated and will be removed in 0.3.0. It provides no performance benefit."
-)]
+#[allow(deprecated)]
 pub use statement_cache::{CacheStats, PreparedStatementCache};
 
 #[cfg(test)]

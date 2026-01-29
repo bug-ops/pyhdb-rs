@@ -21,11 +21,25 @@ Basic async usage::
 
     asyncio.run(main())
 
+Connection with configuration::
+
+    from pyhdb_rs import ConnectionConfig
+    from pyhdb_rs.aio import connect
+
+    config = ConnectionConfig(
+        fetch_size=50000,
+        read_timeout=60.0,
+    )
+    async with await connect("hdbsql://...", config=config) as conn:
+        reader = await conn.execute_arrow("SELECT * FROM sales")
+
 Connection pooling::
 
+    from pyhdb_rs import ConnectionConfig
     from pyhdb_rs.aio import create_pool
 
-    pool = create_pool("hdbsql://user:pass@host:39017", max_size=10)
+    config = ConnectionConfig(fetch_size=50000, read_timeout=30.0)
+    pool = create_pool("hdbsql://user:pass@host:39017", max_size=10, config=config)
 
     async def query():
         async with pool.acquire() as conn:
@@ -38,6 +52,11 @@ Connection pooling::
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyhdb_rs import ConnectionConfig
 
 try:
     from pyhdb_rs._core import (
@@ -61,6 +80,7 @@ async def connect(
     url: str,
     *,
     autocommit: bool = True,
+    config: ConnectionConfig | None = None,
     statement_cache_size: int = 0,
 ) -> AsyncConnection:
     """Connect to a HANA database asynchronously.
@@ -68,6 +88,7 @@ async def connect(
     Args:
         url: Connection URL (hdbsql://user:pass@host:port[/database])
         autocommit: Enable auto-commit mode (default: True)
+        config: Optional connection configuration for tuning performance
         statement_cache_size: DEPRECATED - This parameter is ignored.
             Statement caching is not available. Will be removed in 0.3.0.
 
@@ -83,6 +104,11 @@ async def connect(
         >>> async with await connect("hdbsql://user:pass@host:30015") as conn:
         ...     reader = await conn.execute_arrow("SELECT * FROM sales")
         ...     df = pl.from_arrow(reader)
+
+        >>> # With configuration
+        >>> config = ConnectionConfig(fetch_size=50000, read_timeout=60.0)
+        >>> async with await connect("hdbsql://...", config=config) as conn:
+        ...     reader = await conn.execute_arrow("SELECT * FROM sales")
     """
     if not ASYNC_AVAILABLE:
         raise RuntimeError(
@@ -92,6 +118,7 @@ async def connect(
     return await AsyncConnection.connect(
         url,
         autocommit=autocommit,
+        config=config,
         statement_cache_size=statement_cache_size,
     )
 
@@ -101,6 +128,7 @@ def create_pool(
     *,
     max_size: int = 10,
     connection_timeout: int = 30,
+    config: ConnectionConfig | None = None,
 ) -> ConnectionPool:
     """Create a connection pool.
 
@@ -108,6 +136,7 @@ def create_pool(
         url: Connection URL (hdbsql://user:pass@host:port[/database])
         max_size: Maximum pool size (default: 10)
         connection_timeout: Connection timeout in seconds (default: 30)
+        config: Optional connection configuration applied to all pooled connections
 
     Returns:
         ConnectionPool object
@@ -122,6 +151,10 @@ def create_pool(
         >>> async with pool.acquire() as conn:
         ...     reader = await conn.execute_arrow("SELECT * FROM sales")
         ...     df = pl.from_arrow(reader)
+
+        >>> # With configuration
+        >>> config = ConnectionConfig(fetch_size=50000, read_timeout=30.0)
+        >>> pool = create_pool("hdbsql://...", max_size=20, config=config)
     """
     if not ASYNC_AVAILABLE:
         raise RuntimeError(
@@ -132,6 +165,7 @@ def create_pool(
         url,
         max_size=max_size,
         connection_timeout=connection_timeout,
+        config=config,
     )
 
 

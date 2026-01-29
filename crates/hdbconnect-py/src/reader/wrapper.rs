@@ -383,7 +383,7 @@ impl AsyncStreamingReader {
                                     return; // Consumer dropped, stop producing
                                 }
                             }
-                            Ok(None) => {},
+                            Ok(None) => {}
                             Err(e) => {
                                 let _ = sender.send(Err(to_arrow_error(e))).await;
                                 return;

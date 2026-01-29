@@ -1,12 +1,14 @@
 //! `PyO3` Connection wrapper for Python.
 //!
-//! Provides thread-safe connection sharing via Arc<Mutex>.
+//! Provides thread-safe connection sharing via `Arc<Mutex>`.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use parking_lot::Mutex;
 use pyo3::prelude::*;
 
+use crate::config::PyConnectionConfig;
 use crate::cursor::PyCursor;
 use crate::error::PyHdbError;
 use crate::reader::PyRecordBatchReader;
@@ -51,6 +53,22 @@ pub struct PyConnection {
     inner: SharedConnection,
     /// Auto-commit mode.
     autocommit: bool,
+}
+
+impl PyConnection {
+    /// Create a connection with custom configuration.
+    pub fn with_config(url: &str, config: &PyConnectionConfig) -> PyResult<Self> {
+        let params = crate::connection::ConnectionBuilder::from_url(url)?.build()?;
+        let hdb_config = config.to_hdbconnect_config();
+
+        let conn = hdbconnect::Connection::with_configuration(params, &hdb_config)
+            .map_err(|e| PyHdbError::operational(e.to_string()))?;
+
+        Ok(Self {
+            inner: Arc::new(Mutex::new(ConnectionInner::Connected(conn))),
+            autocommit: true,
+        })
+    }
 }
 
 #[pymethods]
@@ -172,6 +190,164 @@ impl PyConnection {
                 conn.set_auto_commit(value).map_err(PyHdbError::from)?;
                 drop(guard);
                 self.autocommit = value;
+                Ok(())
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Get current fetch size (rows per network round-trip).
+    #[getter]
+    fn fetch_size(&self) -> PyResult<u32> {
+        let guard = self.inner.lock();
+        match &*guard {
+            ConnectionInner::Connected(conn) => Ok(conn.fetch_size().map_err(PyHdbError::from)?),
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Set fetch size at runtime.
+    ///
+    /// Args:
+    ///     value: Number of rows to fetch per network round-trip
+    ///
+    /// Raises:
+    ///     `ProgrammingError`: If value is 0
+    ///     `OperationalError`: If connection is closed
+    #[setter]
+    fn set_fetch_size(&self, value: u32) -> PyResult<()> {
+        if value == 0 {
+            return Err(PyHdbError::programming("fetch_size must be > 0").into());
+        }
+        let mut guard = self.inner.lock();
+        match &mut *guard {
+            ConnectionInner::Connected(conn) => {
+                conn.set_fetch_size(value).map_err(PyHdbError::from)?;
+                Ok(())
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Get current read timeout in seconds (None = no timeout).
+    #[getter]
+    fn read_timeout(&self) -> PyResult<Option<f64>> {
+        let guard = self.inner.lock();
+        match &*guard {
+            ConnectionInner::Connected(conn) => {
+                let timeout: Option<Duration> = conn.read_timeout().map_err(PyHdbError::from)?;
+                Ok(timeout.map(|d| d.as_secs_f64()))
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Set read timeout at runtime.
+    ///
+    /// Args:
+    ///     value: Timeout in seconds, or None to disable
+    ///
+    /// Raises:
+    ///     `ProgrammingError`: If value is negative
+    ///     `OperationalError`: If connection is closed
+    #[setter]
+    fn set_read_timeout(&self, value: Option<f64>) -> PyResult<()> {
+        if let Some(v) = value
+            && v < 0.0
+        {
+            return Err(PyHdbError::programming("read_timeout cannot be negative").into());
+        }
+        let mut guard = self.inner.lock();
+        match &mut *guard {
+            ConnectionInner::Connected(conn) => {
+                let duration = value.filter(|&v| v > 0.0).map(Duration::from_secs_f64);
+                conn.set_read_timeout(duration).map_err(PyHdbError::from)?;
+                Ok(())
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Get current LOB read length.
+    #[getter]
+    fn lob_read_length(&self) -> PyResult<u32> {
+        let guard = self.inner.lock();
+        match &*guard {
+            ConnectionInner::Connected(conn) => {
+                Ok(conn.lob_read_length().map_err(PyHdbError::from)?)
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Set LOB read length at runtime.
+    ///
+    /// Args:
+    ///     value: Bytes per LOB read operation
+    ///
+    /// Raises:
+    ///     `ProgrammingError`: If value is 0
+    ///     `OperationalError`: If connection is closed
+    #[setter]
+    fn set_lob_read_length(&self, value: u32) -> PyResult<()> {
+        if value == 0 {
+            return Err(PyHdbError::programming("lob_read_length must be > 0").into());
+        }
+        let mut guard = self.inner.lock();
+        match &mut *guard {
+            ConnectionInner::Connected(conn) => {
+                conn.set_lob_read_length(value).map_err(PyHdbError::from)?;
+                Ok(())
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Get current LOB write length.
+    #[getter]
+    fn lob_write_length(&self) -> PyResult<u32> {
+        let guard = self.inner.lock();
+        match &*guard {
+            ConnectionInner::Connected(conn) => {
+                Ok(conn.lob_write_length().map_err(PyHdbError::from)?)
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Set LOB write length at runtime.
+    ///
+    /// Args:
+    ///     value: Bytes per LOB write operation
+    ///
+    /// Raises:
+    ///     `ProgrammingError`: If value is 0
+    ///     `OperationalError`: If connection is closed
+    #[setter]
+    fn set_lob_write_length(&self, value: u32) -> PyResult<()> {
+        if value == 0 {
+            return Err(PyHdbError::programming("lob_write_length must be > 0").into());
+        }
+        let mut guard = self.inner.lock();
+        match &mut *guard {
+            ConnectionInner::Connected(conn) => {
+                conn.set_lob_write_length(value).map_err(PyHdbError::from)?;
                 Ok(())
             }
             ConnectionInner::Disconnected => {

@@ -14,12 +14,14 @@
 use std::sync::Arc;
 
 use deadpool::managed::{Manager, Metrics, Object, RecycleError, RecycleResult};
+use hdbconnect::ConnectionConfiguration;
 use pyo3::prelude::*;
 use tokio::sync::Mutex as TokioMutex;
 
 use super::common::{
     ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, rollback_impl,
 };
+use crate::config::PyConnectionConfig;
 use crate::connection::ConnectionBuilder;
 use crate::error::PyHdbError;
 
@@ -77,11 +79,22 @@ pub type PooledObject = Object<HanaConnectionManager>;
 #[derive(Debug)]
 pub struct HanaConnectionManager {
     url: String,
+    config: Option<ConnectionConfiguration>,
 }
 
 impl HanaConnectionManager {
     pub fn new(url: impl Into<String>) -> Self {
-        Self { url: url.into() }
+        Self {
+            url: url.into(),
+            config: None,
+        }
+    }
+
+    pub fn with_config(url: impl Into<String>, config: ConnectionConfiguration) -> Self {
+        Self {
+            url: url.into(),
+            config: Some(config),
+        }
     }
 }
 
@@ -95,7 +108,10 @@ impl Manager for HanaConnectionManager {
             .build()
             .map_err(|e| hdbconnect_async::HdbError::from(std::io::Error::other(e.to_string())))?;
 
-        let connection = hdbconnect_async::Connection::new(params).await?;
+        let connection = match &self.config {
+            Some(cfg) => hdbconnect_async::Connection::with_configuration(params, cfg).await?,
+            None => hdbconnect_async::Connection::new(params).await?,
+        };
         Ok(PooledConnectionInner { connection })
     }
 
@@ -154,13 +170,15 @@ impl PyConnectionPool {
     /// * `min_idle` - Minimum idle connections to maintain (accepted for API compatibility, not
     ///   enforced by underlying pool)
     /// * `connection_timeout` - Connection acquisition timeout in seconds (default: 30)
+    /// * `config` - Optional connection configuration applied to all pooled connections
     #[new]
-    #[pyo3(signature = (url, *, max_size=10, min_idle=None, connection_timeout=30))]
+    #[pyo3(signature = (url, *, max_size=10, min_idle=None, connection_timeout=30, config=None))]
     fn new(
         url: String,
         max_size: usize,
         min_idle: Option<usize>,
         connection_timeout: u64,
+        config: Option<&PyConnectionConfig>,
     ) -> PyResult<Self> {
         // Validate min_idle doesn't exceed max_size
         if let Some(min) = min_idle
@@ -172,7 +190,10 @@ impl PyConnectionPool {
             .into());
         }
 
-        let manager = HanaConnectionManager::new(&url);
+        let manager = config.map_or_else(
+            || HanaConnectionManager::new(&url),
+            |cfg| HanaConnectionManager::with_config(&url, cfg.to_hdbconnect_config()),
+        );
 
         let pool = Pool::builder(manager)
             .max_size(max_size)
@@ -335,6 +356,162 @@ impl PooledConnection {
         })
     }
 
+    /// Get current fetch size (rows per network round-trip).
+    #[getter]
+    fn fetch_size<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = object.lock().await;
+            let obj = guard
+                .as_ref()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+
+            let val = obj.connection.fetch_size().await;
+            Ok(val)
+        })
+    }
+
+    /// Set fetch size at runtime (async operation).
+    fn set_fetch_size<'py>(&self, py: Python<'py>, value: u32) -> PyResult<Bound<'py, PyAny>> {
+        if value == 0 {
+            return Err(PyHdbError::programming("fetch_size must be > 0").into());
+        }
+        let object = Arc::clone(&self.object);
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = object.lock().await;
+            let obj = guard
+                .as_mut()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+
+            obj.connection.set_fetch_size(value).await;
+            Ok(())
+        })
+    }
+
+    /// Get current read timeout in seconds (None = no timeout).
+    #[getter]
+    fn read_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = object.lock().await;
+            let obj = guard
+                .as_ref()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+
+            let timeout = obj
+                .connection
+                .read_timeout()
+                .await
+                .map_err(PyHdbError::from)?;
+            Ok(timeout.map(|d: std::time::Duration| d.as_secs_f64()))
+        })
+    }
+
+    /// Set read timeout at runtime (async operation).
+    fn set_read_timeout<'py>(
+        &self,
+        py: Python<'py>,
+        value: Option<f64>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(v) = value
+            && v < 0.0
+        {
+            return Err(PyHdbError::programming("read_timeout cannot be negative").into());
+        }
+        let object = Arc::clone(&self.object);
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = object.lock().await;
+            let obj = guard
+                .as_mut()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+
+            let duration = value
+                .filter(|&v| v > 0.0)
+                .map(std::time::Duration::from_secs_f64);
+            obj.connection
+                .set_read_timeout(duration)
+                .await
+                .map_err(PyHdbError::from)?;
+            Ok(())
+        })
+    }
+
+    /// Get current LOB read length.
+    #[getter]
+    fn lob_read_length<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = object.lock().await;
+            let obj = guard
+                .as_ref()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+
+            let val = obj.connection.lob_read_length().await;
+            Ok(val)
+        })
+    }
+
+    /// Set LOB read length at runtime (async operation).
+    fn set_lob_read_length<'py>(&self, py: Python<'py>, value: u32) -> PyResult<Bound<'py, PyAny>> {
+        if value == 0 {
+            return Err(PyHdbError::programming("lob_read_length must be > 0").into());
+        }
+        let object = Arc::clone(&self.object);
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = object.lock().await;
+            let obj = guard
+                .as_mut()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+
+            obj.connection.set_lob_read_length(value).await;
+            Ok(())
+        })
+    }
+
+    /// Get current LOB write length.
+    #[getter]
+    fn lob_write_length<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = object.lock().await;
+            let obj = guard
+                .as_ref()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+
+            let val = obj.connection.lob_write_length().await;
+            Ok(val)
+        })
+    }
+
+    /// Set LOB write length at runtime (async operation).
+    fn set_lob_write_length<'py>(
+        &self,
+        py: Python<'py>,
+        value: u32,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        if value == 0 {
+            return Err(PyHdbError::programming("lob_write_length must be > 0").into());
+        }
+        let object = Arc::clone(&self.object);
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = object.lock().await;
+            let obj = guard
+                .as_mut()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+
+            obj.connection.set_lob_write_length(value).await;
+            Ok(())
+        })
+    }
+
     /// Check if pooled connection is valid.
     ///
     /// Returns an awaitable that resolves to a boolean.
@@ -464,6 +641,13 @@ mod tests {
         let manager = HanaConnectionManager::new("hdbsql://user:pass@host:30015");
         let debug_str = format!("{:?}", manager);
         assert!(debug_str.contains("HanaConnectionManager"));
+    }
+
+    #[test]
+    fn test_hana_connection_manager_with_config() {
+        let config = ConnectionConfiguration::default();
+        let manager = HanaConnectionManager::with_config("hdbsql://user:pass@host:30015", config);
+        assert!(manager.config.is_some());
     }
 
     #[test]
