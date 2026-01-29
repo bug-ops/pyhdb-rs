@@ -19,7 +19,7 @@ use super::common::{
 };
 use super::cursor::AsyncPyCursor;
 use crate::config::PyConnectionConfig;
-use crate::connection::{ConnectionBuilder, PyCacheStats};
+use crate::connection::{AsyncConnectionBuilder, PyCacheStats};
 use crate::error::PyHdbError;
 use crate::types::prepared_cache::{
     CacheStatistics, DEFAULT_CACHE_CAPACITY, PreparedStatementCache,
@@ -93,19 +93,17 @@ impl AsyncPyConnection {
         config: Option<PyConnectionConfig>,
     ) -> PyResult<Bound<'py, PyAny>> {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let params = ConnectionBuilder::from_url(&url)?.build()?;
+            let builder = AsyncConnectionBuilder::from_url(&url)?;
 
-            let (connection, cache_size) = if let Some(cfg) = config {
-                let hdb_config = cfg.to_hdbconnect_config();
-                let conn = hdbconnect_async::Connection::with_configuration(params, &hdb_config)
-                    .await
-                    .map_err(|e| PyHdbError::operational(e.to_string()))?;
-                (conn, cfg.statement_cache_size())
-            } else {
-                let conn = hdbconnect_async::Connection::new(params)
-                    .await
-                    .map_err(|e| PyHdbError::operational(e.to_string()))?;
-                (conn, DEFAULT_CACHE_CAPACITY)
+            let (connection, cache_size) = match config {
+                Some(cfg) => {
+                    let conn = builder
+                        .with_config(&cfg.to_hdbconnect_config())
+                        .connect()
+                        .await?;
+                    (conn, cfg.statement_cache_size())
+                }
+                None => (builder.connect().await?, DEFAULT_CACHE_CAPACITY),
             };
 
             let inner = Arc::new(TokioMutex::new(AsyncConnectionInner::Connected {

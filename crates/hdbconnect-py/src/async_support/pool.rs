@@ -28,7 +28,7 @@ use super::common::{
     validate_non_negative_f64, validate_positive_u32,
 };
 use crate::config::PyConnectionConfig;
-use crate::connection::{ConnectionBuilder, PyCacheStats};
+use crate::connection::{AsyncConnectionBuilder, PyCacheStats};
 use crate::error::PyHdbError;
 use crate::types::prepared_cache::{
     CacheStatistics, DEFAULT_CACHE_CAPACITY, PreparedStatementCache,
@@ -114,15 +114,18 @@ impl Manager for HanaConnectionManager {
     type Error = hdbconnect_async::HdbError;
 
     async fn create(&self) -> Result<Self::Type, Self::Error> {
-        let params = ConnectionBuilder::from_url(&self.url)
-            .map_err(|e| hdbconnect_async::HdbError::from(std::io::Error::other(e.to_string())))?
-            .build()
+        // Use AsyncConnectionBuilder for unified connection creation
+        let mut builder = AsyncConnectionBuilder::from_url(&self.url)
             .map_err(|e| hdbconnect_async::HdbError::from(std::io::Error::other(e.to_string())))?;
 
-        let connection = match &self.config {
-            Some(cfg) => hdbconnect_async::Connection::with_configuration(params, cfg).await?,
-            None => hdbconnect_async::Connection::new(params).await?,
-        };
+        if let Some(ref cfg) = self.config {
+            builder = builder.with_config(cfg);
+        }
+
+        let connection = builder
+            .connect()
+            .await
+            .map_err(|e| hdbconnect_async::HdbError::from(std::io::Error::other(e.to_string())))?;
 
         Ok(PooledConnectionInner {
             connection,

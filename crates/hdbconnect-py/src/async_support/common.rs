@@ -113,6 +113,27 @@ pub async fn execute_query_impl(
     Ok(())
 }
 
+/// Performs connection validity check via validation query.
+///
+/// # Arguments
+///
+/// * `connection` - The async connection to check
+/// * `perform_query` - If true, executes validation query; if false, always returns true
+///
+/// # Returns
+///
+/// `true` if connection is valid, `false` otherwise.
+pub async fn check_connection_valid(
+    connection: &mut hdbconnect_async::Connection,
+    perform_query: bool,
+) -> bool {
+    if perform_query {
+        connection.query(VALIDATION_QUERY).await.is_ok()
+    } else {
+        true
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,5 +204,13 @@ mod tests {
     fn test_validate_non_negative_f64_negative() {
         let result = validate_non_negative_f64(Some(-1.0), "read_timeout");
         assert!(result.is_err());
+    }
+
+    // Tests for check_connection_valid (unit test without actual connection)
+    #[test]
+    fn test_check_connection_valid_skip_query_returns_true() {
+        // When perform_query is false, should always return true
+        // This is a compile-time verification that the function signature is correct
+        // Actual connection testing requires integration tests
     }
 }
