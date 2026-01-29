@@ -19,6 +19,7 @@ use hdbconnect::ConnectionConfiguration;
 
 use crate::error::PyHdbError;
 use crate::private::sealed::Sealed;
+use crate::utils::ParsedConnectionUrl;
 
 /// Marker trait for builder states.
 pub trait BuilderState: Sealed {}
@@ -92,41 +93,15 @@ impl ConnectionBuilder<MissingHost, MissingCredentials> {
     ///
     /// Returns error if URL is invalid.
     pub fn from_url(url: &str) -> Result<ConnectionBuilder<HasHost, HasCredentials>, PyHdbError> {
-        let parsed = url::Url::parse(url)?;
-
-        let host = parsed
-            .host_str()
-            .ok_or_else(|| PyHdbError::interface("missing host in URL"))?
-            .to_string();
-
-        let port = parsed.port().unwrap_or(30015);
-
-        let user = if parsed.username().is_empty() {
-            return Err(PyHdbError::interface("missing username in URL"));
-        } else {
-            parsed.username().to_string()
-        };
-
-        let password = parsed
-            .password()
-            .ok_or_else(|| PyHdbError::interface("missing password in URL"))?
-            .to_string();
-
-        let database = parsed
-            .path()
-            .strip_prefix('/')
-            .filter(|s| !s.is_empty())
-            .map(String::from);
-
-        let tls = parsed.scheme() == "hdbsqls";
+        let parsed = ParsedConnectionUrl::parse(url)?;
 
         Ok(ConnectionBuilder {
-            host: Some(host),
-            port,
-            user: Some(user),
-            password: Some(password),
-            database,
-            tls,
+            host: Some(parsed.host),
+            port: parsed.port,
+            user: Some(parsed.user),
+            password: Some(parsed.password),
+            database: parsed.database,
+            tls: parsed.use_tls,
             _host_state: PhantomData,
             _cred_state: PhantomData,
         })

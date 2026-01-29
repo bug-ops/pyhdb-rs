@@ -55,6 +55,7 @@ use crate::tls::{PyTlsConfig, TlsConfigInner};
 use crate::types::prepared_cache::{
     CacheStatistics, DEFAULT_CACHE_CAPACITY, PreparedStatementCache,
 };
+use crate::utils::{ParsedConnectionUrl, apply_tls_to_async_builder};
 
 /// Pool configuration parameters.
 #[derive(Debug, Clone)]
@@ -162,43 +163,16 @@ impl Manager for HanaConnectionManager {
     type Error = hdbconnect_async::HdbError;
 
     async fn create(&self) -> Result<Self::Type, Self::Error> {
-        let parsed = url::Url::parse(&self.url)
+        let parsed = ParsedConnectionUrl::parse(&self.url)
             .map_err(|e| hdbconnect_async::HdbError::from(std::io::Error::other(e.to_string())))?;
 
-        let host = parsed
-            .host_str()
-            .ok_or_else(|| {
-                hdbconnect_async::HdbError::from(std::io::Error::other("missing host in URL"))
-            })?
-            .to_string();
-
-        let port = parsed.port().unwrap_or(30015);
-
-        let user = if parsed.username().is_empty() {
-            return Err(hdbconnect_async::HdbError::from(std::io::Error::other(
-                "missing username in URL",
-            )));
-        } else {
-            parsed.username().to_string()
-        };
-
-        let password = parsed.password().ok_or_else(|| {
-            hdbconnect_async::HdbError::from(std::io::Error::other("missing password in URL"))
-        })?;
-
-        let database = parsed
-            .path()
-            .strip_prefix('/')
-            .filter(|s| !s.is_empty())
-            .map(String::from);
-
         let mut builder = hdbconnect_async::ConnectParams::builder();
-        builder.hostname(&host);
-        builder.port(port);
-        builder.dbuser(&user);
-        builder.password(password);
+        builder.hostname(&parsed.host);
+        builder.port(parsed.port);
+        builder.dbuser(&parsed.user);
+        builder.password(&parsed.password);
 
-        if let Some(db) = &database {
+        if let Some(db) = &parsed.database {
             builder.dbname(db);
         }
 
@@ -208,8 +182,8 @@ impl Manager for HanaConnectionManager {
 
         // Apply TLS from explicit config, or from URL scheme
         if let Some(tls) = &self.tls_config {
-            apply_tls_to_async_builder_mut(tls, &mut builder);
-        } else if parsed.scheme() == "hdbsqls" {
+            apply_tls_to_async_builder(tls, &mut builder);
+        } else if parsed.use_tls {
             builder.tls_with(hdbconnect_async::ServerCerts::RootCertificates);
         }
 
@@ -238,29 +212,6 @@ impl Manager for HanaConnectionManager {
             .await
             .map_err(RecycleError::Backend)?;
         Ok(())
-    }
-}
-
-fn apply_tls_to_async_builder_mut(
-    tls: &TlsConfigInner,
-    builder: &mut hdbconnect_async::ConnectParamsBuilder,
-) {
-    match tls {
-        TlsConfigInner::Directory(path) => {
-            builder.tls_with(hdbconnect_async::ServerCerts::Directory(path.clone()));
-        }
-        TlsConfigInner::Environment(var) => {
-            builder.tls_with(hdbconnect_async::ServerCerts::Environment(var.clone()));
-        }
-        TlsConfigInner::Direct(pem) => {
-            builder.tls_with(hdbconnect_async::ServerCerts::Direct(pem.clone()));
-        }
-        TlsConfigInner::RootCertificates => {
-            builder.tls_with(hdbconnect_async::ServerCerts::RootCertificates);
-        }
-        TlsConfigInner::Insecure => {
-            builder.tls_without_server_verification();
-        }
     }
 }
 
@@ -1328,7 +1279,7 @@ mod tests {
     #[test]
     fn test_apply_tls_directory() {
         let mut builder = hdbconnect_async::ConnectParams::builder();
-        apply_tls_to_async_builder_mut(
+        apply_tls_to_async_builder(
             &TlsConfigInner::Directory("/path/to/certs".to_string()),
             &mut builder,
         );
@@ -1338,7 +1289,7 @@ mod tests {
     #[test]
     fn test_apply_tls_environment() {
         let mut builder = hdbconnect_async::ConnectParams::builder();
-        apply_tls_to_async_builder_mut(
+        apply_tls_to_async_builder(
             &TlsConfigInner::Environment("HANA_CA_CERT".to_string()),
             &mut builder,
         );
@@ -1347,7 +1298,7 @@ mod tests {
     #[test]
     fn test_apply_tls_direct() {
         let mut builder = hdbconnect_async::ConnectParams::builder();
-        apply_tls_to_async_builder_mut(
+        apply_tls_to_async_builder(
             &TlsConfigInner::Direct(
                 "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----".to_string(),
             ),
@@ -1358,12 +1309,12 @@ mod tests {
     #[test]
     fn test_apply_tls_root_certificates() {
         let mut builder = hdbconnect_async::ConnectParams::builder();
-        apply_tls_to_async_builder_mut(&TlsConfigInner::RootCertificates, &mut builder);
+        apply_tls_to_async_builder(&TlsConfigInner::RootCertificates, &mut builder);
     }
 
     #[test]
     fn test_apply_tls_insecure() {
         let mut builder = hdbconnect_async::ConnectParams::builder();
-        apply_tls_to_async_builder_mut(&TlsConfigInner::Insecure, &mut builder);
+        apply_tls_to_async_builder(&TlsConfigInner::Insecure, &mut builder);
     }
 }

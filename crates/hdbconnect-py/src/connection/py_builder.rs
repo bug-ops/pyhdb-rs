@@ -41,6 +41,7 @@ use crate::cursor_holdability::PyCursorHoldability;
 use crate::error::PyHdbError;
 use crate::tls::{PyTlsConfig, TlsConfigInner};
 use crate::types::prepared_cache::{DEFAULT_CACHE_CAPACITY, PreparedStatementCache};
+use crate::utils::ParsedConnectionUrl;
 
 /// Python-facing connection builder with runtime validation.
 ///
@@ -137,35 +138,9 @@ impl PyConnectionBuilder {
     #[classmethod]
     #[pyo3(text_signature = "(cls, url)")]
     fn from_url(_cls: &Bound<'_, PyType>, url: &str) -> PyResult<Self> {
-        let parsed =
-            url::Url::parse(url).map_err(|e| PyHdbError::interface(format!("invalid URL: {e}")))?;
+        let parsed = ParsedConnectionUrl::parse(url)?;
 
-        let host = parsed
-            .host_str()
-            .ok_or_else(|| PyHdbError::interface("missing host in URL"))?
-            .to_string();
-
-        let port = parsed.port().unwrap_or(30015);
-
-        if parsed.username().is_empty() {
-            return Err(PyHdbError::interface("missing username in URL").into());
-        }
-        let user = Some(parsed.username().to_string());
-
-        let password = Some(
-            parsed
-                .password()
-                .ok_or_else(|| PyHdbError::interface("missing password in URL"))?
-                .to_string(),
-        );
-
-        let database = parsed
-            .path()
-            .strip_prefix('/')
-            .filter(|s| !s.is_empty())
-            .map(String::from);
-
-        let tls_config = if parsed.scheme() == "hdbsqls" {
+        let tls_config = if parsed.use_tls {
             Some(PyTlsConfig {
                 inner: TlsConfigInner::RootCertificates,
             })
@@ -174,11 +149,11 @@ impl PyConnectionBuilder {
         };
 
         Ok(Self {
-            host: Some(host),
-            port,
-            user,
-            password,
-            database,
+            host: Some(parsed.host),
+            port: parsed.port,
+            user: Some(parsed.user),
+            password: Some(parsed.password),
+            database: parsed.database,
             tls_config,
             connection_config: None,
             cursor_holdability: None,
@@ -486,35 +461,9 @@ impl PyAsyncConnectionBuilder {
     #[classmethod]
     #[pyo3(text_signature = "(cls, url)")]
     fn from_url(_cls: &Bound<'_, PyType>, url: &str) -> PyResult<Self> {
-        let parsed =
-            url::Url::parse(url).map_err(|e| PyHdbError::interface(format!("invalid URL: {e}")))?;
+        let parsed = ParsedConnectionUrl::parse(url)?;
 
-        let host = parsed
-            .host_str()
-            .ok_or_else(|| PyHdbError::interface("missing host in URL"))?
-            .to_string();
-
-        let port = parsed.port().unwrap_or(30015);
-
-        if parsed.username().is_empty() {
-            return Err(PyHdbError::interface("missing username in URL").into());
-        }
-        let user = Some(parsed.username().to_string());
-
-        let password = Some(
-            parsed
-                .password()
-                .ok_or_else(|| PyHdbError::interface("missing password in URL"))?
-                .to_string(),
-        );
-
-        let database = parsed
-            .path()
-            .strip_prefix('/')
-            .filter(|s| !s.is_empty())
-            .map(String::from);
-
-        let tls_config = if parsed.scheme() == "hdbsqls" {
+        let tls_config = if parsed.use_tls {
             Some(PyTlsConfig {
                 inner: TlsConfigInner::RootCertificates,
             })
@@ -523,11 +472,11 @@ impl PyAsyncConnectionBuilder {
         };
 
         Ok(Self {
-            host: Some(host),
-            port,
-            user,
-            password,
-            database,
+            host: Some(parsed.host),
+            port: parsed.port,
+            user: Some(parsed.user),
+            password: Some(parsed.password),
+            database: parsed.database,
             tls_config,
             connection_config: None,
             autocommit: true,
@@ -637,6 +586,7 @@ impl PyAsyncConnectionBuilder {
 
         use crate::async_support::{AsyncConnectionInner, AsyncPyConnection};
         use crate::types::prepared_cache::PreparedStatementCache;
+        use crate::utils::apply_tls_to_async_builder;
 
         let host = self
             .host
@@ -672,7 +622,7 @@ impl PyAsyncConnectionBuilder {
             }
 
             if let Some(tls) = &tls_config {
-                apply_tls_to_async_builder_mut(tls, &mut builder);
+                apply_tls_to_async_builder(&tls.inner, &mut builder);
             }
 
             let params = builder
@@ -728,30 +678,6 @@ impl PyAsyncConnectionBuilder {
             "AsyncConnectionBuilder(host={host:?}, port={}, credentials={}, tls={}, autocommit={})",
             self.port, has_creds, tls, self.autocommit
         )
-    }
-}
-
-#[cfg(feature = "async")]
-fn apply_tls_to_async_builder_mut(
-    tls: &PyTlsConfig,
-    builder: &mut hdbconnect_async::ConnectParamsBuilder,
-) {
-    match &tls.inner {
-        TlsConfigInner::Directory(path) => {
-            builder.tls_with(hdbconnect_async::ServerCerts::Directory(path.clone()));
-        }
-        TlsConfigInner::Environment(var) => {
-            builder.tls_with(hdbconnect_async::ServerCerts::Environment(var.clone()));
-        }
-        TlsConfigInner::Direct(pem) => {
-            builder.tls_with(hdbconnect_async::ServerCerts::Direct(pem.clone()));
-        }
-        TlsConfigInner::RootCertificates => {
-            builder.tls_with(hdbconnect_async::ServerCerts::RootCertificates);
-        }
-        TlsConfigInner::Insecure => {
-            builder.tls_without_server_verification();
-        }
     }
 }
 

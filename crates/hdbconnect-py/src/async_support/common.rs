@@ -7,12 +7,8 @@ use pyo3::prelude::*;
 
 use crate::error::PyHdbError;
 use crate::reader::PyRecordBatchReader;
-
-/// Lightweight validation query for connection health checks.
-///
-/// SAP HANA's `DUMMY` table is equivalent to Oracle's `DUAL` - a special
-/// single-row, single-column table designed for this purpose.
-pub const VALIDATION_QUERY: &str = "SELECT 1 FROM DUMMY";
+// Re-export from centralized utils module
+pub use crate::utils::{VALIDATION_QUERY, validate_non_negative_f64, validate_positive_u32};
 
 /// Connection state error for consistent error messages.
 #[derive(Debug, Clone, Copy)]
@@ -44,42 +40,6 @@ impl From<ConnectionState> for PyErr {
     fn from(state: ConnectionState) -> Self {
         state.into_error().into()
     }
-}
-
-/// Validates that a u32 parameter is positive (greater than 0).
-///
-/// # Arguments
-///
-/// * `value` - The value to validate
-/// * `param_name` - The parameter name for error messages
-///
-/// # Errors
-///
-/// Returns `PyValueError` if value is 0.
-pub fn validate_positive_u32(value: u32, param_name: &str) -> PyResult<()> {
-    if value == 0 {
-        return Err(PyHdbError::programming(format!("{param_name} must be > 0")).into());
-    }
-    Ok(())
-}
-
-/// Validates that an optional f64 parameter is non-negative.
-///
-/// # Arguments
-///
-/// * `value` - The optional value to validate
-/// * `param_name` - The parameter name for error messages
-///
-/// # Errors
-///
-/// Returns `PyValueError` if value is negative.
-pub fn validate_non_negative_f64(value: Option<f64>, param_name: &str) -> PyResult<()> {
-    if let Some(v) = value
-        && v < 0.0
-    {
-        return Err(PyHdbError::programming(format!("{param_name} cannot be negative")).into());
-    }
-    Ok(())
 }
 
 /// Executes commit on an async HANA connection.
