@@ -244,9 +244,7 @@ class TestIterPandasRows:
         import pandas as pd
         from pyhdb_rs._utils import iter_pandas_rows
 
-        df = pd.DataFrame(
-            {"int_col": [1, 2], "str_col": ["a", "b"], "float_col": [1.5, 2.5]}
-        )
+        df = pd.DataFrame({"int_col": [1, 2], "str_col": ["a", "b"], "float_col": [1.5, 2.5]})
 
         rows = list(iter_pandas_rows(df))
 

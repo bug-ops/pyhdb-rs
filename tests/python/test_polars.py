@@ -48,9 +48,7 @@ class TestExecuteArrowPolars:
 
         conn = ConnectionBuilder.from_url(hana_uri).build()
         try:
-            reader = conn.execute_arrow(
-                "SELECT 1 AS int_col, 'hello' AS str_col FROM DUMMY"
-            )
+            reader = conn.execute_arrow("SELECT 1 AS int_col, 'hello' AS str_col FROM DUMMY")
             df = polars.from_arrow(reader)
             assert len(df.columns) == 2
         finally:

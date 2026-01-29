@@ -261,15 +261,11 @@ class TestConnectionContextManager:
 class TestCursor:
     """Tests for Cursor operations."""
 
-    def test_cursor_description_none_before_execute(
-        self, cursor: pyhdb_rs.Cursor
-    ) -> None:
+    def test_cursor_description_none_before_execute(self, cursor: pyhdb_rs.Cursor) -> None:
         """Test that description is None before execute."""
         assert cursor.description is None
 
-    def test_cursor_rowcount_minus_one_for_select(
-        self, cursor: pyhdb_rs.Cursor
-    ) -> None:
+    def test_cursor_rowcount_minus_one_for_select(self, cursor: pyhdb_rs.Cursor) -> None:
         """Test that rowcount is -1 for SELECT."""
         cursor.execute("SELECT 1 FROM DUMMY")
         assert cursor.rowcount == -1

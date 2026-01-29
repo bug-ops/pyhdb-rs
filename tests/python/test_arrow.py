@@ -13,9 +13,7 @@ if TYPE_CHECKING:
 class TestExecuteArrow:
     """Tests for Arrow data transfer."""
 
-    def test_execute_arrow_returns_reader(
-        self, connection: pyhdb_rs.Connection
-    ) -> None:
+    def test_execute_arrow_returns_reader(self, connection: pyhdb_rs.Connection) -> None:
         """Test that execute_arrow returns a RecordBatchReader."""
         import pyhdb_rs
 
@@ -26,9 +24,7 @@ class TestExecuteArrow:
         """Test Arrow to Polars conversion."""
         polars = pytest.importorskip("polars")
 
-        reader = connection.execute_arrow(
-            "SELECT 1 AS value, 'test' AS name FROM DUMMY"
-        )
+        reader = connection.execute_arrow("SELECT 1 AS value, 'test' AS name FROM DUMMY")
         df = polars.from_arrow(reader)
 
         assert len(df) == 1
@@ -39,9 +35,7 @@ class TestExecuteArrow:
         """Test Arrow schema access."""
         pytest.importorskip("pyarrow")
 
-        reader = connection.execute_arrow(
-            "SELECT 1 AS int_col, 'test' AS str_col FROM DUMMY"
-        )
+        reader = connection.execute_arrow("SELECT 1 AS int_col, 'test' AS str_col FROM DUMMY")
         schema = reader.schema()
 
         assert schema is not None
@@ -119,23 +113,17 @@ class TestArrowCStreamProtocol:
         assert hasattr(reader, "__arrow_c_stream__")
         assert callable(reader.__arrow_c_stream__)
 
-    def test_polars_from_arrow_uses_protocol(
-        self, connection: pyhdb_rs.Connection
-    ) -> None:
+    def test_polars_from_arrow_uses_protocol(self, connection: pyhdb_rs.Connection) -> None:
         """Test that Polars can consume reader via protocol."""
         polars = pytest.importorskip("polars")
 
-        reader = connection.execute_arrow(
-            "SELECT 1 AS int_col, 'test' AS str_col FROM DUMMY"
-        )
+        reader = connection.execute_arrow("SELECT 1 AS int_col, 'test' AS str_col FROM DUMMY")
         df = polars.from_arrow(reader)
 
         assert len(df) == 1
         assert len(df.columns) == 2
 
-    def test_consumed_after_protocol_call(
-        self, connection: pyhdb_rs.Connection
-    ) -> None:
+    def test_consumed_after_protocol_call(self, connection: pyhdb_rs.Connection) -> None:
         """Test that reader is consumed after __arrow_c_stream__ call."""
         import pyhdb_rs
 
@@ -167,9 +155,7 @@ class TestArrowCStreamProtocol:
         table = pa_reader.read_all()
         assert len(table) == 1
 
-    def test_protocol_with_multiple_batches(
-        self, connection: pyhdb_rs.Connection
-    ) -> None:
+    def test_protocol_with_multiple_batches(self, connection: pyhdb_rs.Connection) -> None:
         """Test protocol works with large result sets (multiple batches)."""
         import pyhdb_rs
 
@@ -177,16 +163,12 @@ class TestArrowCStreamProtocol:
 
         # Generate multiple batches - use a system table with multiple rows
         config = pyhdb_rs.ArrowConfig(batch_size=100)
-        reader = connection.execute_arrow(
-            "SELECT TOP 500 * FROM M_TABLES", config=config
-        )
+        reader = connection.execute_arrow("SELECT TOP 500 * FROM M_TABLES", config=config)
         df = polars.from_arrow(reader)
 
         assert len(df) > 0
 
-    def test_schema_preserved_through_protocol(
-        self, connection: pyhdb_rs.Connection
-    ) -> None:
+    def test_schema_preserved_through_protocol(self, connection: pyhdb_rs.Connection) -> None:
         """Test that schema is correctly transferred via protocol."""
         pyarrow = pytest.importorskip("pyarrow")
 
@@ -203,9 +185,7 @@ class TestArrowCStreamProtocol:
         assert "STR_COL" in names
         assert "FLOAT_COL" in names
 
-    def test_null_values_through_protocol(
-        self, connection: pyhdb_rs.Connection
-    ) -> None:
+    def test_null_values_through_protocol(self, connection: pyhdb_rs.Connection) -> None:
         """Test that NULL values are correctly handled via protocol."""
         polars = pytest.importorskip("polars")
 
