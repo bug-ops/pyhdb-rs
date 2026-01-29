@@ -9,6 +9,8 @@
 //! The `statement_cache_size` parameter in `AsyncConnection.connect()`
 //! is now ignored. Use direct query execution instead.
 //!
+//! For the new implementation, see `crate::types::prepared_cache`.
+//!
 //! # Performance Note
 //!
 //! The current implementation uses `String` keys which allocate on each lookup.
@@ -16,11 +18,6 @@
 //! heterogeneous lookups (e.g., `hashbrown` with `raw_entry` API). The LRU crate
 //! doesn't support `Borrow` trait-based lookups, so we accept this trade-off for
 //! simplicity and correctness.
-
-#![deprecated(
-    since = "0.2.5",
-    note = "Statement cache provides no performance benefit. Parameter ignored."
-)]
 
 use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;

@@ -12,6 +12,9 @@ use crate::config::PyConnectionConfig;
 use crate::cursor::PyCursor;
 use crate::error::PyHdbError;
 use crate::reader::PyRecordBatchReader;
+use crate::types::prepared_cache::{
+    CacheStatistics, DEFAULT_CACHE_CAPACITY, PreparedStatementCache,
+};
 
 /// Lightweight validation query for connection health checks.
 ///
@@ -29,6 +32,53 @@ pub enum ConnectionInner {
     Connected(hdbconnect::Connection),
     /// Disconnected state.
     Disconnected,
+}
+
+/// Python-exposed cache statistics.
+#[pyclass(name = "CacheStats", module = "pyhdb_rs._core", frozen)]
+#[derive(Debug, Clone)]
+pub struct PyCacheStats {
+    /// Current number of cached statements.
+    #[pyo3(get)]
+    pub size: usize,
+    /// Maximum cache capacity.
+    #[pyo3(get)]
+    pub capacity: usize,
+    /// Total number of cache hits.
+    #[pyo3(get)]
+    pub hits: u64,
+    /// Total number of cache misses.
+    #[pyo3(get)]
+    pub misses: u64,
+    /// Total number of evictions.
+    #[pyo3(get)]
+    pub evictions: u64,
+    /// Cache hit rate (0.0 - 1.0).
+    #[pyo3(get)]
+    pub hit_rate: f64,
+}
+
+impl From<CacheStatistics> for PyCacheStats {
+    fn from(stats: CacheStatistics) -> Self {
+        Self {
+            size: stats.size,
+            capacity: stats.capacity,
+            hits: stats.hits,
+            misses: stats.misses,
+            evictions: stats.evictions,
+            hit_rate: stats.hit_rate,
+        }
+    }
+}
+
+#[pymethods]
+impl PyCacheStats {
+    fn __repr__(&self) -> String {
+        format!(
+            "CacheStats(size={}, capacity={}, hits={}, misses={}, evictions={}, hit_rate={:.3})",
+            self.size, self.capacity, self.hits, self.misses, self.evictions, self.hit_rate
+        )
+    }
 }
 
 /// Python Connection class.
@@ -53,6 +103,8 @@ pub struct PyConnection {
     inner: SharedConnection,
     /// Auto-commit mode.
     autocommit: bool,
+    /// Prepared statement cache.
+    stmt_cache: Mutex<PreparedStatementCache<hdbconnect::PreparedStatement>>,
 }
 
 impl PyConnection {
@@ -64,10 +116,25 @@ impl PyConnection {
         let conn = hdbconnect::Connection::with_configuration(params, &hdb_config)
             .map_err(|e| PyHdbError::operational(e.to_string()))?;
 
+        let cache_size = config.statement_cache_size();
+
         Ok(Self {
             inner: Arc::new(Mutex::new(ConnectionInner::Connected(conn))),
             autocommit: true,
+            stmt_cache: Mutex::new(PreparedStatementCache::new(cache_size)),
         })
+    }
+
+    /// Get the shared connection reference.
+    pub fn shared(&self) -> SharedConnection {
+        Arc::clone(&self.inner)
+    }
+
+    /// Get the statement cache reference (for cursor integration).
+    pub const fn statement_cache(
+        &self,
+    ) -> &Mutex<PreparedStatementCache<hdbconnect::PreparedStatement>> {
+        &self.stmt_cache
     }
 }
 
@@ -94,6 +161,7 @@ impl PyConnection {
         Ok(Self {
             inner: Arc::new(Mutex::new(ConnectionInner::Connected(conn))),
             autocommit: true,
+            stmt_cache: Mutex::new(PreparedStatementCache::new(DEFAULT_CACHE_CAPACITY)),
         })
     }
 
@@ -107,6 +175,11 @@ impl PyConnection {
 
     /// Close the connection.
     fn close(&self) {
+        // Clear statement cache first (drops all PreparedStatements)
+        let mut cache = self.stmt_cache.lock();
+        let _ = cache.clear();
+        drop(cache);
+
         *self.inner.lock() = ConnectionInner::Disconnected;
     }
 
@@ -379,6 +452,31 @@ impl PyConnection {
         }
     }
 
+    /// Get prepared statement cache statistics.
+    ///
+    /// Returns:
+    ///     `CacheStats` with size, capacity, hits, misses, evictions, `hit_rate`
+    ///
+    /// Example:
+    ///     ```python
+    ///     stats = conn.cache_stats()
+    ///     print(f"Cache hit rate: {stats.hit_rate:.2%}")
+    ///     print(f"Size: {stats.size}/{stats.capacity}")
+    ///     ```
+    fn cache_stats(&self) -> PyCacheStats {
+        let cache = self.stmt_cache.lock();
+        cache.stats().into()
+    }
+
+    /// Clear the prepared statement cache.
+    ///
+    /// Drops all cached prepared statements. Useful after schema changes
+    /// or to free server resources.
+    fn clear_cache(&self) {
+        let mut cache = self.stmt_cache.lock();
+        let _ = cache.clear();
+    }
+
     // Context manager protocol
     const fn __enter__(slf: Py<Self>) -> Py<Self> {
         slf
@@ -395,12 +493,16 @@ impl PyConnection {
     }
 
     fn __repr__(&self) -> String {
-        let state = if self.is_connected() {
+        let conn_state = if self.is_connected() {
             "connected"
         } else {
             "closed"
         };
-        format!("Connection(state={state}, autocommit={})", self.autocommit)
+        let cache_stats = self.stmt_cache.lock().stats();
+        format!(
+            "Connection(state={conn_state}, autocommit={}, cache_size={}/{})",
+            self.autocommit, cache_stats.size, cache_stats.capacity
+        )
     }
 }
 
@@ -417,5 +519,62 @@ mod tests {
     fn test_connection_inner_disconnected() {
         let inner = ConnectionInner::Disconnected;
         assert!(matches!(inner, ConnectionInner::Disconnected));
+    }
+
+    #[test]
+    fn test_py_cache_stats_from_cache_statistics() {
+        let stats = CacheStatistics {
+            size: 5,
+            capacity: 16,
+            hits: 100,
+            misses: 20,
+            evictions: 3,
+            hit_rate: 0.833,
+        };
+
+        let py_stats: PyCacheStats = stats.into();
+        assert_eq!(py_stats.size, 5);
+        assert_eq!(py_stats.capacity, 16);
+        assert_eq!(py_stats.hits, 100);
+        assert_eq!(py_stats.misses, 20);
+        assert_eq!(py_stats.evictions, 3);
+        assert!((py_stats.hit_rate - 0.833).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_py_cache_stats_repr() {
+        let stats = PyCacheStats {
+            size: 5,
+            capacity: 16,
+            hits: 100,
+            misses: 20,
+            evictions: 3,
+            hit_rate: 0.833,
+        };
+
+        let repr = stats.__repr__();
+        assert!(repr.contains("CacheStats"));
+        assert!(repr.contains("size=5"));
+        assert!(repr.contains("capacity=16"));
+        assert!(repr.contains("hits=100"));
+        assert!(repr.contains("misses=20"));
+        assert!(repr.contains("evictions=3"));
+        assert!(repr.contains("hit_rate=0.833"));
+    }
+
+    #[test]
+    fn test_py_cache_stats_clone() {
+        let stats = PyCacheStats {
+            size: 5,
+            capacity: 16,
+            hits: 100,
+            misses: 20,
+            evictions: 3,
+            hit_rate: 0.833,
+        };
+
+        let cloned = stats.clone();
+        assert_eq!(cloned.size, stats.size);
+        assert_eq!(cloned.capacity, stats.capacity);
     }
 }

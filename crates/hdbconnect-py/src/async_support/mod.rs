@@ -21,11 +21,10 @@
 //! asyncio.run(main())
 //! ```
 //!
-//! # Statement Cache Deprecation
+//! # Statement Cache
 //!
-//! The statement cache module is deprecated and will be removed in version 0.3.0.
-//! Statement caching was not providing actual performance benefit due to hdbconnect
-//! API limitations. The `statement_cache_size` parameter in `connect()` is now ignored.
+//! Both `AsyncConnection` and `PooledConnection` include prepared statement
+//! caching. Configure via `ConnectionConfig(max_cached_statements=N)`.
 
 // PyO3 async FFI captures connection state in futures; boxing would add unnecessary overhead.
 // These futures necessarily hold Arc<TokioMutex<T>> and connection state for Python interop.
@@ -50,14 +49,18 @@ pub mod common;
 pub mod connection;
 pub mod cursor;
 pub mod pool;
+
+// Deprecated module - kept for backward compatibility until 0.3.0
+#[deprecated(
+    since = "0.2.5",
+    note = "Use crate::types::prepared_cache instead. Will be removed in 0.3.0."
+)]
 pub mod statement_cache;
 
 pub use common::ConnectionState;
 pub use connection::{AsyncConnectionInner, AsyncPyConnection, SharedAsyncConnection};
 pub use cursor::AsyncPyCursor;
 pub use pool::{HanaConnectionManager, PoolConfig, PooledConnection, PyConnectionPool};
-#[allow(deprecated)]
-pub use statement_cache::{CacheStats, PreparedStatementCache};
 
 #[cfg(test)]
 mod tests;

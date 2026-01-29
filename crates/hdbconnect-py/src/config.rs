@@ -12,6 +12,7 @@
 //!     fetch_size=50000,           # Larger batches for bulk reads
 //!     lob_read_length=10_000_000, # 10MB LOB chunks
 //!     read_timeout=60.0,          # 60 second timeout
+//!     max_cached_statements=32,   # Statement cache size
 //! )
 //! conn = connect("hdbsql://...", config=config)
 //! ```
@@ -22,6 +23,7 @@ use hdbconnect::ConnectionConfiguration;
 use pyo3::prelude::*;
 
 use crate::error::PyHdbError;
+use crate::types::prepared_cache::DEFAULT_CACHE_CAPACITY;
 
 /// Python-facing connection configuration.
 ///
@@ -36,6 +38,7 @@ pub struct PyConnectionConfig {
     max_buffer_size: Option<usize>,
     min_compression_size: Option<usize>,
     read_timeout_secs: Option<f64>,
+    max_cached_statements: Option<usize>,
 }
 
 impl PyConnectionConfig {
@@ -70,6 +73,14 @@ impl PyConnectionConfig {
 
         config
     }
+
+    /// Get the configured statement cache size.
+    ///
+    /// Returns the configured value or the default if not set.
+    #[must_use]
+    pub fn statement_cache_size(&self) -> usize {
+        self.max_cached_statements.unwrap_or(DEFAULT_CACHE_CAPACITY)
+    }
 }
 
 #[pymethods]
@@ -99,6 +110,10 @@ impl PyConnectionConfig {
     #[classattr]
     const MIN_BUFFER_SIZE: usize = ConnectionConfiguration::MIN_BUFFER_SIZE;
 
+    /// Default prepared statement cache size.
+    #[classattr]
+    const DEFAULT_CACHE_CAPACITY: usize = DEFAULT_CACHE_CAPACITY;
+
     /// Create connection configuration.
     ///
     /// # Arguments
@@ -114,6 +129,8 @@ impl PyConnectionConfig {
     ///   larger than this may be compressed.
     /// * `read_timeout` - Network read timeout in seconds (default: None = no timeout). Connection
     ///   dropped if response takes longer.
+    /// * `max_cached_statements` - Maximum number of prepared statements to cache per connection
+    ///   (default: 16). Set to 0 to disable caching.
     ///
     /// # Raises
     ///
@@ -127,6 +144,7 @@ impl PyConnectionConfig {
         max_buffer_size=None,
         min_compression_size=None,
         read_timeout=None,
+        max_cached_statements=None,
     ))]
     fn new(
         fetch_size: Option<u32>,
@@ -135,6 +153,7 @@ impl PyConnectionConfig {
         max_buffer_size: Option<usize>,
         min_compression_size: Option<usize>,
         read_timeout: Option<f64>,
+        max_cached_statements: Option<usize>,
     ) -> PyResult<Self> {
         if let Some(fs) = fetch_size
             && fs == 0
@@ -173,6 +192,7 @@ impl PyConnectionConfig {
             max_buffer_size,
             min_compression_size,
             read_timeout_secs: read_timeout,
+            max_cached_statements,
         })
     }
 
@@ -212,16 +232,23 @@ impl PyConnectionConfig {
         self.read_timeout_secs
     }
 
+    /// Maximum prepared statements to cache per connection (None = use default).
+    #[getter]
+    const fn max_cached_statements(&self) -> Option<usize> {
+        self.max_cached_statements
+    }
+
     fn __repr__(&self) -> String {
         format!(
             "ConnectionConfig(fetch_size={}, lob_read_length={}, lob_write_length={}, \
-             max_buffer_size={}, min_compression_size={}, read_timeout={})",
+             max_buffer_size={}, min_compression_size={}, read_timeout={}, max_cached_statements={})",
             format_option(self.fetch_size),
             format_option(self.lob_read_length),
             format_option(self.lob_write_length),
             format_option(self.max_buffer_size),
             format_option(self.min_compression_size),
             format_option(self.read_timeout_secs),
+            format_option(self.max_cached_statements),
         )
     }
 }
@@ -236,48 +263,57 @@ mod tests {
 
     #[test]
     fn test_config_defaults() {
-        let config = PyConnectionConfig::new(None, None, None, None, None, None).unwrap();
+        let config = PyConnectionConfig::new(None, None, None, None, None, None, None).unwrap();
         assert!(config.fetch_size().is_none());
         assert!(config.lob_read_length().is_none());
         assert!(config.lob_write_length().is_none());
         assert!(config.max_buffer_size().is_none());
         assert!(config.min_compression_size().is_none());
         assert!(config.read_timeout().is_none());
+        assert!(config.max_cached_statements().is_none());
     }
 
     #[test]
     fn test_config_with_values() {
-        let config =
-            PyConnectionConfig::new(Some(50000), Some(1000), Some(2000), None, None, Some(30.0))
-                .unwrap();
+        let config = PyConnectionConfig::new(
+            Some(50000),
+            Some(1000),
+            Some(2000),
+            None,
+            None,
+            Some(30.0),
+            Some(32),
+        )
+        .unwrap();
 
         assert_eq!(config.fetch_size(), Some(50000));
         assert_eq!(config.lob_read_length(), Some(1000));
         assert_eq!(config.lob_write_length(), Some(2000));
         assert_eq!(config.read_timeout(), Some(30.0));
+        assert_eq!(config.max_cached_statements(), Some(32));
     }
 
     #[test]
     fn test_config_validation_fetch_size_zero() {
-        let result = PyConnectionConfig::new(Some(0), None, None, None, None, None);
+        let result = PyConnectionConfig::new(Some(0), None, None, None, None, None, None);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_config_validation_lob_read_length_zero() {
-        let result = PyConnectionConfig::new(None, Some(0), None, None, None, None);
+        let result = PyConnectionConfig::new(None, Some(0), None, None, None, None, None);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_config_validation_lob_write_length_zero() {
-        let result = PyConnectionConfig::new(None, None, Some(0), None, None, None);
+        let result = PyConnectionConfig::new(None, None, Some(0), None, None, None, None);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_config_validation_max_buffer_size_too_small() {
-        let result = PyConnectionConfig::new(None, None, None, Some(100), None, None);
+        let result = PyConnectionConfig::new(None, None, None, Some(100), None, None, None);
         assert!(result.is_err());
     }
 
@@ -290,26 +326,27 @@ mod tests {
             Some(PyConnectionConfig::MIN_BUFFER_SIZE),
             None,
             None,
+            None,
         );
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_config_validation_negative_timeout() {
-        let result = PyConnectionConfig::new(None, None, None, None, None, Some(-1.0));
+        let result = PyConnectionConfig::new(None, None, None, None, None, Some(-1.0), None);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_config_validation_zero_timeout() {
-        let result = PyConnectionConfig::new(None, None, None, None, None, Some(0.0));
+        let result = PyConnectionConfig::new(None, None, None, None, None, Some(0.0), None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_config_to_hdbconnect() {
         let config =
-            PyConnectionConfig::new(Some(50000), None, None, None, None, Some(30.0)).unwrap();
+            PyConnectionConfig::new(Some(50000), None, None, None, None, Some(30.0), None).unwrap();
         let hdb_config = config.to_hdbconnect_config();
 
         assert_eq!(hdb_config.fetch_size(), 50000);
@@ -318,7 +355,8 @@ mod tests {
 
     #[test]
     fn test_config_to_hdbconnect_zero_timeout_disables() {
-        let config = PyConnectionConfig::new(None, None, None, None, None, Some(0.0)).unwrap();
+        let config =
+            PyConnectionConfig::new(None, None, None, None, None, Some(0.0), None).unwrap();
         let hdb_config = config.to_hdbconnect_config();
 
         assert_eq!(hdb_config.read_timeout(), None);
@@ -326,17 +364,20 @@ mod tests {
 
     #[test]
     fn test_config_repr() {
-        let config = PyConnectionConfig::new(Some(50000), None, None, None, None, None).unwrap();
+        let config =
+            PyConnectionConfig::new(Some(50000), None, None, None, None, None, Some(32)).unwrap();
         let repr = config.__repr__();
 
         assert!(repr.contains("ConnectionConfig"));
         assert!(repr.contains("fetch_size=50000"));
         assert!(repr.contains("lob_read_length=None"));
+        assert!(repr.contains("max_cached_statements=32"));
     }
 
     #[test]
     fn test_config_clone() {
-        let config = PyConnectionConfig::new(Some(50000), None, None, None, None, None).unwrap();
+        let config =
+            PyConnectionConfig::new(Some(50000), None, None, None, None, None, None).unwrap();
         let cloned = config.clone();
 
         assert_eq!(cloned.fetch_size(), config.fetch_size());
@@ -344,7 +385,8 @@ mod tests {
 
     #[test]
     fn test_config_debug() {
-        let config = PyConnectionConfig::new(Some(50000), None, None, None, None, None).unwrap();
+        let config =
+            PyConnectionConfig::new(Some(50000), None, None, None, None, None, None).unwrap();
         let debug_str = format!("{:?}", config);
 
         assert!(debug_str.contains("PyConnectionConfig"));
@@ -377,5 +419,27 @@ mod tests {
             PyConnectionConfig::MIN_BUFFER_SIZE,
             ConnectionConfiguration::MIN_BUFFER_SIZE
         );
+        assert_eq!(
+            PyConnectionConfig::DEFAULT_CACHE_CAPACITY,
+            DEFAULT_CACHE_CAPACITY
+        );
+    }
+
+    #[test]
+    fn test_statement_cache_size_default() {
+        let config = PyConnectionConfig::new(None, None, None, None, None, None, None).unwrap();
+        assert_eq!(config.statement_cache_size(), DEFAULT_CACHE_CAPACITY);
+    }
+
+    #[test]
+    fn test_statement_cache_size_custom() {
+        let config = PyConnectionConfig::new(None, None, None, None, None, None, Some(64)).unwrap();
+        assert_eq!(config.statement_cache_size(), 64);
+    }
+
+    #[test]
+    fn test_statement_cache_size_zero() {
+        let config = PyConnectionConfig::new(None, None, None, None, None, None, Some(0)).unwrap();
+        assert_eq!(config.statement_cache_size(), 0);
     }
 }

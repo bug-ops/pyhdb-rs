@@ -41,12 +41,9 @@ pub mod types;
 pub mod async_support;
 
 #[cfg(feature = "async")]
-#[allow(deprecated)]
-pub use async_support::{
-    AsyncPyConnection, AsyncPyCursor, PooledConnection, PreparedStatementCache, PyConnectionPool,
-};
+pub use async_support::{AsyncPyConnection, AsyncPyCursor, PooledConnection, PyConnectionPool};
 pub use config::PyConnectionConfig;
-pub use connection::PyConnection;
+pub use connection::{PyCacheStats, PyConnection};
 pub use cursor::PyCursor;
 pub use error::PyHdbError;
 pub use reader::PyRecordBatchReader;
@@ -116,6 +113,7 @@ fn pyhdb_rs_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyCursor>()?;
     m.add_class::<PyRecordBatchReader>()?;
     m.add_class::<PyConnectionConfig>()?;
+    m.add_class::<PyCacheStats>()?;
 
     // Async classes (when feature enabled)
     #[cfg(feature = "async")]

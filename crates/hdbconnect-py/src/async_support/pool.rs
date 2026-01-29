@@ -2,6 +2,11 @@
 //!
 //! Provides an async connection pool for SAP HANA with configurable size limits.
 //!
+//! # Statement Cache
+//!
+//! Each pooled connection maintains its own prepared statement cache.
+//! Configure cache size via `ConnectionConfig(max_cached_statements=N)`.
+//!
 //! # Note on `min_idle`
 //!
 //! The [`deadpool`] crate's managed pool does not natively support `min_idle`.
@@ -22,8 +27,11 @@ use super::common::{
     ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, rollback_impl,
 };
 use crate::config::PyConnectionConfig;
-use crate::connection::ConnectionBuilder;
+use crate::connection::{ConnectionBuilder, PyCacheStats};
 use crate::error::PyHdbError;
+use crate::types::prepared_cache::{
+    CacheStatistics, DEFAULT_CACHE_CAPACITY, PreparedStatementCache,
+};
 
 /// Pool configuration parameters.
 #[derive(Debug, Clone)]
@@ -36,24 +44,16 @@ pub struct PoolConfig {
     /// Connection acquisition timeout in seconds.
     pub connection_timeout_secs: u64,
     /// Size of the prepared statement cache per connection.
-    ///
-    /// **DEPRECATED**: This field is ignored. Statement caching is not available
-    /// due to hdbconnect API limitations. Will be removed in version 0.3.0.
-    #[deprecated(
-        since = "0.2.5",
-        note = "Statement caching is not supported. This field is ignored."
-    )]
-    pub statement_cache_size: usize,
+    pub max_cached_statements: usize,
 }
 
 impl Default for PoolConfig {
     fn default() -> Self {
-        #[allow(deprecated)]
         Self {
             max_size: 10,
             min_idle: None,
             connection_timeout_secs: 30,
-            statement_cache_size: 0,
+            max_cached_statements: DEFAULT_CACHE_CAPACITY,
         }
     }
 }
@@ -66,11 +66,14 @@ impl Default for PoolConfig {
 /// [`hdbconnect_async::Connection`].
 pub struct PooledConnectionInner {
     pub connection: hdbconnect_async::Connection,
+    pub statement_cache: PreparedStatementCache<hdbconnect_async::PreparedStatement>,
 }
 
 impl std::fmt::Debug for PooledConnectionInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PooledConnectionInner").finish()
+        f.debug_struct("PooledConnectionInner")
+            .field("cache_size", &self.statement_cache.len())
+            .finish()
     }
 }
 
@@ -80,6 +83,7 @@ pub type PooledObject = Object<HanaConnectionManager>;
 pub struct HanaConnectionManager {
     url: String,
     config: Option<ConnectionConfiguration>,
+    cache_size: usize,
 }
 
 impl HanaConnectionManager {
@@ -87,13 +91,19 @@ impl HanaConnectionManager {
         Self {
             url: url.into(),
             config: None,
+            cache_size: DEFAULT_CACHE_CAPACITY,
         }
     }
 
-    pub fn with_config(url: impl Into<String>, config: ConnectionConfiguration) -> Self {
+    pub fn with_config(
+        url: impl Into<String>,
+        config: ConnectionConfiguration,
+        cache_size: usize,
+    ) -> Self {
         Self {
             url: url.into(),
             config: Some(config),
+            cache_size,
         }
     }
 }
@@ -112,7 +122,11 @@ impl Manager for HanaConnectionManager {
             Some(cfg) => hdbconnect_async::Connection::with_configuration(params, cfg).await?,
             None => hdbconnect_async::Connection::new(params).await?,
         };
-        Ok(PooledConnectionInner { connection })
+
+        Ok(PooledConnectionInner {
+            connection,
+            statement_cache: PreparedStatementCache::new(self.cache_size),
+        })
     }
 
     async fn recycle(
@@ -192,7 +206,13 @@ impl PyConnectionPool {
 
         let manager = config.map_or_else(
             || HanaConnectionManager::new(&url),
-            |cfg| HanaConnectionManager::with_config(&url, cfg.to_hdbconnect_config()),
+            |cfg| {
+                HanaConnectionManager::with_config(
+                    &url,
+                    cfg.to_hdbconnect_config(),
+                    cfg.statement_cache_size(),
+                )
+            },
         );
 
         let pool = Pool::builder(manager)
@@ -557,6 +577,40 @@ impl PooledConnection {
         })
     }
 
+    /// Get prepared statement cache statistics.
+    ///
+    /// Returns an awaitable that resolves to `CacheStats`.
+    fn cache_stats<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = object.lock().await;
+            let obj = guard
+                .as_ref()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+
+            let stats: CacheStatistics = obj.statement_cache.stats();
+            Ok(PyCacheStats::from(stats))
+        })
+    }
+
+    /// Clear the prepared statement cache.
+    ///
+    /// Returns an awaitable that completes when the cache is cleared.
+    fn clear_cache<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = object.lock().await;
+            let obj = guard
+                .as_mut()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+
+            let _ = obj.statement_cache.clear();
+            Ok(())
+        })
+    }
+
     // PyO3 requires &self for Python __aenter__ protocol binding.
     #[allow(clippy::unused_self)]
     fn __aenter__(slf: Py<Self>) -> Py<Self> {
@@ -599,37 +653,31 @@ mod tests {
 
     #[test]
     fn test_pool_config_default() {
-        #[allow(deprecated)]
         let config = PoolConfig::default();
         assert_eq!(config.max_size, 10);
         assert_eq!(config.min_idle, None);
         assert_eq!(config.connection_timeout_secs, 30);
-        #[allow(deprecated)]
-        {
-            assert_eq!(config.statement_cache_size, 0);
-        }
+        assert_eq!(config.max_cached_statements, DEFAULT_CACHE_CAPACITY);
     }
 
     #[test]
-    #[allow(deprecated)]
     fn test_pool_config_clone() {
         let config = PoolConfig {
             max_size: 20,
             min_idle: Some(5),
             connection_timeout_secs: 60,
-            statement_cache_size: 100,
+            max_cached_statements: 32,
         };
 
         let cloned = config.clone();
         assert_eq!(cloned.max_size, 20);
         assert_eq!(cloned.min_idle, Some(5));
         assert_eq!(cloned.connection_timeout_secs, 60);
-        assert_eq!(cloned.statement_cache_size, 100);
+        assert_eq!(cloned.max_cached_statements, 32);
     }
 
     #[test]
     fn test_pool_config_debug() {
-        #[allow(deprecated)]
         let config = PoolConfig::default();
         let debug_str = format!("{:?}", config);
         assert!(debug_str.contains("PoolConfig"));
@@ -646,8 +694,10 @@ mod tests {
     #[test]
     fn test_hana_connection_manager_with_config() {
         let config = ConnectionConfiguration::default();
-        let manager = HanaConnectionManager::with_config("hdbsql://user:pass@host:30015", config);
+        let manager =
+            HanaConnectionManager::with_config("hdbsql://user:pass@host:30015", config, 32);
         assert!(manager.config.is_some());
+        assert_eq!(manager.cache_size, 32);
     }
 
     #[test]
