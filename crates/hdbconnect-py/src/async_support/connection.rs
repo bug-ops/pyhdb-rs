@@ -63,6 +63,24 @@ pub struct AsyncPyConnection {
 }
 
 impl AsyncPyConnection {
+    /// Create an `AsyncPyConnection` from pre-built components.
+    ///
+    /// Used by `PyAsyncConnectionBuilder` to construct connections without going
+    /// through URL parsing.
+    pub fn from_parts(
+        inner: SharedAsyncConnection,
+        autocommit: bool,
+        statement_cache: Arc<
+            TokioMutex<PreparedStatementCache<hdbconnect_async::PreparedStatement>>,
+        >,
+    ) -> Self {
+        Self {
+            inner,
+            autocommit,
+            statement_cache,
+        }
+    }
+
     pub fn shared(&self) -> SharedAsyncConnection {
         Arc::clone(&self.inner)
     }

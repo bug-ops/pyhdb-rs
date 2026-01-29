@@ -28,6 +28,17 @@ Connection with configuration::
     )
     conn = connect("hdbsql://user:pass@host:39017", config=config)
 
+Builder-based connection with TLS::
+
+    from pyhdb_rs import TlsConfig, ConnectionBuilder
+
+    conn = (ConnectionBuilder()
+        .host("hana.example.com")
+        .port(30015)
+        .credentials("SYSTEM", "password")
+        .tls(TlsConfig.from_directory("/path/to/certs"))
+        .build())
+
 Polars integration::
 
     import polars as pl
@@ -48,6 +59,7 @@ from __future__ import annotations
 from pyhdb_rs._core import (
     # Classes
     Connection,
+    ConnectionBuilder,
     ConnectionConfig,
     Cursor,
     DatabaseError,
@@ -61,6 +73,7 @@ from pyhdb_rs._core import (
     OperationalError,
     ProgrammingError,
     RecordBatchReader,
+    TlsConfig,
     Warning,
     # Version
     __version__,
@@ -98,9 +111,11 @@ __all__ = [
     # Connection
     "connect",
     "Connection",
+    "ConnectionBuilder",
     "ConnectionConfig",
     "Cursor",
     "RecordBatchReader",
+    "TlsConfig",
     # Module attributes
     "apilevel",
     "threadsafety",

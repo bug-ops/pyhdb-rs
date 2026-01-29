@@ -1,11 +1,32 @@
 //! Connection pool using [`deadpool`].
 //!
-//! Provides an async connection pool for SAP HANA with configurable size limits.
+//! Provides an async connection pool for SAP HANA with configurable size limits
+//! and TLS support.
 //!
 //! # Statement Cache
 //!
 //! Each pooled connection maintains its own prepared statement cache.
 //! Configure cache size via `ConnectionConfig(max_cached_statements=N)`.
+//!
+//! # TLS Configuration
+//!
+//! Connection pools support TLS via the `tls_config` parameter or the builder API:
+//!
+//! ```python
+//! # Direct construction
+//! pool = ConnectionPool(
+//!     "hdbsql://user:pass@host:30015",
+//!     max_size=10,
+//!     tls_config=TlsConfig.from_directory("/path/to/certs")
+//! )
+//!
+//! # Builder API
+//! pool = (ConnectionPoolBuilder()
+//!     .url("hdbsql://user:pass@host:30015")
+//!     .max_size(10)
+//!     .tls(TlsConfig.with_system_roots())
+//!     .build())
+//! ```
 //!
 //! # Note on `min_idle`
 //!
@@ -28,8 +49,9 @@ use super::common::{
     validate_non_negative_f64, validate_positive_u32,
 };
 use crate::config::PyConnectionConfig;
-use crate::connection::{AsyncConnectionBuilder, PyCacheStats};
+use crate::connection::PyCacheStats;
 use crate::error::PyHdbError;
+use crate::tls::{PyTlsConfig, TlsConfigInner};
 use crate::types::prepared_cache::{
     CacheStatistics, DEFAULT_CACHE_CAPACITY, PreparedStatementCache,
 };
@@ -85,6 +107,8 @@ pub struct HanaConnectionManager {
     url: String,
     config: Option<ConnectionConfiguration>,
     cache_size: usize,
+    tls_config: Option<TlsConfigInner>,
+    network_group: Option<String>,
 }
 
 impl HanaConnectionManager {
@@ -93,6 +117,8 @@ impl HanaConnectionManager {
             url: url.into(),
             config: None,
             cache_size: DEFAULT_CACHE_CAPACITY,
+            tls_config: None,
+            network_group: None,
         }
     }
 
@@ -105,7 +131,29 @@ impl HanaConnectionManager {
             url: url.into(),
             config: Some(config),
             cache_size,
+            tls_config: None,
+            network_group: None,
         }
+    }
+
+    pub(crate) fn with_tls(
+        url: impl Into<String>,
+        config: Option<ConnectionConfiguration>,
+        cache_size: usize,
+        tls_config: TlsConfigInner,
+    ) -> Self {
+        Self {
+            url: url.into(),
+            config,
+            cache_size,
+            tls_config: Some(tls_config),
+            network_group: None,
+        }
+    }
+
+    pub(crate) fn with_network_group(mut self, network_group: String) -> Self {
+        self.network_group = Some(network_group);
+        self
     }
 }
 
@@ -114,18 +162,65 @@ impl Manager for HanaConnectionManager {
     type Error = hdbconnect_async::HdbError;
 
     async fn create(&self) -> Result<Self::Type, Self::Error> {
-        // Use AsyncConnectionBuilder for unified connection creation
-        let mut builder = AsyncConnectionBuilder::from_url(&self.url)
+        let parsed = url::Url::parse(&self.url)
             .map_err(|e| hdbconnect_async::HdbError::from(std::io::Error::other(e.to_string())))?;
 
-        if let Some(ref cfg) = self.config {
-            builder = builder.with_config(cfg);
+        let host = parsed
+            .host_str()
+            .ok_or_else(|| {
+                hdbconnect_async::HdbError::from(std::io::Error::other("missing host in URL"))
+            })?
+            .to_string();
+
+        let port = parsed.port().unwrap_or(30015);
+
+        let user = if parsed.username().is_empty() {
+            return Err(hdbconnect_async::HdbError::from(std::io::Error::other(
+                "missing username in URL",
+            )));
+        } else {
+            parsed.username().to_string()
+        };
+
+        let password = parsed.password().ok_or_else(|| {
+            hdbconnect_async::HdbError::from(std::io::Error::other("missing password in URL"))
+        })?;
+
+        let database = parsed
+            .path()
+            .strip_prefix('/')
+            .filter(|s| !s.is_empty())
+            .map(String::from);
+
+        let mut builder = hdbconnect_async::ConnectParams::builder();
+        builder.hostname(&host);
+        builder.port(port);
+        builder.dbuser(&user);
+        builder.password(password);
+
+        if let Some(db) = &database {
+            builder.dbname(db);
         }
 
-        let connection = builder
-            .connect()
-            .await
+        if let Some(ng) = &self.network_group {
+            builder.network_group(ng);
+        }
+
+        // Apply TLS from explicit config, or from URL scheme
+        if let Some(tls) = &self.tls_config {
+            apply_tls_to_async_builder_mut(tls, &mut builder);
+        } else if parsed.scheme() == "hdbsqls" {
+            builder.tls_with(hdbconnect_async::ServerCerts::RootCertificates);
+        }
+
+        let params = builder
+            .build()
             .map_err(|e| hdbconnect_async::HdbError::from(std::io::Error::other(e.to_string())))?;
+
+        let connection = match &self.config {
+            Some(cfg) => hdbconnect_async::Connection::with_configuration(params, cfg).await?,
+            None => hdbconnect_async::Connection::new(params).await?,
+        };
 
         Ok(PooledConnectionInner {
             connection,
@@ -146,6 +241,29 @@ impl Manager for HanaConnectionManager {
     }
 }
 
+fn apply_tls_to_async_builder_mut(
+    tls: &TlsConfigInner,
+    builder: &mut hdbconnect_async::ConnectParamsBuilder,
+) {
+    match tls {
+        TlsConfigInner::Directory(path) => {
+            builder.tls_with(hdbconnect_async::ServerCerts::Directory(path.clone()));
+        }
+        TlsConfigInner::Environment(var) => {
+            builder.tls_with(hdbconnect_async::ServerCerts::Environment(var.clone()));
+        }
+        TlsConfigInner::Direct(pem) => {
+            builder.tls_with(hdbconnect_async::ServerCerts::Direct(pem.clone()));
+        }
+        TlsConfigInner::RootCertificates => {
+            builder.tls_with(hdbconnect_async::ServerCerts::RootCertificates);
+        }
+        TlsConfigInner::Insecure => {
+            builder.tls_without_server_verification();
+        }
+    }
+}
+
 pub type Pool = deadpool::managed::Pool<HanaConnectionManager>;
 
 /// Python connection pool.
@@ -161,6 +279,20 @@ pub type Pool = deadpool::managed::Pool<HanaConnectionManager>;
 ///         "SELECT CUSTOMER_ID, COUNT(*) AS ORDER_COUNT FROM SALES_ORDERS WHERE ORDER_DATE >= '2025-01-01' GROUP BY CUSTOMER_ID"
 ///     )
 ///     df = pl.from_arrow(reader)
+/// ```
+///
+/// # TLS Example
+///
+/// ```python
+/// from pyhdb_rs import TlsConfig
+/// from pyhdb_rs.aio import ConnectionPool
+///
+/// # With TLS configuration
+/// pool = ConnectionPool(
+///     "hdbsql://user:pass@host:30015",
+///     max_size=10,
+///     tls_config=TlsConfig.from_directory("/etc/hana/certs")
+/// )
 /// ```
 #[pyclass(name = "ConnectionPool", module = "hdbconnect.aio")]
 pub struct PyConnectionPool {
@@ -183,20 +315,36 @@ impl PyConnectionPool {
     ///
     /// # Arguments
     ///
-    /// * `url` - HANA connection URL (hdbsql://user:pass@host:port)
+    /// * `url` - HANA connection URL (`hdbsql://user:pass@host:port`)
     /// * `max_size` - Maximum number of connections (default: 10)
     /// * `min_idle` - Minimum idle connections to maintain (accepted for API compatibility, not
     ///   enforced by underlying pool)
     /// * `connection_timeout` - Connection acquisition timeout in seconds (default: 30)
     /// * `config` - Optional connection configuration applied to all pooled connections
+    /// * `tls_config` - Optional TLS configuration for secure connections
+    ///
+    /// # Example
+    ///
+    /// ```python
+    /// # Basic pool
+    /// pool = ConnectionPool("hdbsql://user:pass@host:30015", max_size=10)
+    ///
+    /// # Pool with TLS
+    /// pool = ConnectionPool(
+    ///     "hdbsql://user:pass@host:30015",
+    ///     max_size=10,
+    ///     tls_config=TlsConfig.from_directory("/etc/hana/certs")
+    /// )
+    /// ```
     #[new]
-    #[pyo3(signature = (url, *, max_size=10, min_idle=None, connection_timeout=30, config=None))]
+    #[pyo3(signature = (url, *, max_size=10, min_idle=None, connection_timeout=30, config=None, tls_config=None))]
     fn new(
         url: String,
         max_size: usize,
         min_idle: Option<usize>,
         connection_timeout: u64,
         config: Option<&PyConnectionConfig>,
+        tls_config: Option<&PyTlsConfig>,
     ) -> PyResult<Self> {
         // Validate min_idle doesn't exceed max_size
         if let Some(min) = min_idle
@@ -208,16 +356,26 @@ impl PyConnectionPool {
             .into());
         }
 
-        let manager = config.map_or_else(
-            || HanaConnectionManager::new(&url),
-            |cfg| {
-                HanaConnectionManager::with_config(
-                    &url,
-                    cfg.to_hdbconnect_config(),
-                    cfg.statement_cache_size(),
-                )
-            },
-        );
+        let manager = match (config, tls_config) {
+            (None, None) => HanaConnectionManager::new(&url),
+            (Some(cfg), None) => HanaConnectionManager::with_config(
+                &url,
+                cfg.to_hdbconnect_config(),
+                cfg.statement_cache_size(),
+            ),
+            (None, Some(tls)) => HanaConnectionManager::with_tls(
+                &url,
+                None,
+                DEFAULT_CACHE_CAPACITY,
+                tls.inner.clone(),
+            ),
+            (Some(cfg), Some(tls)) => HanaConnectionManager::with_tls(
+                &url,
+                Some(cfg.to_hdbconnect_config()),
+                cfg.statement_cache_size(),
+                tls.inner.clone(),
+            ),
+        };
 
         let pool = Pool::builder(manager)
             .max_size(max_size)
@@ -273,6 +431,250 @@ impl PyConnectionPool {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ConnectionPoolBuilder
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Builder for creating connection pools with fluent API.
+///
+/// # Example
+///
+/// ```python
+/// from pyhdb_rs import TlsConfig
+/// from pyhdb_rs.aio import ConnectionPoolBuilder
+///
+/// # Minimal configuration
+/// pool = (ConnectionPoolBuilder()
+///     .url("hdbsql://user:pass@host:30015")
+///     .build())
+///
+/// # Full configuration
+/// pool = (ConnectionPoolBuilder()
+///     .url("hdbsql://user:pass@host:30015")
+///     .max_size(20)
+///     .min_idle(5)
+///     .connection_timeout(60)
+///     .tls(TlsConfig.with_system_roots())
+///     .config(ConnectionConfig(fetch_size=50000))
+///     .network_group("analytics_group")
+///     .build())
+/// ```
+#[pyclass(name = "ConnectionPoolBuilder", module = "hdbconnect.aio")]
+#[derive(Debug, Clone, Default)]
+pub struct PyConnectionPoolBuilder {
+    url: Option<String>,
+    max_size: usize,
+    min_idle: Option<usize>,
+    connection_timeout: u64,
+    config: Option<PyConnectionConfig>,
+    tls_config: Option<PyTlsConfig>,
+    network_group: Option<String>,
+}
+
+#[pymethods]
+impl PyConnectionPoolBuilder {
+    /// Create a new pool builder with default settings.
+    ///
+    /// Defaults:
+    /// - `max_size`: 10
+    /// - `min_idle`: None
+    /// - `connection_timeout`: 30 seconds
+    #[new]
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn new() -> Self {
+        Self {
+            url: None,
+            max_size: 10,
+            min_idle: None,
+            connection_timeout: 30,
+            config: None,
+            tls_config: None,
+            network_group: None,
+        }
+    }
+
+    /// Set the connection URL.
+    ///
+    /// Args:
+    ///     url: Connection URL (`hdbsql://user:pass@host:port`)
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    #[pyo3(text_signature = "(self, url)")]
+    fn url<'py>(mut slf: PyRefMut<'py, Self>, url: &str) -> PyRefMut<'py, Self> {
+        slf.url = Some(url.to_string());
+        slf
+    }
+
+    /// Set maximum pool size.
+    ///
+    /// Args:
+    ///     size: Maximum number of connections (default: 10)
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    #[pyo3(text_signature = "(self, size)")]
+    fn max_size(mut slf: PyRefMut<'_, Self>, size: usize) -> PyRefMut<'_, Self> {
+        slf.max_size = size;
+        slf
+    }
+
+    /// Set minimum idle connections.
+    ///
+    /// Note: Currently not enforced by the underlying pool implementation.
+    /// Exposed for API consistency and future support.
+    ///
+    /// Args:
+    ///     size: Minimum idle connections to maintain
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    #[pyo3(text_signature = "(self, size)")]
+    fn min_idle(mut slf: PyRefMut<'_, Self>, size: usize) -> PyRefMut<'_, Self> {
+        slf.min_idle = Some(size);
+        slf
+    }
+
+    /// Set connection acquisition timeout.
+    ///
+    /// Args:
+    ///     seconds: Timeout in seconds (default: 30)
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    #[pyo3(text_signature = "(self, seconds)")]
+    fn connection_timeout(mut slf: PyRefMut<'_, Self>, seconds: u64) -> PyRefMut<'_, Self> {
+        slf.connection_timeout = seconds;
+        slf
+    }
+
+    /// Configure TLS for secure connections.
+    ///
+    /// Args:
+    ///     config: TLS configuration (use `TlsConfig` factory methods)
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    ///
+    /// Example:
+    ///     ```python
+    ///     builder.tls(TlsConfig.from_directory("/path/to/certs"))
+    ///     builder.tls(TlsConfig.with_system_roots())
+    ///     builder.tls(TlsConfig.insecure())  # Development only!
+    ///     ```
+    #[pyo3(text_signature = "(self, config)")]
+    fn tls(mut slf: PyRefMut<'_, Self>, config: PyTlsConfig) -> PyRefMut<'_, Self> {
+        slf.tls_config = Some(config);
+        slf
+    }
+
+    /// Apply connection configuration to all pooled connections.
+    ///
+    /// Args:
+    ///     config: Connection configuration (`fetch_size`, timeouts, etc.)
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    #[pyo3(text_signature = "(self, config)")]
+    fn config(mut slf: PyRefMut<'_, Self>, config: PyConnectionConfig) -> PyRefMut<'_, Self> {
+        slf.config = Some(config);
+        slf
+    }
+
+    /// Set the network group for HANA Scale-Out and HA deployments.
+    ///
+    /// Network groups allow routing connections to specific HANA nodes in
+    /// scale-out or high-availability configurations.
+    ///
+    /// Args:
+    ///     group: Network group name configured in HANA.
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    ///
+    /// Example:
+    ///     ```python
+    ///     # Route pool connections to specific network group
+    ///     builder.network_group("analytics_group")
+    ///     ```
+    #[pyo3(text_signature = "(self, group)")]
+    fn network_group<'py>(mut slf: PyRefMut<'py, Self>, group: &str) -> PyRefMut<'py, Self> {
+        slf.network_group = Some(group.to_string());
+        slf
+    }
+
+    /// Build the connection pool.
+    ///
+    /// Returns:
+    ///     `ConnectionPool`
+    ///
+    /// Raises:
+    ///     `InterfaceError`: If URL not set or invalid
+    ///     `ProgrammingError`: If `min_idle` > `max_size`
+    #[pyo3(text_signature = "(self)")]
+    fn build(&self) -> PyResult<PyConnectionPool> {
+        let url = self
+            .url
+            .clone()
+            .ok_or_else(|| PyHdbError::interface("url not set - call .url() before .build()"))?;
+
+        // Validate min_idle doesn't exceed max_size
+        if let Some(min) = self.min_idle
+            && min > self.max_size
+        {
+            return Err(PyHdbError::programming(format!(
+                "min_idle ({min}) cannot exceed max_size ({})",
+                self.max_size
+            ))
+            .into());
+        }
+
+        let mut manager = match (&self.config, &self.tls_config) {
+            (None, None) => HanaConnectionManager::new(&url),
+            (Some(cfg), None) => HanaConnectionManager::with_config(
+                &url,
+                cfg.to_hdbconnect_config(),
+                cfg.statement_cache_size(),
+            ),
+            (None, Some(tls)) => HanaConnectionManager::with_tls(
+                &url,
+                None,
+                DEFAULT_CACHE_CAPACITY,
+                tls.inner.clone(),
+            ),
+            (Some(cfg), Some(tls)) => HanaConnectionManager::with_tls(
+                &url,
+                Some(cfg.to_hdbconnect_config()),
+                cfg.statement_cache_size(),
+                tls.inner.clone(),
+            ),
+        };
+
+        if let Some(ng) = &self.network_group {
+            manager = manager.with_network_group(ng.clone());
+        }
+
+        let pool = Pool::builder(manager)
+            .max_size(self.max_size)
+            .wait_timeout(Some(std::time::Duration::from_secs(
+                self.connection_timeout,
+            )))
+            .build()
+            .map_err(|e| PyHdbError::operational(e.to_string()))?;
+
+        Ok(PyConnectionPool { pool, url })
+    }
+
+    fn __repr__(&self) -> String {
+        let url = self.url.as_deref().unwrap_or("<not set>");
+        format!(
+            "ConnectionPoolBuilder(url={url:?}, max_size={}, tls={})",
+            self.max_size,
+            self.tls_config.is_some()
+        )
+    }
+}
+
 #[pyclass(name = "PoolStatus", module = "hdbconnect.aio")]
 #[derive(Debug, Clone)]
 pub struct PoolStatus {
@@ -299,7 +701,7 @@ impl PoolStatus {
 /// Automatically returns to the pool when dropped via deadpool's RAII mechanism.
 #[pyclass(name = "PooledConnection", module = "hdbconnect.aio")]
 pub struct PooledConnection {
-    // Wrapped in Arc<TokioMutex> for thread-safe async access. None = returned to pool.
+    // Wrapped in `Arc<TokioMutex>` for thread-safe async access. `None` = returned to pool.
     object: Arc<TokioMutex<Option<PooledObject>>>,
 }
 
@@ -412,7 +814,7 @@ impl PooledConnection {
         })
     }
 
-    /// Get current read timeout in seconds (None = no timeout).
+    /// Get current read timeout in seconds (`None` = no timeout).
     #[getter]
     fn read_timeout<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let object = Arc::clone(&self.object);
@@ -538,7 +940,7 @@ impl PooledConnection {
     ///
     /// # Returns
     ///
-    /// Awaitable[bool]: True if connection is valid, False otherwise.
+    /// `Awaitable[bool]`: True if connection is valid, False otherwise.
     ///
     /// # Example
     ///
@@ -559,13 +961,10 @@ impl PooledConnection {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut guard = object.lock().await;
             match guard.as_mut() {
-                Some(obj) => {
-                    if check_connection {
-                        Ok(obj.connection.query(VALIDATION_QUERY).await.is_ok())
-                    } else {
-                        Ok(true)
-                    }
+                Some(obj) if check_connection => {
+                    Ok(obj.connection.query(VALIDATION_QUERY).await.is_ok())
                 }
+                Some(_) => Ok(true),
                 None => Ok(false), // Returned to pool
             }
         })
@@ -674,7 +1073,7 @@ mod tests {
     #[test]
     fn test_pool_config_debug() {
         let config = PoolConfig::default();
-        let debug_str = format!("{:?}", config);
+        let debug_str = format!("{config:?}");
         assert!(debug_str.contains("PoolConfig"));
         assert!(debug_str.contains("max_size"));
     }
@@ -682,8 +1081,10 @@ mod tests {
     #[test]
     fn test_hana_connection_manager_new() {
         let manager = HanaConnectionManager::new("hdbsql://user:pass@host:30015");
-        let debug_str = format!("{:?}", manager);
+        let debug_str = format!("{manager:?}");
         assert!(debug_str.contains("HanaConnectionManager"));
+        assert!(manager.tls_config.is_none());
+        assert!(manager.network_group.is_none());
     }
 
     #[test]
@@ -693,6 +1094,43 @@ mod tests {
             HanaConnectionManager::with_config("hdbsql://user:pass@host:30015", config, 32);
         assert!(manager.config.is_some());
         assert_eq!(manager.cache_size, 32);
+        assert!(manager.tls_config.is_none());
+    }
+
+    #[test]
+    fn test_hana_connection_manager_with_tls() {
+        let manager = HanaConnectionManager::with_tls(
+            "hdbsql://user:pass@host:30015",
+            None,
+            DEFAULT_CACHE_CAPACITY,
+            TlsConfigInner::RootCertificates,
+        );
+        assert!(manager.tls_config.is_some());
+        assert!(matches!(
+            manager.tls_config,
+            Some(TlsConfigInner::RootCertificates)
+        ));
+    }
+
+    #[test]
+    fn test_hana_connection_manager_with_tls_and_config() {
+        let config = ConnectionConfiguration::default();
+        let manager = HanaConnectionManager::with_tls(
+            "hdbsql://user:pass@host:30015",
+            Some(config),
+            64,
+            TlsConfigInner::Directory("/path/to/certs".to_string()),
+        );
+        assert!(manager.config.is_some());
+        assert!(manager.tls_config.is_some());
+        assert_eq!(manager.cache_size, 64);
+    }
+
+    #[test]
+    fn test_hana_connection_manager_with_network_group() {
+        let manager = HanaConnectionManager::new("hdbsql://user:pass@host:30015")
+            .with_network_group("analytics_group".to_string());
+        assert_eq!(manager.network_group, Some("analytics_group".to_string()));
     }
 
     #[test]
@@ -731,7 +1169,201 @@ mod tests {
             max_size: 5,
         };
 
-        let debug_str = format!("{:?}", status);
+        let debug_str = format!("{status:?}");
         assert!(debug_str.contains("PoolStatus"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // ConnectionPoolBuilder Tests
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_pool_builder_new() {
+        let builder = PyConnectionPoolBuilder::new();
+        assert!(builder.url.is_none());
+        assert_eq!(builder.max_size, 10);
+        assert!(builder.min_idle.is_none());
+        assert_eq!(builder.connection_timeout, 30);
+        assert!(builder.config.is_none());
+        assert!(builder.tls_config.is_none());
+        assert!(builder.network_group.is_none());
+    }
+
+    #[test]
+    fn test_pool_builder_default() {
+        let builder = PyConnectionPoolBuilder::default();
+        assert!(builder.url.is_none());
+        assert_eq!(builder.max_size, 10);
+    }
+
+    #[test]
+    fn test_pool_builder_build_missing_url() {
+        let builder = PyConnectionPoolBuilder::new();
+        let result = builder.build();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pool_builder_build_min_idle_exceeds_max_size() {
+        let builder = PyConnectionPoolBuilder {
+            url: Some("hdbsql://user:pass@host:30015".to_string()),
+            max_size: 5,
+            min_idle: Some(10),
+            connection_timeout: 30,
+            config: None,
+            tls_config: None,
+            network_group: None,
+        };
+
+        let result = builder.build();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pool_builder_with_tls_config() {
+        let builder = PyConnectionPoolBuilder {
+            url: Some("hdbsql://user:pass@host:30015".to_string()),
+            max_size: 10,
+            min_idle: None,
+            connection_timeout: 30,
+            config: None,
+            tls_config: Some(PyTlsConfig {
+                inner: TlsConfigInner::RootCertificates,
+            }),
+            network_group: None,
+        };
+
+        assert!(builder.tls_config.is_some());
+    }
+
+    #[test]
+    fn test_pool_builder_with_network_group() {
+        let builder = PyConnectionPoolBuilder {
+            url: Some("hdbsql://user:pass@host:30015".to_string()),
+            max_size: 10,
+            min_idle: None,
+            connection_timeout: 30,
+            config: None,
+            tls_config: None,
+            network_group: Some("ha_group".to_string()),
+        };
+
+        assert_eq!(builder.network_group, Some("ha_group".to_string()));
+    }
+
+    #[test]
+    fn test_pool_builder_clone() {
+        let builder = PyConnectionPoolBuilder {
+            url: Some("hdbsql://user:pass@host:30015".to_string()),
+            max_size: 20,
+            min_idle: Some(5),
+            connection_timeout: 60,
+            config: None,
+            tls_config: None,
+            network_group: Some("test_group".to_string()),
+        };
+
+        let cloned = builder.clone();
+        assert_eq!(cloned.url, builder.url);
+        assert_eq!(cloned.max_size, 20);
+        assert_eq!(cloned.min_idle, Some(5));
+        assert_eq!(cloned.connection_timeout, 60);
+        assert_eq!(cloned.network_group, Some("test_group".to_string()));
+    }
+
+    #[test]
+    fn test_pool_builder_debug() {
+        let builder = PyConnectionPoolBuilder::new();
+        let debug_str = format!("{builder:?}");
+        assert!(debug_str.contains("PyConnectionPoolBuilder"));
+    }
+
+    #[test]
+    fn test_pool_builder_repr() {
+        let builder = PyConnectionPoolBuilder {
+            url: Some("hdbsql://user:pass@host:30015".to_string()),
+            max_size: 10,
+            min_idle: None,
+            connection_timeout: 30,
+            config: None,
+            tls_config: None,
+            network_group: None,
+        };
+
+        let repr = builder.__repr__();
+        assert!(repr.contains("ConnectionPoolBuilder"));
+        assert!(repr.contains("max_size=10"));
+        assert!(repr.contains("tls=false"));
+    }
+
+    #[test]
+    fn test_pool_builder_repr_no_url() {
+        let builder = PyConnectionPoolBuilder::new();
+        let repr = builder.__repr__();
+        assert!(repr.contains("<not set>"));
+    }
+
+    #[test]
+    fn test_pool_builder_repr_with_tls() {
+        let builder = PyConnectionPoolBuilder {
+            url: Some("hdbsql://user:pass@host:30015".to_string()),
+            max_size: 10,
+            min_idle: None,
+            connection_timeout: 30,
+            config: None,
+            tls_config: Some(PyTlsConfig {
+                inner: TlsConfigInner::RootCertificates,
+            }),
+            network_group: None,
+        };
+
+        let repr = builder.__repr__();
+        assert!(repr.contains("tls=true"));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // TLS Configuration Tests
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_apply_tls_directory() {
+        let mut builder = hdbconnect_async::ConnectParams::builder();
+        apply_tls_to_async_builder_mut(
+            &TlsConfigInner::Directory("/path/to/certs".to_string()),
+            &mut builder,
+        );
+        // Builder is modified in place, no error means success
+    }
+
+    #[test]
+    fn test_apply_tls_environment() {
+        let mut builder = hdbconnect_async::ConnectParams::builder();
+        apply_tls_to_async_builder_mut(
+            &TlsConfigInner::Environment("HANA_CA_CERT".to_string()),
+            &mut builder,
+        );
+    }
+
+    #[test]
+    fn test_apply_tls_direct() {
+        let mut builder = hdbconnect_async::ConnectParams::builder();
+        apply_tls_to_async_builder_mut(
+            &TlsConfigInner::Direct(
+                "-----BEGIN CERTIFICATE-----\ntest\n-----END CERTIFICATE-----".to_string(),
+            ),
+            &mut builder,
+        );
+    }
+
+    #[test]
+    fn test_apply_tls_root_certificates() {
+        let mut builder = hdbconnect_async::ConnectParams::builder();
+        apply_tls_to_async_builder_mut(&TlsConfigInner::RootCertificates, &mut builder);
+    }
+
+    #[test]
+    fn test_apply_tls_insecure() {
+        let mut builder = hdbconnect_async::ConnectParams::builder();
+        apply_tls_to_async_builder_mut(&TlsConfigInner::Insecure, &mut builder);
     }
 }

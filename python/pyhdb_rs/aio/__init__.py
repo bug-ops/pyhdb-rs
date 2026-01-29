@@ -33,6 +33,17 @@ Connection with configuration::
     async with await connect("hdbsql://...", config=config) as conn:
         reader = await conn.execute_arrow("SELECT * FROM sales")
 
+Builder-based async connection with TLS::
+
+    from pyhdb_rs import TlsConfig
+    from pyhdb_rs.aio import AsyncConnectionBuilder
+
+    conn = await (AsyncConnectionBuilder()
+        .host("hana.example.com")
+        .credentials("SYSTEM", "password")
+        .tls(TlsConfig.with_system_roots())
+        .build())
+
 Connection pooling::
 
     from pyhdb_rs import ConnectionConfig
@@ -49,6 +60,17 @@ Connection pooling::
                 print(row)
 
     asyncio.run(query())
+
+Connection pool builder::
+
+    from pyhdb_rs import TlsConfig
+    from pyhdb_rs.aio import ConnectionPoolBuilder
+
+    pool = (ConnectionPoolBuilder()
+        .url("hdbsql://user:pass@host:39017")
+        .max_size(20)
+        .tls(TlsConfig.with_system_roots())
+        .build())
 """
 
 from __future__ import annotations
@@ -62,16 +84,20 @@ try:
     from pyhdb_rs._core import (
         ASYNC_AVAILABLE,
         AsyncConnection,
+        AsyncConnectionBuilder,
         AsyncCursor,
         ConnectionPool,
+        ConnectionPoolBuilder,
         PooledConnection,
         PoolStatus,
     )
 except ImportError:
     ASYNC_AVAILABLE = False
     AsyncConnection = None
+    AsyncConnectionBuilder = None
     AsyncCursor = None
     ConnectionPool = None
+    ConnectionPoolBuilder = None
     PooledConnection = None
     PoolStatus = None
 
@@ -81,7 +107,6 @@ async def connect(
     *,
     autocommit: bool = True,
     config: ConnectionConfig | None = None,
-    statement_cache_size: int = 0,
 ) -> AsyncConnection:
     """Connect to a HANA database asynchronously.
 
@@ -89,8 +114,6 @@ async def connect(
         url: Connection URL (hdbsql://user:pass@host:port[/database])
         autocommit: Enable auto-commit mode (default: True)
         config: Optional connection configuration for tuning performance
-        statement_cache_size: DEPRECATED - This parameter is ignored.
-            Statement caching is not available. Will be removed in 0.3.0.
 
     Returns:
         AsyncConnection object
@@ -119,7 +142,6 @@ async def connect(
         url,
         autocommit=autocommit,
         config=config,
-        statement_cache_size=statement_cache_size,
     )
 
 
@@ -177,8 +199,10 @@ __all__ = [
     "create_pool",
     # Classes
     "AsyncConnection",
+    "AsyncConnectionBuilder",
     "AsyncCursor",
     "ConnectionPool",
+    "ConnectionPoolBuilder",
     "PooledConnection",
     "PoolStatus",
 ]

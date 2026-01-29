@@ -230,11 +230,17 @@ impl ConnectionBuilder<HasHost, HasCredentials> {
             .password
             .ok_or_else(|| PyHdbError::internal("internal: password missing"))?;
 
-        let params = hdbconnect::ConnectParams::builder()
-            .hostname(&host)
-            .port(self.port)
-            .dbuser(&user)
-            .password(&password)
+        let mut params_builder = hdbconnect::ConnectParams::builder();
+        params_builder.hostname(&host);
+        params_builder.port(self.port);
+        params_builder.dbuser(&user);
+        params_builder.password(&password);
+
+        if let Some(db) = &self.database {
+            params_builder.dbname(db);
+        }
+
+        let params = params_builder
             .build()
             .map_err(|e| PyHdbError::interface(e.to_string()))?;
 
@@ -525,6 +531,14 @@ mod tests {
         let _has_creds: HasCredentials = Default::default();
     }
 
+    #[test]
+    fn test_builder_with_database_creates_params() {
+        let builder = ConnectionBuilder::from_url("hdbsql://user:pass@localhost:30015/mydb");
+        assert!(builder.is_ok());
+        let params = builder.unwrap().build();
+        assert!(params.is_ok());
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // AsyncConnectionBuilder Tests (async feature only)
     // ═══════════════════════════════════════════════════════════════════════════
@@ -659,5 +673,14 @@ mod tests {
         let builder =
             AsyncConnectionBuilder::from_url("hdbsql://user:pass@localhost:30015").unwrap();
         assert!(builder.config.is_none());
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_with_database_creates_params() {
+        let builder = AsyncConnectionBuilder::from_url("hdbsql://user:pass@localhost:30015/mydb");
+        assert!(builder.is_ok());
+        let params = builder.unwrap().build();
+        assert!(params.is_ok());
     }
 }

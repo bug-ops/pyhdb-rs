@@ -108,6 +108,23 @@ pub struct PyConnection {
 }
 
 impl PyConnection {
+    /// Create a `PyConnection` from pre-built components.
+    ///
+    /// Used by `PyConnectionBuilder` to construct connections without going
+    /// through URL parsing.
+    #[allow(clippy::missing_const_for_fn)]
+    pub fn from_parts(
+        inner: SharedConnection,
+        autocommit: bool,
+        stmt_cache: Mutex<PreparedStatementCache<hdbconnect::PreparedStatement>>,
+    ) -> Self {
+        Self {
+            inner,
+            autocommit,
+            stmt_cache,
+        }
+    }
+
     /// Create a connection with custom configuration.
     pub fn with_config(url: &str, config: &PyConnectionConfig) -> PyResult<Self> {
         let params = crate::connection::ConnectionBuilder::from_url(url)?.build()?;
@@ -607,5 +624,15 @@ mod tests {
     #[test]
     fn test_validate_non_negative_f64_negative() {
         assert!(PyConnection::validate_non_negative_f64(Some(-1.0), "test").is_err());
+    }
+
+    #[test]
+    fn test_from_parts() {
+        let inner = Arc::new(Mutex::new(ConnectionInner::Disconnected));
+        let cache = Mutex::new(PreparedStatementCache::new(16));
+        let conn = PyConnection::from_parts(inner, false, cache);
+
+        assert!(!conn.autocommit);
+        assert!(!conn.is_connected());
     }
 }

@@ -5,14 +5,18 @@
 //! - `PyCacheStats`: Python-exposed cache statistics
 //! - `ConnectionBuilder`: Type-safe builder with compile-time validation
 //! - `AsyncConnectionBuilder`: Async-aware builder with configuration support (async feature)
+//! - `PyConnectionBuilder`: Python-facing builder with runtime validation
+//! - `PyAsyncConnectionBuilder`: Python-facing async builder (async feature)
 //! - State types for typestate pattern
 
 pub mod builder;
-pub mod state;
+pub mod py_builder;
 pub mod wrapper;
 
 #[cfg(feature = "async")]
 pub use builder::AsyncConnectionBuilder;
 pub use builder::ConnectionBuilder;
-pub use state::{Connected, ConnectionState, Disconnected, InTransaction, TypedConnection};
+#[cfg(feature = "async")]
+pub use py_builder::PyAsyncConnectionBuilder;
+pub use py_builder::PyConnectionBuilder;
 pub use wrapper::{ConnectionInner, PyCacheStats, PyConnection, SharedConnection};

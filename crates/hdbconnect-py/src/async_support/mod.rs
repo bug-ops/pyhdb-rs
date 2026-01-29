@@ -53,4 +53,6 @@ pub mod pool;
 pub use common::ConnectionState;
 pub use connection::{AsyncConnectionInner, AsyncPyConnection, SharedAsyncConnection};
 pub use cursor::AsyncPyCursor;
-pub use pool::{HanaConnectionManager, PoolConfig, PooledConnection, PyConnectionPool};
+pub use pool::{
+    HanaConnectionManager, PoolConfig, PooledConnection, PyConnectionPool, PyConnectionPoolBuilder,
+};

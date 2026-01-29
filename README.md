@@ -89,7 +89,90 @@ with conn.cursor() as cursor:
 conn.close()
 ```
 
-### Polars integration
+## Builder API
+
+pyhdb-rs provides a builder pattern for flexible connection configuration.
+
+### Basic connection
+
+```python
+from pyhdb_rs import ConnectionBuilder
+
+conn = (ConnectionBuilder()
+    .host("hana.example.com")
+    .port(30015)
+    .credentials("SYSTEM", "password")
+    .database("SYSTEMDB")
+    .build())
+
+with conn.cursor() as cursor:
+    cursor.execute("SELECT * FROM DUMMY")
+    print(cursor.fetchone())
+
+conn.close()
+```
+
+### With TLS configuration
+
+```python
+from pyhdb_rs import ConnectionBuilder, TlsConfig
+
+# System root certificates
+tls = TlsConfig.with_system_roots()
+
+conn = (ConnectionBuilder()
+    .host("hana.example.com")
+    .credentials("SYSTEM", "password")
+    .tls(tls)
+    .build())
+```
+
+> [!TIP]
+> Use `TlsConfig.from_directory("/path/to/certs")` for custom CA certificates.
+
+<details>
+<summary><strong>Builder API: From URL with overrides</strong></summary>
+
+```python
+from pyhdb_rs import ConnectionBuilder, TlsConfig
+
+# Start with URL, override specific settings
+conn = (ConnectionBuilder.from_url("hdbsql://user:pass@host:30015")
+    .tls(TlsConfig.with_system_roots())
+    .autocommit(True)
+    .build())
+```
+
+</details>
+
+<details>
+<summary><strong>Builder API: Async connections</strong></summary>
+
+```python
+import asyncio
+from pyhdb_rs.aio import AsyncConnectionBuilder
+from pyhdb_rs import TlsConfig
+
+async def main():
+    conn = await (AsyncConnectionBuilder()
+        .host("hana.example.com")
+        .credentials("SYSTEM", "password")
+        .tls(TlsConfig.with_system_roots())
+        .autocommit(True)
+        .build())
+
+    async with conn:
+        cursor = conn.cursor()
+        await cursor.execute("SELECT * FROM DUMMY")
+        print(await cursor.fetchone())
+
+asyncio.run(main())
+```
+
+</details>
+
+<details>
+<summary><strong>Polars Integration Examples</strong></summary>
 
 ```python
 import pyhdb_rs.polars as hdb
@@ -184,7 +267,261 @@ result = lf.filter(pl.col("NET_AMOUNT") > 1000).select(["CUSTOMER_NAME", "PRODUC
 > [!TIP]
 > Use `scan_hana()` for lazy evaluation when you need to apply filters or transformations before materializing data.
 
-## Async support
+</details>
+
+<details>
+<summary><strong>TLS/SSL Configuration (5 methods)</strong></summary>
+
+pyhdb-rs provides flexible TLS configuration via `TlsConfig` for secure connections.
+
+### TLS Configuration Methods
+
+`TlsConfig` provides five factory methods for different certificate sources:
+
+#### 1. From Directory (recommended for production)
+
+Load all `.pem`, `.crt`, and `.cer` files from a directory:
+
+```python
+from pyhdb_rs import TlsConfig, ConnectionBuilder
+
+tls = TlsConfig.from_directory("/etc/hana/certs")
+
+conn = (ConnectionBuilder()
+    .host("hana.example.com")
+    .credentials("SYSTEM", "password")
+    .tls(tls)
+    .build())
+```
+
+> [!TIP]
+> This is the recommended approach for production deployments. Place all CA certificates in a single directory.
+
+#### 2. From Environment Variable
+
+Load certificate from an environment variable:
+
+```python
+import os
+from pyhdb_rs import TlsConfig, ConnectionBuilder
+
+# Set certificate in environment
+os.environ["HANA_CA_CERT"] = """-----BEGIN CERTIFICATE-----
+MIIDdzCCAl+gAwIBAgIEAgAAuTANBgkqhkiG9w0BAQUFADBaMQswCQYDVQQGEwJJ
+...
+-----END CERTIFICATE-----"""
+
+tls = TlsConfig.from_environment("HANA_CA_CERT")
+
+conn = (ConnectionBuilder()
+    .host("hana.example.com")
+    .credentials("SYSTEM", "password")
+    .tls(tls)
+    .build())
+```
+
+> [!NOTE]
+> Useful for containerized deployments where certificates are injected via environment variables.
+
+#### 3. From Certificate String
+
+Provide PEM-encoded certificate directly:
+
+```python
+from pyhdb_rs import TlsConfig, ConnectionBuilder
+
+with open("/path/to/ca-bundle.pem") as f:
+    cert_pem = f.read()
+
+tls = TlsConfig.from_certificate(cert_pem)
+
+conn = (ConnectionBuilder()
+    .host("hana.example.com")
+    .credentials("SYSTEM", "password")
+    .tls(tls)
+    .build())
+```
+
+#### 4. System Root Certificates
+
+Use Mozilla's root certificates (bundled):
+
+```python
+from pyhdb_rs import TlsConfig, ConnectionBuilder
+
+tls = TlsConfig.with_system_roots()
+
+conn = (ConnectionBuilder()
+    .host("hana.example.com")
+    .credentials("SYSTEM", "password")
+    .tls(tls)
+    .build())
+```
+
+> [!TIP]
+> Best choice when your HANA server uses a certificate signed by a well-known CA (e.g., Let's Encrypt, DigiCert).
+
+#### 5. Insecure (development only)
+
+Skip certificate verification:
+
+```python
+from pyhdb_rs import TlsConfig, ConnectionBuilder
+
+tls = TlsConfig.insecure()
+
+conn = (ConnectionBuilder()
+    .host("hana-dev.internal")
+    .credentials("SYSTEM", "password")
+    .tls(tls)
+    .build())
+```
+
+> [!CAUTION]
+> `TlsConfig.insecure()` disables server certificate verification completely. **NEVER use in production.** This makes your connection vulnerable to man-in-the-middle attacks.
+
+### URL Scheme for TLS
+
+The `hdbsqls://` scheme automatically enables TLS with system roots:
+
+```python
+from pyhdb_rs import ConnectionBuilder
+
+# Equivalent to using TlsConfig.with_system_roots()
+conn = ConnectionBuilder.from_url("hdbsqls://user:pass@host:30015").build()
+
+# Override with custom TLS config
+conn = (ConnectionBuilder.from_url("hdbsqls://user:pass@host:30015")
+    .tls(TlsConfig.from_directory("/custom/certs"))
+    .build())
+```
+
+</details>
+
+<details>
+<summary><strong>Cursor Holdability (Transaction Control)</strong></summary>
+
+Control result set behavior across transaction boundaries with `CursorHoldability`. This determines whether cursors remain open after `commit()` or `rollback()` operations.
+
+```python
+from pyhdb_rs import ConnectionBuilder, CursorHoldability
+
+conn = (ConnectionBuilder()
+    .host("hana.example.com")
+    .credentials("SYSTEM", "password")
+    .cursor_holdability(CursorHoldability.CommitAndRollback)
+    .build())
+
+conn.set_autocommit(False)
+with conn.cursor() as cur:
+    cur.execute("SELECT * FROM large_table")
+    rows = cur.fetchmany(1000)
+
+    # Process first batch
+    process_batch(rows)
+
+    conn.commit()  # Cursor remains open with CommitAndRollback
+
+    # Continue reading from the same result set
+    more_rows = cur.fetchmany(1000)
+```
+
+### Holdability Variants
+
+| Variant | Behavior |
+|---------|----------|
+| `CursorHoldability.None` | Cursor closed on commit **and** rollback (default) |
+| `CursorHoldability.Commit` | Cursor held across commits, closed on rollback |
+| `CursorHoldability.Rollback` | Cursor held across rollbacks, closed on commit |
+| `CursorHoldability.CommitAndRollback` | Cursor held across both operations |
+
+> [!NOTE]
+> Use `CommitAndRollback` when you need to iterate over large result sets while performing intermediate commits to free locks or manage transaction size.
+
+</details>
+
+<details>
+<summary><strong>High Availability & Scale-Out Deployments</strong></summary>
+
+Configure network groups for HANA HA and Scale-Out deployments to control connection routing.
+
+### Network Group Configuration
+
+```python
+from pyhdb_rs import ConnectionBuilder
+
+conn = (ConnectionBuilder()
+    .host("hana-ha-cluster.example.com")
+    .port(30015)
+    .credentials("SYSTEM", "password")
+    .network_group("ha-primary")
+    .build())
+```
+
+> [!IMPORTANT]
+> Network groups are essential for proper routing in multi-node HANA environments. They determine which network interface the driver uses when multiple options are available.
+
+### Use Cases
+
+**1. High Availability Clusters**
+
+Direct connections to specific nodes in an HA setup:
+
+```python
+# Connect to primary node network
+conn_primary = (ConnectionBuilder()
+    .host("hana-ha.example.com")
+    .credentials("SYSTEM", "password")
+    .network_group("internal")
+    .build())
+
+# Connect to secondary node network
+conn_secondary = (ConnectionBuilder()
+    .host("hana-ha.example.com")
+    .credentials("SYSTEM", "password")
+    .network_group("external")
+    .build())
+```
+
+**2. Scale-Out Systems**
+
+Route to specific network groups in scale-out configurations:
+
+```python
+from pyhdb_rs import ConnectionBuilder
+
+# Connect via data network
+conn = (ConnectionBuilder()
+    .host("hana-scaleout.example.com")
+    .credentials("SYSTEM", "password")
+    .network_group("data-network")
+    .build())
+```
+
+### Async Connection Pools
+
+Combine network groups with connection pooling for production deployments:
+
+```python
+from pyhdb_rs.aio import ConnectionPoolBuilder
+from pyhdb_rs import TlsConfig
+
+pool = (ConnectionPoolBuilder()
+    .url("hdbsql://user:pass@host:30015")
+    .network_group("production")
+    .max_size(20)
+    .tls(TlsConfig.with_system_roots())
+    .build())
+
+async with pool.acquire() as conn:
+    reader = await conn.execute_arrow("SELECT * FROM large_table")
+    df = pl.from_arrow(reader)
+```
+
+</details>
+
+<details>
+<summary><strong>Async/Await Support</strong></summary>
 
 pyhdb-rs supports async/await operations for non-blocking database access.
 
@@ -222,17 +559,22 @@ asyncio.run(main())
 <details>
 <summary><strong>Connection pooling</strong></summary>
 
+### Using ConnectionPoolBuilder (recommended)
+
 ```python
 import asyncio
 import polars as pl
-from pyhdb_rs.aio import create_pool
+from pyhdb_rs.aio import ConnectionPoolBuilder
+from pyhdb_rs import TlsConfig
 
 async def main():
-    pool = create_pool(
-        "hdbsql://USER:PASSWORD@HOST:30015",
-        max_size=10,
-        connection_timeout=30
-    )
+    # Builder pattern for pools
+    pool = (ConnectionPoolBuilder()
+        .url("hdbsql://USER:PASSWORD@HOST:30015")
+        .max_size(10)
+        .tls(TlsConfig.with_system_roots())
+        .network_group("production")
+        .build())
 
     async with pool.acquire() as conn:
         reader = await conn.execute_arrow(
@@ -247,6 +589,26 @@ async def main():
 
     status = pool.status
     print(f"Pool size: {status.size}, available: {status.available}")
+
+asyncio.run(main())
+```
+
+### Using create_pool (legacy)
+
+```python
+import asyncio
+from pyhdb_rs.aio import create_pool
+
+async def main():
+    pool = create_pool(
+        "hdbsql://USER:PASSWORD@HOST:30015",
+        max_size=10,
+        connection_timeout=30
+    )
+
+    async with pool.acquire() as conn:
+        # Use connection
+        pass
 
 asyncio.run(main())
 ```
@@ -290,7 +652,151 @@ asyncio.run(main())
 
 </details>
 
-## API Patterns
+</details>
+
+<details>
+<summary><strong>Migration Guide: v0.2.x → v0.3.0</strong></summary>
+
+### Breaking Changes
+
+#### 1. Removed `statement_cache_size` parameter
+
+The `statement_cache_size` parameter has been removed from the async `connect()` function. Statement cache size is now fixed at 100 (the default).
+
+**Before (v0.2.x):**
+```python
+from pyhdb_rs.aio import connect
+
+conn = await connect("hdbsql://user:pass@host:30015", statement_cache_size=100)
+```
+
+**After (v0.3.0):**
+```python
+from pyhdb_rs.aio import connect
+
+# statement_cache_size is always 100
+conn = await connect("hdbsql://user:pass@host:30015")
+```
+
+> [!NOTE]
+> This change only affects async connections. Sync connections never had this parameter.
+
+### New Features
+
+#### Builder API (Recommended)
+
+While the old connection methods still work, the new builder API provides more flexibility:
+
+**Old style (still supported):**
+```python
+import pyhdb_rs
+
+conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015")
+```
+
+**New style (recommended):**
+```python
+from pyhdb_rs import ConnectionBuilder, TlsConfig
+
+conn = (ConnectionBuilder()
+    .host("host")
+    .port(30015)
+    .credentials("user", "pass")
+    .tls(TlsConfig.with_system_roots())
+    .build())
+```
+
+**Benefits of the builder pattern:**
+- Type-safe configuration
+- More discoverable API
+- Better IDE autocomplete
+- Fine-grained control over TLS, cursor holdability, network groups
+
+#### TlsConfig
+
+v0.3.0 introduces `TlsConfig` for flexible TLS configuration:
+
+```python
+from pyhdb_rs import ConnectionBuilder, TlsConfig
+
+# Multiple ways to configure TLS
+tls = TlsConfig.from_directory("/etc/hana/certs")
+tls = TlsConfig.from_environment("HANA_CA_CERT")
+tls = TlsConfig.from_certificate(cert_pem)
+tls = TlsConfig.with_system_roots()
+tls = TlsConfig.insecure()  # Development only!
+
+conn = (ConnectionBuilder()
+    .host("hana.example.com")
+    .credentials("SYSTEM", "password")
+    .tls(tls)
+    .build())
+```
+
+#### CursorHoldability
+
+Control cursor behavior across transactions:
+
+```python
+from pyhdb_rs import ConnectionBuilder, CursorHoldability
+
+conn = (ConnectionBuilder()
+    .host("hana.example.com")
+    .credentials("SYSTEM", "password")
+    .cursor_holdability(CursorHoldability.CommitAndRollback)
+    .build())
+```
+
+#### Network Groups
+
+For HA and Scale-Out deployments:
+
+```python
+from pyhdb_rs import ConnectionBuilder
+
+conn = (ConnectionBuilder()
+    .host("hana-ha.example.com")
+    .credentials("SYSTEM", "password")
+    .network_group("production")
+    .build())
+```
+
+#### ConnectionPoolBuilder
+
+The async pool API now has a builder:
+
+**Old style (still supported):**
+```python
+from pyhdb_rs.aio import create_pool
+
+pool = create_pool("hdbsql://user:pass@host:30015", max_size=10)
+```
+
+**New style (recommended):**
+```python
+from pyhdb_rs.aio import ConnectionPoolBuilder
+from pyhdb_rs import TlsConfig
+
+pool = (ConnectionPoolBuilder()
+    .url("hdbsql://user:pass@host:30015")
+    .max_size(10)
+    .tls(TlsConfig.with_system_roots())
+    .network_group("production")
+    .build())
+```
+
+### Upgrade Checklist
+
+- [ ] Remove `statement_cache_size` from async `connect()` calls
+- [ ] Consider migrating to `ConnectionBuilder` for better configuration
+- [ ] Use `TlsConfig` for explicit TLS configuration
+- [ ] Add `network_group` if using HANA HA/Scale-Out
+- [ ] Use `ConnectionPoolBuilder` for new pool configurations
+
+</details>
+
+<details>
+<summary><strong>API Patterns & Best Practices</strong></summary>
 
 ### Arrow RecordBatchReader
 
@@ -379,7 +885,10 @@ hdb.to_hana(df, "my_table", uri, if_exists="append")
 > [!NOTE]
 > Naming difference is intentional: `write_hana()` follows Polars conventions, `to_hana()` follows pandas conventions.
 
-## Error handling
+</details>
+
+<details>
+<summary><strong>Error Handling</strong></summary>
 
 pyhdb-rs provides detailed error messages that include HANA server information for better diagnostics:
 
@@ -415,7 +924,10 @@ except pyhdb_rs.InterfaceError as e:
   - `pyhdb_rs.OperationalError` — Connection lost, timeout, server unavailable
   - `pyhdb_rs.NotSupportedError` — Unsupported operation
 
-## Connection URL format
+</details>
+
+<details>
+<summary><strong>Connection URL Format Reference</strong></summary>
 
 ```
 hdbsql://[USER[:PASSWORD]@]HOST[:PORT][/DATABASE][?OPTIONS]
@@ -464,7 +976,10 @@ Benchmarks show 2x+ performance improvement over hdbcli for bulk reads.
 
 </details>
 
-## Arrow ecosystem
+</details>
+
+<details>
+<summary><strong>Arrow Ecosystem Integration</strong></summary>
 
 Data is exported in [Apache Arrow](https://arrow.apache.org/) format, enabling zero-copy interoperability with:
 
@@ -475,6 +990,8 @@ Data is exported in [Apache Arrow](https://arrow.apache.org/) format, enabling z
 - **Serialization** — Parquet, Arrow IPC (Feather)
 
 For Rust integration examples (DataFusion, DuckDB, Parquet export), see [`hdbconnect-arrow`](crates/hdbconnect-arrow/README.md).
+
+</details>
 
 ## MSRV policy
 
