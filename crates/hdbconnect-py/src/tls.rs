@@ -22,6 +22,8 @@
 use pyo3::prelude::*;
 use pyo3::types::PyType;
 
+use crate::utils::apply_tls_to_sync_builder;
+
 /// Internal TLS configuration variant.
 #[derive(Debug, Clone)]
 pub(crate) enum TlsConfigInner {
@@ -70,23 +72,7 @@ pub struct PyTlsConfig {
 impl PyTlsConfig {
     /// Apply TLS configuration to a mutable `ConnectParamsBuilder`.
     pub(crate) fn apply_to_builder_mut(&self, builder: &mut hdbconnect::ConnectParamsBuilder) {
-        match &self.inner {
-            TlsConfigInner::Directory(path) => {
-                builder.tls_with(hdbconnect::ServerCerts::Directory(path.clone()));
-            }
-            TlsConfigInner::Environment(var) => {
-                builder.tls_with(hdbconnect::ServerCerts::Environment(var.clone()));
-            }
-            TlsConfigInner::Direct(pem) => {
-                builder.tls_with(hdbconnect::ServerCerts::Direct(pem.clone()));
-            }
-            TlsConfigInner::RootCertificates => {
-                builder.tls_with(hdbconnect::ServerCerts::RootCertificates);
-            }
-            TlsConfigInner::Insecure => {
-                builder.tls_without_server_verification();
-            }
-        }
+        apply_tls_to_sync_builder(&self.inner, builder);
     }
 }
 
@@ -328,5 +314,14 @@ mod tests {
         };
         let repr = config.__repr__();
         assert!(repr.contains("insecure"));
+    }
+
+    #[test]
+    fn test_apply_to_builder_mut() {
+        let config = PyTlsConfig {
+            inner: TlsConfigInner::RootCertificates,
+        };
+        let mut builder = hdbconnect::ConnectParams::builder();
+        config.apply_to_builder_mut(&mut builder);
     }
 }

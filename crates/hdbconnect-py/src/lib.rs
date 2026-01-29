@@ -38,6 +38,7 @@ mod private;
 pub mod reader;
 pub mod tls;
 pub mod types;
+pub mod utils;
 
 #[cfg(feature = "async")]
 pub mod async_support;
