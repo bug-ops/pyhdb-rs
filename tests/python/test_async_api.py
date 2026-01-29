@@ -42,7 +42,6 @@ class TestAsyncModuleImports:
         assert hasattr(aio, "ASYNC_AVAILABLE")
 
 
-
 class TestAsyncClassExports:
     """Tests for async class exports."""
 
