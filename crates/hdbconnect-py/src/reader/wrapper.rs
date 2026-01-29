@@ -2,6 +2,23 @@
 //!
 //! Implements __`arrow_c_stream`__ for zero-copy Arrow data transfer.
 //!
+//! # Memory Guarantees
+//!
+//! Both sync and async readers provide `O(batch_size)` memory usage through
+//! true row-by-row streaming:
+//!
+//! - **Sync API**: Uses `ResultSet::next()` iterator for streaming
+//! - **Async API**: Uses `ResultSet::next_row().await` for streaming
+//!
+//! ```python
+//! # Both APIs stream efficiently
+//! sync_conn = pyhdb_rs.connect(uri)
+//! reader = sync_conn.execute_arrow("SELECT * FROM large_table", batch_size=10000)
+//!
+//! async_conn = await pyhdb_rs.connect_async(uri)
+//! reader = await async_conn.execute_arrow("SELECT * FROM large_table", batch_size=10000)
+//! ```
+//!
 //! # Safety Model
 //!
 //! This module contains `unsafe impl Send` for `StreamingReader` and
@@ -269,7 +286,12 @@ impl PyRecordBatchReader {
         })
     }
 
-    /// WARNING: Loads ALL rows into memory. For large result sets, use sync API.
+    /// Creates a reader from async result set with true streaming semantics.
+    ///
+    /// # Memory Guarantees
+    ///
+    /// Memory usage is `O(batch_size)` - constant regardless of total row count.
+    /// Rows are fetched one-by-one via `next_row().await` and batched incrementally.
     #[cfg(feature = "async")]
     pub fn from_resultset_async(
         result_set: hdbconnect_async::ResultSet,
@@ -283,104 +305,111 @@ impl PyRecordBatchReader {
     }
 }
 
-/// Async streaming reader with channel-based backpressure.
+/// Converts conversion error to Arrow error for channel transmission.
+#[cfg(feature = "async")]
+fn to_arrow_error(e: impl std::fmt::Display) -> arrow_schema::ArrowError {
+    arrow_schema::ArrowError::ExternalError(Box::new(std::io::Error::other(e.to_string())))
+}
+
+/// Async streaming reader with true row-by-row streaming and async backpressure.
 ///
-/// Uses a bounded mpsc channel to stream batches incrementally. A background
-/// task fetches rows asynchronously and sends batches through the channel,
-/// while the iterator blocks on receiving batches. This provides:
+/// Uses `tokio::sync::mpsc` channel and `next_row().await` for efficient streaming:
 ///
-/// - **Backpressure**: Channel bounds prevent unbounded memory growth
-/// - **Incremental processing**: Consumer processes batches as they arrive
-/// - **Error propagation**: Errors are sent through the channel
+/// - `O(batch_size)` memory: Rows fetched one-by-one, not materialized
+/// - Async backpressure: `sender.send().await` pauses producer when channel full
+/// - Early termination: Consumer can stop iteration without loading all data
 ///
-/// The channel buffer size is set to 4 batches, which provides a good balance
-/// between throughput and memory usage.
+/// The channel buffer size is set to 4 batches, providing a balance between
+/// throughput (pipelining) and memory usage.
+///
+/// # Thread Safety
+///
+/// The `blocking_recv()` call in `Iterator::next` is safe because:
+/// 1. Consumer runs in Python GIL thread (not a tokio worker thread)
+/// 2. Producer runs on tokio runtime with async send semantics
+/// 3. This pattern is explicitly supported by tokio for bridging async/sync code
 #[cfg(feature = "async")]
 struct AsyncStreamingReader {
-    receiver: std::sync::mpsc::Receiver<Result<RecordBatch, arrow_schema::ArrowError>>,
+    receiver: tokio::sync::mpsc::Receiver<Result<RecordBatch, arrow_schema::ArrowError>>,
     schema: SchemaRef,
     guard: safety_validator::IterationGuard,
 }
 
-// SAFETY REVIEW: 2026-01-28
-// Reviewer: rust-architect
-// Next review: 2026-07-28 (6 months)
-// Invariants verified: [arrow-sequential, gil-sync, single-owner, lifetime-bound]
-//
 // Safety justification:
-// - AsyncStreamingReader contains only Send types (mpsc::Receiver, SchemaRef)
-// - mpsc::Receiver<T> is Send if T: Send (RecordBatch is Send)
-// - SchemaRef (Arc<Schema>) is Send + Sync
+// - AsyncStreamingReader contains only Send types:
+//   - tokio::sync::mpsc::Receiver<T> is Send if T: Send (RecordBatch is Send)
+//   - SchemaRef (Arc<Schema>) is Send + Sync
+//   - IterationGuard contains AtomicBool which is Send + Sync
 // - No shared mutable state, no thread-unsafe types, no raw pointers
 //
-// NOTE: This impl is technically unnecessary as the type should auto-derive Send,
-// but Rust cannot see through the conditional compilation. The impl is sound
-// because all contained types are inherently Send-safe.
+// The tokio channel receiver is moved into this struct and never shared.
+// All access is sequential via the Iterator trait.
 #[cfg(feature = "async")]
 unsafe impl Send for AsyncStreamingReader {}
 
 #[cfg(feature = "async")]
 impl AsyncStreamingReader {
-    /// Channel buffer size (number of batches to buffer before blocking sender).
+    /// Channel buffer size (number of batches to buffer before backpressure).
     const CHANNEL_BUFFER_SIZE: usize = 4;
 
-    fn new(result_set: hdbconnect_async::ResultSet, batch_size: usize) -> Self {
+    /// Creates async reader with true streaming semantics.
+    ///
+    /// # Memory Guarantees
+    ///
+    /// Memory usage is `O(batch_size)` - constant regardless of total row count.
+    /// Uses `next_row().await` to fetch rows incrementally, never materializing
+    /// the entire result set.
+    fn new(mut result_set: hdbconnect_async::ResultSet, batch_size: usize) -> Self {
         let schema = Self::build_schema(&result_set);
         let config = BatchConfig::with_batch_size(batch_size);
 
-        // Create bounded channel for backpressure
-        let (sender, receiver) = std::sync::mpsc::sync_channel(Self::CHANNEL_BUFFER_SIZE);
+        // tokio::sync::mpsc for async producer with backpressure
+        let (sender, receiver) = tokio::sync::mpsc::channel(Self::CHANNEL_BUFFER_SIZE);
 
-        // Clone schema for the background task
         let schema_clone = Arc::clone(&schema);
 
-        // Spawn background task to fetch and process rows
+        // Spawn streaming producer task
         tokio::task::spawn(async move {
             let mut processor = HanaBatchProcessor::new(schema_clone, config);
 
-            // Fetch rows asynchronously
-            match result_set.into_rows().await {
-                Ok(rows) => {
-                    for row in rows {
+            // True streaming: fetch rows one-by-one via next_row().await
+            loop {
+                match result_set.next_row().await {
+                    Ok(Some(row)) => {
                         match processor.process_row(&row) {
                             Ok(Some(batch)) => {
-                                // Send batch, stop if receiver is dropped
-                                if sender.send(Ok(batch)).is_err() {
-                                    return;
+                                // Async send with backpressure - pauses if channel full
+                                if sender.send(Ok(batch)).await.is_err() {
+                                    return; // Consumer dropped, stop producing
                                 }
                             }
-                            Ok(None) => {
-                                // Continue accumulating rows
-                            }
+                            Ok(None) => {}
                             Err(e) => {
-                                let _ = sender.send(Err(arrow_schema::ArrowError::ExternalError(
-                                    Box::new(std::io::Error::other(e.to_string())),
-                                )));
+                                let _ = sender.send(Err(to_arrow_error(e))).await;
                                 return;
                             }
                         }
                     }
-
-                    // Flush remaining rows
-                    match processor.flush() {
-                        Ok(Some(batch)) => {
-                            let _ = sender.send(Ok(batch));
+                    Ok(None) => {
+                        // End of result set - flush remaining buffered rows
+                        match processor.flush() {
+                            Ok(Some(final_batch)) => {
+                                let _ = sender.send(Ok(final_batch)).await;
+                            }
+                            Err(e) => {
+                                let _ = sender.send(Err(to_arrow_error(e))).await;
+                            }
+                            Ok(None) => {}
                         }
-                        Ok(None) => {}
-                        Err(e) => {
-                            let _ = sender.send(Err(arrow_schema::ArrowError::ExternalError(
-                                Box::new(std::io::Error::other(e.to_string())),
-                            )));
-                        }
+                        return;
+                    }
+                    Err(e) => {
+                        let _ = sender.send(Err(to_arrow_error(e))).await;
+                        return;
                     }
                 }
-                Err(e) => {
-                    let _ = sender.send(Err(arrow_schema::ArrowError::ExternalError(Box::new(
-                        std::io::Error::other(e.to_string()),
-                    ))));
-                }
             }
-            // Sender drops here, signaling end of stream
+            // Sender drops on function return (consumer dropped or error occurred)
         });
 
         Self {
@@ -407,8 +436,11 @@ impl Iterator for AsyncStreamingReader {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.guard.begin_iteration();
-        // Block until a batch is available or the channel is closed
-        let result = self.receiver.recv().ok();
+        // blocking_recv() is safe here because:
+        // 1. Consumer runs in Python GIL thread (not tokio worker)
+        // 2. Producer is on tokio runtime with async send
+        // 3. This pattern is the recommended way to bridge async/sync in tokio
+        let result = self.receiver.blocking_recv();
         self.guard.end_iteration();
         result
     }

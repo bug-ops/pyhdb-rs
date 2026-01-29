@@ -24,7 +24,6 @@ async = [
     "dep:pyo3-async-runtimes",
     "dep:tokio",
     "dep:deadpool",
-    "dep:lru",
     "hdbconnect-arrow/async",
 ]
 
@@ -33,6 +32,7 @@ arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 hdbconnect = { workspace = true }
 hdbconnect-arrow = { workspace = true }
+lru = { workspace = true }
 parking_lot = { workspace = true }
 pyo3 = { workspace = true, features = ["extension-module", "abi3-py312", "generate-import-lib"] }
 pyo3-arrow = { workspace = true }
@@ -43,7 +43,6 @@ url = { workspace = true }
 # Async dependencies (optional)
 deadpool = { workspace = true, optional = true, features = ["rt_tokio_1", "managed"] }
 hdbconnect_async = { workspace = true, optional = true }
-lru = { workspace = true, optional = true }
 pyo3-async-runtimes = { workspace = true, optional = true, features = ["tokio-runtime"] }
 tokio = { workspace = true, optional = true, features = ["rt-multi-thread", "sync"] }
 

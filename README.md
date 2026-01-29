@@ -191,6 +191,11 @@ pyhdb-rs supports async/await operations for non-blocking database access.
 > [!NOTE]
 > Async support requires the `async` extra: `uv pip install pyhdb_rs[async]`
 
+> [!WARNING]
+> **Async API Memory Behavior**: The async `execute_arrow()` loads ALL rows into
+> memory before streaming batches. For large datasets (>100K rows), use the sync
+> API for true streaming with O(batch_size) memory usage.
+
 ### Basic async usage
 
 ```python
@@ -333,6 +338,27 @@ cursor.execute(
 )
 df = pl.from_arrow(cursor.fetch_arrow())
 ```
+
+### Connection Validation
+
+Check if a connection is still valid before use:
+
+```python
+# Sync API
+conn = pyhdb_rs.connect("hdbsql://USER:PASSWORD@HOST:30015")
+if not conn.is_valid():
+    conn = pyhdb_rs.connect("hdbsql://USER:PASSWORD@HOST:30015")  # Reconnect
+
+# Async API
+async with await connect("hdbsql://USER:PASSWORD@HOST:30015") as conn:
+    if not await conn.is_valid():
+        # Handle invalid connection
+        pass
+```
+
+The `is_valid(check_connection=True)` method:
+- When `check_connection=True` (default): Executes `SELECT 1 FROM DUMMY` to verify connection is alive
+- When `check_connection=False`: Only checks internal state (no network round-trip)
 
 ### Write Methods
 

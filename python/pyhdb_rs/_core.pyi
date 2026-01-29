@@ -5,7 +5,7 @@ This file provides type hints for IDE support and static analysis.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Awaitable, Iterator, Sequence
 from types import TracebackType
 from typing import Any, Literal
 
@@ -24,6 +24,108 @@ paramstyle: Literal["qmark"]
 
 __version__: str
 """Package version string."""
+
+# =====================================================================
+# ConnectionConfig
+# =====================================================================
+
+class ConnectionConfig:
+    """Configuration for SAP HANA connection tuning.
+
+    Use with connect() or create_pool() to customize connection behavior.
+    All parameters have sensible defaults matching hdbconnect behavior.
+
+    Example::
+
+        config = ConnectionConfig(
+            fetch_size=50000,           # Larger batches for bulk reads
+            lob_read_length=10_000_000, # 10MB LOB chunks
+            read_timeout=60.0,          # 60 second timeout
+        )
+        conn = connect("hdbsql://...", config=config)
+    """
+
+    DEFAULT_FETCH_SIZE: int
+    """Default fetch size (rows per network round-trip)."""
+
+    DEFAULT_LOB_READ_LENGTH: int
+    """Default LOB read length in bytes."""
+
+    DEFAULT_LOB_WRITE_LENGTH: int
+    """Default LOB write length in bytes."""
+
+    DEFAULT_MAX_BUFFER_SIZE: int
+    """Default maximum buffer size."""
+
+    DEFAULT_MIN_COMPRESSION_SIZE: int
+    """Default minimum compression size threshold."""
+
+    MIN_BUFFER_SIZE: int
+    """Minimum buffer size (cannot go below this)."""
+
+    def __init__(
+        self,
+        *,
+        fetch_size: int | None = None,
+        lob_read_length: int | None = None,
+        lob_write_length: int | None = None,
+        max_buffer_size: int | None = None,
+        min_compression_size: int | None = None,
+        read_timeout: float | None = None,
+    ) -> None:
+        """Create connection configuration.
+
+        Args:
+            fetch_size: Rows fetched per network round-trip (default: 10,000).
+                Higher values reduce round-trips but increase memory.
+                Recommended range: 1,000 - 100,000.
+            lob_read_length: Bytes (or chars for NCLOB) per LOB read (default: ~16MB).
+                Controls LOB fetch chunk size.
+            lob_write_length: Bytes per LOB write (default: ~16MB).
+                Controls LOB upload chunk size.
+            max_buffer_size: Max connection buffer size in bytes (default: 128KB).
+                Oversized buffers shrink back to this after use.
+            min_compression_size: Threshold for request compression (default: 400 bytes).
+                Requests larger than this may be compressed.
+            read_timeout: Network read timeout in seconds (default: None = no timeout).
+                Connection dropped if response takes longer.
+
+        Raises:
+            ProgrammingError: If any parameter is invalid.
+        """
+        ...
+
+    @property
+    def fetch_size(self) -> int | None:
+        """Rows fetched per network round-trip (None = use default)."""
+        ...
+
+    @property
+    def lob_read_length(self) -> int | None:
+        """Bytes per LOB read (None = use default)."""
+        ...
+
+    @property
+    def lob_write_length(self) -> int | None:
+        """Bytes per LOB write (None = use default)."""
+        ...
+
+    @property
+    def max_buffer_size(self) -> int | None:
+        """Max connection buffer size in bytes (None = use default)."""
+        ...
+
+    @property
+    def min_compression_size(self) -> int | None:
+        """Threshold for request compression (None = use default)."""
+        ...
+
+    @property
+    def read_timeout(self) -> float | None:
+        """Network read timeout in seconds (None = no timeout)."""
+        ...
+
+    def __repr__(self) -> str: ...
 
 # =====================================================================
 # Connection
@@ -56,6 +158,69 @@ class Connection:
         """Check if connection is open."""
         ...
 
+    @property
+    def fetch_size(self) -> int:
+        """Current fetch size (rows per network round-trip)."""
+        ...
+
+    @fetch_size.setter
+    def fetch_size(self, value: int) -> None:
+        """Set fetch size at runtime.
+
+        Raises:
+            ProgrammingError: If value is 0
+            OperationalError: If connection is closed
+        """
+        ...
+
+    @property
+    def read_timeout(self) -> float | None:
+        """Current read timeout in seconds (None = no timeout)."""
+        ...
+
+    @read_timeout.setter
+    def read_timeout(self, value: float | None) -> None:
+        """Set read timeout at runtime.
+
+        Args:
+            value: Timeout in seconds, or None to disable
+
+        Raises:
+            ProgrammingError: If value is negative
+            OperationalError: If connection is closed
+        """
+        ...
+
+    @property
+    def lob_read_length(self) -> int:
+        """Current LOB read length."""
+        ...
+
+    @lob_read_length.setter
+    def lob_read_length(self, value: int) -> None:
+        """Set LOB read length at runtime.
+
+        Raises:
+            ProgrammingError: If value is 0
+            OperationalError: If connection is closed
+        """
+        ...
+
+    @property
+    def lob_write_length(self) -> int:
+        """Current LOB write length."""
+        ...
+
+    @lob_write_length.setter
+    def lob_write_length(self, value: int) -> None:
+        """Set LOB write length at runtime.
+
+        Raises:
+            ProgrammingError: If value is 0
+            OperationalError: If connection is closed
+        """
+        ...
+
     def __init__(self, url: str) -> None:
         """Create a new connection.
 
@@ -82,6 +247,18 @@ class Connection:
 
     def close(self) -> None:
         """Close the connection."""
+        ...
+
+    def is_valid(self, check_connection: bool = True) -> bool:
+        """Check if connection is valid.
+
+        Args:
+            check_connection: If True (default), executes SELECT 1 FROM DUMMY
+                to verify the connection is alive.
+
+        Returns:
+            True if connection is valid, False otherwise.
+        """
         ...
 
     def execute_arrow(
@@ -379,11 +556,16 @@ class RecordBatchReader:
 # Module-level connect function
 # =====================================================================
 
-def connect(url: str) -> Connection:
+def connect(
+    url: str,
+    *,
+    config: ConnectionConfig | None = None,
+) -> Connection:
     """Connect to a SAP HANA database.
 
     Args:
         url: Connection URL in format hdbsql://user:pass@host:port
+        config: Optional connection configuration for tuning performance
 
     Returns:
         Connection object
@@ -395,6 +577,10 @@ def connect(url: str) -> Connection:
     Example::
 
         conn = pyhdb_rs.connect("hdbsql://SYSTEM:password@localhost:39017")
+
+        # With configuration
+        config = ConnectionConfig(fetch_size=50000, read_timeout=60.0)
+        conn = pyhdb_rs.connect("hdbsql://...", config=config)
     """
     ...
 
@@ -475,3 +661,157 @@ class NotSupportedError(DatabaseError):
     """
 
     ...
+
+# =====================================================================
+# Async support (when 'async' feature enabled)
+# =====================================================================
+
+ASYNC_AVAILABLE: bool
+"""Whether async support is available."""
+
+class AsyncConnection:
+    """Async SAP HANA database connection."""
+
+    @classmethod
+    async def connect(
+        cls,
+        url: str,
+        *,
+        autocommit: bool = True,
+        config: ConnectionConfig | None = None,
+        statement_cache_size: int = 0,
+    ) -> AsyncConnection:
+        """Connect to HANA database asynchronously."""
+        ...
+
+    @property
+    def autocommit(self) -> bool: ...
+    @autocommit.setter
+    def autocommit(self, value: bool) -> None: ...
+    @property
+    def is_connected(self) -> Awaitable[bool]: ...
+    @property
+    def fetch_size(self) -> Awaitable[int]: ...
+    async def set_fetch_size(self, value: int) -> None: ...
+    @property
+    def read_timeout(self) -> Awaitable[float | None]: ...
+    async def set_read_timeout(self, value: float | None) -> None: ...
+    @property
+    def lob_read_length(self) -> Awaitable[int]: ...
+    async def set_lob_read_length(self, value: int) -> None: ...
+    @property
+    def lob_write_length(self) -> Awaitable[int]: ...
+    async def set_lob_write_length(self, value: int) -> None: ...
+    def cursor(self) -> AsyncCursor: ...
+    async def close(self) -> None: ...
+    async def commit(self) -> None: ...
+    async def rollback(self) -> None: ...
+    async def is_valid(self, check_connection: bool = True) -> bool: ...
+    async def execute_arrow(self, sql: str, batch_size: int = 65536) -> RecordBatchReader: ...
+    async def __aenter__(self) -> AsyncConnection: ...
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> Literal[False]: ...
+    def __repr__(self) -> str: ...
+
+class AsyncCursor:
+    """Async database cursor."""
+
+    @property
+    def description(
+        self,
+    ) -> list[tuple[str, int, None, int | None, int | None, int | None, bool]] | None: ...
+    @property
+    def rowcount(self) -> int: ...
+    @property
+    def arraysize(self) -> int: ...
+    @arraysize.setter
+    def arraysize(self, value: int) -> None: ...
+    async def execute(
+        self,
+        sql: str,
+        parameters: Sequence[Any] | dict[str, Any] | None = None,
+    ) -> None: ...
+    async def executemany(
+        self,
+        sql: str,
+        seq_of_parameters: Sequence[Sequence[Any]] | None = None,
+    ) -> None: ...
+    async def fetchone(self) -> tuple[Any, ...] | None: ...
+    async def fetchmany(self, size: int | None = None) -> list[tuple[Any, ...]]: ...
+    async def fetchall(self) -> list[tuple[Any, ...]]: ...
+    async def close(self) -> None: ...
+    async def execute_arrow(self, sql: str, batch_size: int = 65536) -> RecordBatchReader: ...
+    def __aiter__(self) -> AsyncCursor: ...
+    async def __anext__(self) -> tuple[Any, ...]: ...
+    async def __aenter__(self) -> AsyncCursor: ...
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> Literal[False]: ...
+    def __repr__(self) -> str: ...
+
+class ConnectionPool:
+    """Async connection pool."""
+
+    def __init__(
+        self,
+        url: str,
+        *,
+        max_size: int = 10,
+        min_idle: int | None = None,
+        connection_timeout: int = 30,
+        config: ConnectionConfig | None = None,
+    ) -> None: ...
+    async def acquire(self) -> PooledConnection: ...
+    @property
+    def status(self) -> PoolStatus: ...
+    @property
+    def max_size(self) -> int: ...
+    async def close(self) -> None: ...
+    def __repr__(self) -> str: ...
+
+class PooledConnection:
+    """A connection borrowed from the pool."""
+
+    @property
+    def fetch_size(self) -> Awaitable[int]: ...
+    async def set_fetch_size(self, value: int) -> None: ...
+    @property
+    def read_timeout(self) -> Awaitable[float | None]: ...
+    async def set_read_timeout(self, value: float | None) -> None: ...
+    @property
+    def lob_read_length(self) -> Awaitable[int]: ...
+    async def set_lob_read_length(self, value: int) -> None: ...
+    @property
+    def lob_write_length(self) -> Awaitable[int]: ...
+    async def set_lob_write_length(self, value: int) -> None: ...
+    async def execute_arrow(self, sql: str, batch_size: int = 65536) -> RecordBatchReader: ...
+    async def cursor(self) -> AsyncCursor: ...
+    async def commit(self) -> None: ...
+    async def rollback(self) -> None: ...
+    async def is_valid(self, check_connection: bool = True) -> bool: ...
+    async def __aenter__(self) -> PooledConnection: ...
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> Literal[False]: ...
+    async def __repr__(self) -> str: ...
+
+class PoolStatus:
+    """Pool status information."""
+
+    @property
+    def size(self) -> int: ...
+    @property
+    def available(self) -> int: ...
+    @property
+    def max_size(self) -> int: ...
+    def __repr__(self) -> str: ...

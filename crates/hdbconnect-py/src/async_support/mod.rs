@@ -11,7 +11,8 @@
 //!
 //! async def main():
 //!     async with await connect("hdbsql://user:pass@host:30015") as conn:
-//!         df = await conn.execute_polars("SELECT * FROM sales")
+//!         reader = await conn.execute_arrow("SELECT * FROM sales")
+//!         df = pl.from_arrow(reader)
 //!
 //!     pool = create_pool("hdbsql://user:pass@host:30015", max_size=10)
 //!     async with pool.acquire() as conn:
@@ -19,6 +20,11 @@
 //!
 //! asyncio.run(main())
 //! ```
+//!
+//! # Statement Cache
+//!
+//! Both `AsyncConnection` and `PooledConnection` include prepared statement
+//! caching. Configure via `ConnectionConfig(max_cached_statements=N)`.
 
 // PyO3 async FFI captures connection state in futures; boxing would add unnecessary overhead.
 // These futures necessarily hold Arc<TokioMutex<T>> and connection state for Python interop.
@@ -43,13 +49,8 @@ pub mod common;
 pub mod connection;
 pub mod cursor;
 pub mod pool;
-pub mod statement_cache;
 
 pub use common::ConnectionState;
 pub use connection::{AsyncConnectionInner, AsyncPyConnection, SharedAsyncConnection};
 pub use cursor::AsyncPyCursor;
 pub use pool::{HanaConnectionManager, PoolConfig, PooledConnection, PyConnectionPool};
-pub use statement_cache::{CacheStats, PreparedStatementCache};
-
-#[cfg(test)]
-mod tests;

@@ -1,8 +1,21 @@
-//! Type-safe connection builder with phantom types.
+//! Type-safe connection builders with phantom types.
 //!
-//! Enforces that host and credentials are set before building.
+//! Provides both sync and async connection builders that enforce at compile-time
+//! that host and credentials are set before building.
+//!
+//! # Typestate Pattern
+//!
+//! The builders use phantom types to track whether required parameters have been set:
+//! - `MissingHost` / `HasHost` - tracks if host is configured
+//! - `MissingCredentials` / `HasCredentials` - tracks if credentials are configured
+//!
+//! The `build()` and `connect()` methods are only available when both host and credentials
+//! are set, preventing invalid connection attempts at compile time.
 
 use std::marker::PhantomData;
+
+#[cfg(feature = "async")]
+use hdbconnect::ConnectionConfiguration;
 
 use crate::error::PyHdbError;
 use crate::private::sealed::Sealed;
@@ -229,9 +242,205 @@ impl ConnectionBuilder<HasHost, HasCredentials> {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// AsyncConnectionBuilder (async feature only)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Async-aware connection builder with configuration support.
+///
+/// Wraps `ConnectionBuilder` and adds async connection methods with optional
+/// configuration support. Uses the same typestate pattern for compile-time safety.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use hdbconnect_py::connection::AsyncConnectionBuilder;
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// // From URL (most common)
+/// let conn = AsyncConnectionBuilder::from_url("hdbsql://user:pass@host:30015")?
+///     .connect()
+///     .await?;
+///
+/// // With configuration
+/// let config = hdbconnect::ConnectionConfiguration::default();
+/// let conn = AsyncConnectionBuilder::from_url("hdbsql://user:pass@host:30015")?
+///     .with_config(&config)
+///     .connect()
+///     .await?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Programmatic Construction
+///
+/// ```rust,ignore
+/// use hdbconnect_py::connection::AsyncConnectionBuilder;
+///
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let conn = AsyncConnectionBuilder::new()
+///     .host("localhost")
+///     .port(30015)
+///     .credentials("user", "password")
+///     .tls(true)
+///     .connect()
+///     .await?;
+/// # Ok(())
+/// # }
+/// ```
+#[cfg(feature = "async")]
+#[derive(Debug)]
+pub struct AsyncConnectionBuilder<H: BuilderState, C: BuilderState> {
+    inner: ConnectionBuilder<H, C>,
+    config: Option<ConnectionConfiguration>,
+}
+
+#[cfg(feature = "async")]
+impl Default for AsyncConnectionBuilder<MissingHost, MissingCredentials> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "async")]
+impl AsyncConnectionBuilder<MissingHost, MissingCredentials> {
+    /// Create a new async connection builder.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            inner: ConnectionBuilder::new(),
+            config: None,
+        }
+    }
+
+    /// Parse a connection URL.
+    ///
+    /// Format: `hdbsql://user:password@host:port[/database]`
+    ///
+    /// # Errors
+    ///
+    /// Returns error if URL is invalid.
+    pub fn from_url(
+        url: &str,
+    ) -> Result<AsyncConnectionBuilder<HasHost, HasCredentials>, PyHdbError> {
+        let inner = ConnectionBuilder::from_url(url)?;
+        Ok(AsyncConnectionBuilder {
+            inner,
+            config: None,
+        })
+    }
+}
+
+#[cfg(feature = "async")]
+impl<C: BuilderState> AsyncConnectionBuilder<MissingHost, C> {
+    /// Set the host.
+    #[must_use]
+    pub fn host(self, host: impl Into<String>) -> AsyncConnectionBuilder<HasHost, C> {
+        AsyncConnectionBuilder {
+            inner: self.inner.host(host),
+            config: self.config,
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+impl<H: BuilderState> AsyncConnectionBuilder<H, MissingCredentials> {
+    /// Set the credentials.
+    #[must_use]
+    pub fn credentials(
+        self,
+        user: impl Into<String>,
+        password: impl Into<String>,
+    ) -> AsyncConnectionBuilder<H, HasCredentials> {
+        AsyncConnectionBuilder {
+            inner: self.inner.credentials(user, password),
+            config: self.config,
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+impl<H: BuilderState, C: BuilderState> AsyncConnectionBuilder<H, C> {
+    /// Set the port.
+    #[must_use]
+    pub fn port(self, port: u16) -> Self {
+        Self {
+            inner: self.inner.port(port),
+            config: self.config,
+        }
+    }
+
+    /// Set the database name.
+    #[must_use]
+    pub fn database(self, database: impl Into<String>) -> Self {
+        Self {
+            inner: self.inner.database(database),
+            config: self.config,
+        }
+    }
+
+    /// Enable TLS.
+    #[must_use]
+    pub fn tls(self, enabled: bool) -> Self {
+        Self {
+            inner: self.inner.tls(enabled),
+            config: self.config,
+        }
+    }
+
+    /// Set connection configuration.
+    ///
+    /// Configuration includes fetch size, LOB settings, timeouts, etc.
+    #[must_use]
+    pub fn with_config(mut self, config: &ConnectionConfiguration) -> Self {
+        self.config = Some(config.clone());
+        self
+    }
+}
+
+#[cfg(feature = "async")]
+impl AsyncConnectionBuilder<HasHost, HasCredentials> {
+    /// Build connection parameters.
+    ///
+    /// Only available when both host and credentials are set.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if parameters are invalid.
+    pub fn build(self) -> Result<hdbconnect::ConnectParams, PyHdbError> {
+        self.inner.build()
+    }
+
+    /// Connect to the database asynchronously.
+    ///
+    /// Only available when both host and credentials are set.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if connection fails.
+    pub async fn connect(self) -> Result<hdbconnect_async::Connection, PyHdbError> {
+        let params = self.inner.build()?;
+
+        let connection = match self.config {
+            Some(cfg) => hdbconnect_async::Connection::with_configuration(params, &cfg)
+                .await
+                .map_err(|e| PyHdbError::operational(e.to_string()))?,
+            None => hdbconnect_async::Connection::new(params)
+                .await
+                .map_err(|e| PyHdbError::operational(e.to_string()))?,
+        };
+
+        Ok(connection)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // ConnectionBuilder Tests
+    // ═══════════════════════════════════════════════════════════════════════════
 
     #[test]
     fn test_builder_from_url() {
@@ -250,7 +459,7 @@ mod tests {
         let _builder = ConnectionBuilder::new()
             .host("localhost")
             .port(30015)
-            .credentials("user", "pass")
+            .credentials("test_user", "test_password")
             .database("mydb")
             .tls(true);
         // Type system ensures this is ConnectionBuilder<HasHost, HasCredentials>
@@ -314,5 +523,141 @@ mod tests {
         let _has_host: HasHost = Default::default();
         let _missing_creds: MissingCredentials = Default::default();
         let _has_creds: HasCredentials = Default::default();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // AsyncConnectionBuilder Tests (async feature only)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_from_url() {
+        let builder = AsyncConnectionBuilder::from_url("hdbsql://user:pass@localhost:30015/mydb");
+        assert!(builder.is_ok());
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_missing_host() {
+        let result = AsyncConnectionBuilder::from_url("hdbsql://user:pass@/mydb");
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_fluent() {
+        let _builder = AsyncConnectionBuilder::new()
+            .host("localhost")
+            .port(30015)
+            .credentials("test_user", "test_password")
+            .database("mydb")
+            .tls(true);
+        // Type system ensures this is AsyncConnectionBuilder<HasHost, HasCredentials>
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_missing_username() {
+        let result = AsyncConnectionBuilder::from_url("hdbsql://:pass@localhost:30015");
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_missing_password() {
+        let result = AsyncConnectionBuilder::from_url("hdbsql://user@localhost:30015");
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_with_tls_scheme() {
+        let builder = AsyncConnectionBuilder::from_url("hdbsqls://user:pass@localhost:30015");
+        assert!(builder.is_ok());
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_without_database() {
+        let builder = AsyncConnectionBuilder::from_url("hdbsql://user:pass@localhost:30015");
+        assert!(builder.is_ok());
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_default_port() {
+        let builder = AsyncConnectionBuilder::from_url("hdbsql://user:pass@localhost");
+        assert!(builder.is_ok());
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_default() {
+        let builder = AsyncConnectionBuilder::<MissingHost, MissingCredentials>::default();
+        let debug_str = format!("{:?}", builder);
+        assert!(debug_str.contains("AsyncConnectionBuilder"));
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_invalid_url() {
+        let result = AsyncConnectionBuilder::from_url("not-a-valid-url");
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_with_config() {
+        let config = ConnectionConfiguration::default();
+        let builder = AsyncConnectionBuilder::from_url("hdbsql://user:pass@localhost:30015")
+            .unwrap()
+            .with_config(&config);
+        assert!(builder.config.is_some());
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_build_params() {
+        let result = AsyncConnectionBuilder::from_url("hdbsql://user:pass@localhost:30015")
+            .unwrap()
+            .build();
+        assert!(result.is_ok());
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_programmatic_build() {
+        let result = AsyncConnectionBuilder::new()
+            .host("localhost")
+            .port(30015)
+            .credentials("test_user", "test_password")
+            .database("mydb")
+            .build();
+        assert!(result.is_ok());
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_config_chaining() {
+        let config = ConnectionConfiguration::default();
+        let builder = AsyncConnectionBuilder::new()
+            .host("localhost")
+            .credentials("test_user", "test_password")
+            .port(30015)
+            .database("mydb")
+            .tls(false)
+            .with_config(&config);
+
+        assert!(builder.config.is_some());
+        let debug_str = format!("{:?}", builder);
+        assert!(debug_str.contains("AsyncConnectionBuilder"));
+    }
+
+    #[cfg(feature = "async")]
+    #[test]
+    fn test_async_builder_without_config() {
+        let builder =
+            AsyncConnectionBuilder::from_url("hdbsql://user:pass@localhost:30015").unwrap();
+        assert!(builder.config.is_none());
     }
 }

@@ -17,6 +17,17 @@ Basic usage::
             print(row)
     conn.close()
 
+Connection with configuration::
+
+    from pyhdb_rs import ConnectionConfig, connect
+
+    config = ConnectionConfig(
+        fetch_size=50000,           # Larger batches for bulk reads
+        lob_read_length=10_000_000, # 10MB LOB chunks
+        read_timeout=60.0,          # 60 second timeout
+    )
+    conn = connect("hdbsql://user:pass@host:39017", config=config)
+
 Polars integration::
 
     import polars as pl
@@ -37,6 +48,7 @@ from __future__ import annotations
 from pyhdb_rs._core import (
     # Classes
     Connection,
+    ConnectionConfig,
     Cursor,
     DatabaseError,
     DataError,
@@ -86,6 +98,7 @@ __all__ = [
     # Connection
     "connect",
     "Connection",
+    "ConnectionConfig",
     "Cursor",
     "RecordBatchReader",
     # Module attributes

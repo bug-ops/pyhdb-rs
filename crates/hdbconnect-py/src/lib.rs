@@ -29,6 +29,7 @@
 
 use pyo3::prelude::*;
 
+pub mod config;
 pub mod connection;
 pub mod cursor;
 pub mod error;
@@ -40,10 +41,9 @@ pub mod types;
 pub mod async_support;
 
 #[cfg(feature = "async")]
-pub use async_support::{
-    AsyncPyConnection, AsyncPyCursor, PooledConnection, PreparedStatementCache, PyConnectionPool,
-};
-pub use connection::PyConnection;
+pub use async_support::{AsyncPyConnection, AsyncPyCursor, PooledConnection, PyConnectionPool};
+pub use config::PyConnectionConfig;
+pub use connection::{PyCacheStats, PyConnection};
 pub use cursor::PyCursor;
 pub use error::PyHdbError;
 pub use reader::PyRecordBatchReader;
@@ -59,10 +59,11 @@ const THREADSAFETY: i32 = 2;
 /// "qmark" = Question mark style (SELECT * FROM t WHERE id = ?)
 const PARAMSTYLE: &str = "qmark";
 
-/// Connect to a HANA database.
+/// Connect to a HANA database with optional configuration.
 ///
 /// Args:
 ///     url: Connection URL (hdbsql://user:pass@host:port[/database])
+///     config: Optional connection configuration for tuning performance
 ///
 /// Returns:
 ///     Connection object
@@ -70,10 +71,23 @@ const PARAMSTYLE: &str = "qmark";
 /// Raises:
 ///     `InterfaceError`: If URL is invalid
 ///     `OperationalError`: If connection fails
+///
+/// Example:
+///     ```python
+///     # Basic connection
+///     conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015")
+///
+///     # Connection with custom configuration
+///     config = ConnectionConfig(fetch_size=50000, read_timeout=60.0)
+///     conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015", config=config)
+///     ```
 #[pyfunction]
-#[pyo3(signature = (url))]
-fn connect(url: &str) -> PyResult<PyConnection> {
-    PyConnection::new(url)
+#[pyo3(signature = (url, *, config=None))]
+fn connect(url: &str, config: Option<&PyConnectionConfig>) -> PyResult<PyConnection> {
+    config.map_or_else(
+        || PyConnection::new(url),
+        |cfg| PyConnection::with_config(url, cfg),
+    )
 }
 
 /// HANA Python driver module.
@@ -98,6 +112,8 @@ fn pyhdb_rs_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyConnection>()?;
     m.add_class::<PyCursor>()?;
     m.add_class::<PyRecordBatchReader>()?;
+    m.add_class::<PyConnectionConfig>()?;
+    m.add_class::<PyCacheStats>()?;
 
     // Async classes (when feature enabled)
     #[cfg(feature = "async")]

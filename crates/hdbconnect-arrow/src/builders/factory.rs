@@ -33,6 +33,8 @@ pub struct BuilderFactory {
     string_capacity: usize,
     /// Bytes to pre-allocate for binary data.
     binary_capacity: usize,
+    /// Maximum LOB size in bytes before rejecting.
+    max_lob_bytes: Option<usize>,
 }
 
 impl BuilderFactory {
@@ -43,6 +45,7 @@ impl BuilderFactory {
             capacity,
             string_capacity: capacity * 32, // Estimate 32 bytes per string
             binary_capacity: capacity * 64, // Estimate 64 bytes per binary
+            max_lob_bytes: None,
         }
     }
 
@@ -54,6 +57,7 @@ impl BuilderFactory {
             capacity: config.batch_size.get(),
             string_capacity: config.string_capacity,
             binary_capacity: config.binary_capacity,
+            max_lob_bytes: config.max_lob_bytes,
         }
     }
 
@@ -68,6 +72,13 @@ impl BuilderFactory {
     #[must_use]
     pub const fn with_binary_capacity(mut self, capacity: usize) -> Self {
         self.binary_capacity = capacity;
+        self
+    }
+
+    /// Set the maximum LOB size in bytes.
+    #[must_use]
+    pub const fn with_max_lob_bytes(mut self, max: Option<usize>) -> Self {
+        self.max_lob_bytes = max;
         self
     }
 
@@ -103,20 +114,28 @@ impl BuilderFactory {
                 self.capacity,
                 self.string_capacity,
             )),
-            DataType::LargeUtf8 => Box::new(LargeStringBuilderWrapper::new(
-                self.capacity,
-                self.string_capacity,
-            )),
+            DataType::LargeUtf8 => {
+                let mut builder =
+                    LargeStringBuilderWrapper::new(self.capacity, self.string_capacity);
+                if let Some(max) = self.max_lob_bytes {
+                    builder = builder.with_max_lob_bytes(max);
+                }
+                Box::new(builder)
+            }
 
             // Binary
             DataType::Binary => Box::new(BinaryBuilderWrapper::new(
                 self.capacity,
                 self.binary_capacity,
             )),
-            DataType::LargeBinary => Box::new(LargeBinaryBuilderWrapper::new(
-                self.capacity,
-                self.binary_capacity,
-            )),
+            DataType::LargeBinary => {
+                let mut builder =
+                    LargeBinaryBuilderWrapper::new(self.capacity, self.binary_capacity);
+                if let Some(max) = self.max_lob_bytes {
+                    builder = builder.with_max_lob_bytes(max);
+                }
+                Box::new(builder)
+            }
             DataType::FixedSizeBinary(size) => {
                 Box::new(FixedSizeBinaryBuilderWrapper::new(self.capacity, *size))
             }
@@ -180,6 +199,7 @@ mod tests {
         assert_eq!(factory.capacity, 100);
         assert_eq!(factory.string_capacity, 3200);
         assert_eq!(factory.binary_capacity, 6400);
+        assert!(factory.max_lob_bytes.is_none());
     }
 
     #[test]
@@ -188,18 +208,31 @@ mod tests {
         assert_eq!(factory.capacity, 1024);
         assert_eq!(factory.string_capacity, 1024 * 32);
         assert_eq!(factory.binary_capacity, 1024 * 64);
+        assert!(factory.max_lob_bytes.is_none());
     }
 
     #[test]
     fn test_factory_from_config() {
         let config = BatchConfig::with_batch_size(500)
             .string_capacity(10000)
-            .binary_capacity(20000);
+            .binary_capacity(20000)
+            .max_lob_bytes(Some(50_000_000));
 
         let factory = BuilderFactory::from_config(&config);
         assert_eq!(factory.capacity, 500);
         assert_eq!(factory.string_capacity, 10000);
         assert_eq!(factory.binary_capacity, 20000);
+        assert_eq!(factory.max_lob_bytes, Some(50_000_000));
+    }
+
+    #[test]
+    fn test_factory_from_config_without_lob_limit() {
+        let config = BatchConfig::with_batch_size(500)
+            .string_capacity(10000)
+            .binary_capacity(20000);
+
+        let factory = BuilderFactory::from_config(&config);
+        assert!(factory.max_lob_bytes.is_none());
     }
 
     #[test]
@@ -219,14 +252,22 @@ mod tests {
     }
 
     #[test]
+    fn test_factory_with_max_lob_bytes() {
+        let factory = BuilderFactory::new(100).with_max_lob_bytes(Some(10_000_000));
+        assert_eq!(factory.max_lob_bytes, Some(10_000_000));
+    }
+
+    #[test]
     fn test_factory_builder_chaining() {
         let factory = BuilderFactory::new(200)
             .with_string_capacity(1000)
-            .with_binary_capacity(2000);
+            .with_binary_capacity(2000)
+            .with_max_lob_bytes(Some(5_000_000));
 
         assert_eq!(factory.capacity, 200);
         assert_eq!(factory.string_capacity, 1000);
         assert_eq!(factory.binary_capacity, 2000);
+        assert_eq!(factory.max_lob_bytes, Some(5_000_000));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -328,6 +369,13 @@ mod tests {
     }
 
     #[test]
+    fn test_create_large_utf8_builder_with_lob_limit() {
+        let factory = BuilderFactory::new(100).with_max_lob_bytes(Some(1_000_000));
+        let builder = factory.create_builder(&DataType::LargeUtf8);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
     fn test_create_binary_builder() {
         let factory = BuilderFactory::new(100);
         let builder = factory.create_builder(&DataType::Binary);
@@ -337,6 +385,13 @@ mod tests {
     #[test]
     fn test_create_large_binary_builder() {
         let factory = BuilderFactory::new(100);
+        let builder = factory.create_builder(&DataType::LargeBinary);
+        assert_eq!(builder.len(), 0);
+    }
+
+    #[test]
+    fn test_create_large_binary_builder_with_lob_limit() {
+        let factory = BuilderFactory::new(100).with_max_lob_bytes(Some(1_000_000));
         let builder = factory.create_builder(&DataType::LargeBinary);
         assert_eq!(builder.len(), 0);
     }
@@ -493,12 +548,14 @@ mod tests {
     fn test_factory_clone() {
         let factory1 = BuilderFactory::new(100)
             .with_string_capacity(5000)
-            .with_binary_capacity(10000);
+            .with_binary_capacity(10000)
+            .with_max_lob_bytes(Some(1_000_000));
         let factory2 = factory1.clone();
 
         assert_eq!(factory1.capacity, factory2.capacity);
         assert_eq!(factory1.string_capacity, factory2.string_capacity);
         assert_eq!(factory1.binary_capacity, factory2.binary_capacity);
+        assert_eq!(factory1.max_lob_bytes, factory2.max_lob_bytes);
     }
 
     #[test]
