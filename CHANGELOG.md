@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Internal Refactoring:** Comprehensive DRY (Don't Repeat Yourself) violations elimination
+  - Created centralized `utils/` module to consolidate duplicate code across sync and async implementations
+  - Eliminated 303 lines of duplicated code across 8 files
+  - New module structure:
+    - `utils/validation.rs` - Centralized `VALIDATION_QUERY` constant and validation helpers (`validate_positive_u32`, `validate_non_negative_f64`)
+    - `utils/url_parser.rs` - Single `ParsedConnectionUrl` struct replacing 3 duplicate URL parsing implementations
+    - `utils/tls.rs` - Unified TLS application helpers for sync/async builders
+  - Added 23 comprehensive unit tests for new utilities
+  - No breaking changes to public API
+
+### Security
+
+- **Enhanced Password Security:** `ParsedConnectionUrl` now implements custom `Debug` trait that redacts password field
+  - Debug output shows `password: "[REDACTED]"` instead of plaintext password
+  - Prevents accidental password exposure in logs and error messages
+  - Added test coverage for password redaction
+
 ## [0.3.0]
 
 ### Added
