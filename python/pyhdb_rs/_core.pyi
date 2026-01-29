@@ -1335,17 +1335,6 @@ ASYNC_AVAILABLE: bool
 class AsyncConnection:
     """Async SAP HANA database connection."""
 
-    @classmethod
-    async def connect(
-        cls,
-        url: str,
-        *,
-        autocommit: bool = True,
-        config: ConnectionConfig | None = None,
-    ) -> AsyncConnection:
-        """Connect to HANA database asynchronously."""
-        ...
-
     @property
     def autocommit(self) -> bool: ...
     @autocommit.setter

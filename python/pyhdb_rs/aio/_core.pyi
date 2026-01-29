@@ -32,20 +32,6 @@ class AsyncConnection:
     Use AsyncConnectionBuilder to create instances.
     """
 
-    @classmethod
-    async def connect(
-        cls,
-        url: str,
-        *,
-        autocommit: bool = True,
-        config: ConnectionConfig | None = None,
-    ) -> AsyncConnection:
-        """Connect to HANA database asynchronously.
-
-        Note: Prefer using AsyncConnectionBuilder for new code.
-        """
-        ...
-
     def cursor(self) -> AsyncCursor:
         """Create a new cursor."""
         ...

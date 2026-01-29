@@ -93,12 +93,6 @@ class TestAsyncClassExports:
 class TestAsyncConnectionClassMethods:
     """Tests for AsyncConnection class method existence."""
 
-    def test_async_connection_has_connect_classmethod(self) -> None:
-        """Test that AsyncConnection has connect classmethod."""
-        from pyhdb_rs.aio import AsyncConnection
-
-        assert hasattr(AsyncConnection, "connect")
-
     def test_async_connection_has_cursor_method(self) -> None:
         """Test that AsyncConnection has cursor method."""
         from pyhdb_rs.aio import AsyncConnection

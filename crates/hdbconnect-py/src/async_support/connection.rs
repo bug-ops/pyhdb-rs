@@ -10,7 +10,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use pyo3::prelude::*;
-use pyo3::types::PyType;
 use tokio::sync::Mutex as TokioMutex;
 
 use super::common::{
@@ -18,12 +17,10 @@ use super::common::{
     rollback_impl, validate_non_negative_f64, validate_positive_u32,
 };
 use super::cursor::AsyncPyCursor;
-use crate::config::{PyArrowConfig, PyConnectionConfig};
-use crate::connection::{AsyncConnectionBuilder, PyCacheStats};
+use crate::config::PyArrowConfig;
+use crate::connection::PyCacheStats;
 use crate::error::PyHdbError;
-use crate::types::prepared_cache::{
-    CacheStatistics, DEFAULT_CACHE_CAPACITY, PreparedStatementCache,
-};
+use crate::types::prepared_cache::{CacheStatistics, PreparedStatementCache};
 
 pub type SharedAsyncConnection = Arc<TokioMutex<AsyncConnectionInner>>;
 
@@ -95,51 +92,6 @@ impl AsyncPyConnection {
 
 #[pymethods]
 impl AsyncPyConnection {
-    /// Connect to HANA database asynchronously.
-    ///
-    /// # Arguments
-    ///
-    /// * `url` - Connection URL (hdbsql://user:pass@host:port)
-    /// * `autocommit` - Enable auto-commit mode (default: True)
-    /// * `config` - Optional connection configuration for tuning performance
-    #[classmethod]
-    #[pyo3(signature = (url, *, autocommit=true, config=None))]
-    fn connect<'py>(
-        _cls: &Bound<'py, PyType>,
-        py: Python<'py>,
-        url: String,
-        autocommit: bool,
-        config: Option<PyConnectionConfig>,
-    ) -> PyResult<Bound<'py, PyAny>> {
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let builder = AsyncConnectionBuilder::from_url(&url)?;
-
-            let (connection, cache_size) = match config {
-                Some(cfg) => {
-                    let conn = builder
-                        .with_config(&cfg.to_hdbconnect_config())
-                        .connect()
-                        .await?;
-                    (conn, cfg.statement_cache_size())
-                }
-                None => (builder.connect().await?, DEFAULT_CACHE_CAPACITY),
-            };
-
-            let inner = Arc::new(TokioMutex::new(AsyncConnectionInner::Connected {
-                connection,
-            }));
-
-            let statement_cache =
-                Arc::new(TokioMutex::new(PreparedStatementCache::new(cache_size)));
-
-            Ok(Self {
-                inner,
-                autocommit,
-                statement_cache,
-            })
-        })
-    }
-
     fn cursor(&self) -> AsyncPyCursor {
         AsyncPyCursor::new(Arc::clone(&self.inner))
     }
