@@ -47,7 +47,7 @@ class TestExecuteArrowPandas:
 
     def test_execute_arrow_multiple_columns(self, hana_uri: str) -> None:
         """Test execute_arrow with multiple columns."""
-        pandas = pytest.importorskip("pandas")
+        pytest.importorskip("pandas")
         pyarrow = pytest.importorskip("pyarrow")
         from pyhdb_rs import ConnectionBuilder
 
@@ -103,7 +103,7 @@ class TestCursorFetchArrowPandas:
 
     def test_cursor_fetch_arrow_with_parameters(self, hana_uri: str) -> None:
         """Test cursor with parameters followed by fetch_arrow."""
-        pandas = pytest.importorskip("pandas")
+        pytest.importorskip("pandas")
         pyarrow = pytest.importorskip("pyarrow")
         from pyhdb_rs import ConnectionBuilder
 
