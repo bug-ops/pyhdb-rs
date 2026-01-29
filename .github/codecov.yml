@@ -1,52 +1,43 @@
-# Codecov configuration
-# https://docs.codecov.io/docs/codecovyml-reference
+# Codecov configuration for pyhdb-rs
+#
+# Excludes hdbconnect-py crate from coverage metrics because:
+# - PyO3 extension modules require Python interpreter for execution
+# - cargo llvm-cov cannot measure coverage for abi3 extension modules
+# - The crate IS tested via Python integration tests in tests/python/
+# - Unit tests exist but cannot be run via cargo test (linker errors)
+#
+# Actual coverage:
+# - hdbconnect-arrow: ~92.8% (measured with cargo llvm-cov)
+# - hdbconnect-py: tested via Python integration suite
+# - python/: 100% (measured with pytest-cov)
 
 coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+
   status:
     project:
       default:
-        target: 70%
-        threshold: 2%
+        target: 90%
+        threshold: 1%
     patch:
       default:
         target: 80%
 
-  # Per-flag coverage requirements
-  flags:
-    hdbconnect-arrow:
-      paths:
-        - crates/hdbconnect-arrow/
-      carryforward: true
-    hdbconnect-py:
-      paths:
-        - crates/hdbconnect-py/
-      carryforward: true
-    python:
-      paths:
-        - python/pyhdb_rs/
-      carryforward: true
+ignore:
+  # PyO3 extension module - cannot be measured with cargo llvm-cov
+  - "crates/hdbconnect-py/**"
 
-flag_management:
-  default_rules:
-    carryforward: true
-  individual_flags:
-    - name: hdbconnect-arrow
-      paths:
-        - crates/hdbconnect-arrow/
-    - name: hdbconnect-py
-      paths:
-        - crates/hdbconnect-py/
-    - name: python
-      paths:
-        - python/pyhdb_rs/
+  # Test utilities and benches
+  - "crates/*/benches/**"
+  - "crates/*/tests/**"
+  - "tests/**"
+
+  # Build artifacts
+  - "target/**"
 
 comment:
-  layout: "reach,diff,flags,files"
+  layout: "reach,diff,flags,tree"
   behavior: default
-  require_changes: true
-
-ignore:
-  - "tests/**/*"
-  - "benches/**/*"
-  - "**/*_test.rs"
-  - "**/tests.rs"
+  require_changes: false
