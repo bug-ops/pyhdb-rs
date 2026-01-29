@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING**: `pyhdb_rs.polars` module - Use `execute_arrow()` + `pl.from_arrow()` instead
 - **BREAKING**: `pyhdb_rs.aio.polars` module - Use async `execute_arrow()` + `pl.from_arrow()` instead
 - **BREAKING**: Convenience functions: `read_hana`, `write_hana`, `to_hana`, `scan_hana`
+- **BREAKING**: `AsyncConnection.connect()` classmethod - Use `AsyncConnectionBuilder.build()` instead
+- **BREAKING**: `ConnectionPool.__init__()` - Use `ConnectionPoolBuilder.build()` instead
 
 ### Changed
 

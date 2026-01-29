@@ -600,16 +600,16 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from pyhdb_rs.aio import ConnectionPool
+from pyhdb_rs.aio import ConnectionPoolBuilder
 from pyhdb_rs import TlsConfig
 
 async def main():
-    pool = ConnectionPool(
-        "hdbsql://USER:PASSWORD@HOST:30015",
-        max_size=10,
-        connection_timeout=30,
-        tls_config=TlsConfig.with_system_roots()
-    )
+    pool = (ConnectionPoolBuilder()
+        .url("hdbsql://USER:PASSWORD@HOST:30015")
+        .max_size(10)
+        .connection_timeout(30)
+        .tls(TlsConfig.with_system_roots())
+        .build())
 
     async with pool.acquire() as conn:
         # Use connection
@@ -626,7 +626,7 @@ asyncio.run(main())
 ```python
 import asyncio
 import polars as pl
-from pyhdb_rs.aio import ConnectionPool
+from pyhdb_rs.aio import ConnectionPoolBuilder
 
 async def fetch_sales_by_region(pool, region: str):
     async with pool.acquire() as conn:
@@ -640,7 +640,10 @@ async def fetch_sales_by_region(pool, region: str):
         return pl.from_arrow(reader)
 
 async def main():
-    pool = ConnectionPool("hdbsql://USER:PASSWORD@HOST:30015", max_size=5)
+    pool = (ConnectionPoolBuilder()
+        .url("hdbsql://USER:PASSWORD@HOST:30015")
+        .max_size(5)
+        .build())
 
     # Run multiple queries concurrently for different regions
     results = await asyncio.gather(
