@@ -40,6 +40,7 @@ pub mod types;
 pub mod async_support;
 
 #[cfg(feature = "async")]
+#[allow(deprecated)]
 pub use async_support::{
     AsyncPyConnection, AsyncPyCursor, PooledConnection, PreparedStatementCache, PyConnectionPool,
 };
