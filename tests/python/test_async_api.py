@@ -41,19 +41,6 @@ class TestAsyncModuleImports:
 
         assert hasattr(aio, "ASYNC_AVAILABLE")
 
-    def test_aio_has_connect_function(self) -> None:
-        """Test that aio module has connect function."""
-        from pyhdb_rs import aio
-
-        assert hasattr(aio, "connect")
-        assert callable(aio.connect)
-
-    def test_aio_has_create_pool_function(self) -> None:
-        """Test that aio module has create_pool function."""
-        from pyhdb_rs import aio
-
-        assert hasattr(aio, "create_pool")
-        assert callable(aio.create_pool)
 
 
 class TestAsyncClassExports:
@@ -351,12 +338,6 @@ class TestAioModuleAll:
 
         assert "connect" in aio.__all__
 
-    def test_aio_all_contains_create_pool(self) -> None:
-        """Test that __all__ contains create_pool."""
-        from pyhdb_rs import aio
-
-        assert "create_pool" in aio.__all__
-
     def test_aio_all_contains_async_connection(self) -> None:
         """Test that __all__ contains AsyncConnection."""
         from pyhdb_rs import aio
@@ -407,7 +388,7 @@ class TestCreatePoolErrors:
     def test_create_pool_invalid_url_raises_error(self) -> None:
         """Test that create_pool with invalid URL raises error."""
         import pyhdb_rs
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         with pytest.raises((pyhdb_rs.InterfaceError, pyhdb_rs.OperationalError)):
             create_pool("invalid://url")

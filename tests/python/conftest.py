@@ -74,3 +74,25 @@ def cursor(connection: pyhdb_rs.Connection) -> Generator[pyhdb_rs.Cursor, None, 
         yield cur
     finally:
         cur.close()
+
+
+def create_pool(url: str, **kwargs):
+    """Helper function for tests to create connection pool using builder.
+
+    This is a test helper that wraps ConnectionPoolBuilder for backward compatibility
+    with existing tests.
+    """
+    from pyhdb_rs.aio import ConnectionPoolBuilder
+
+    builder = ConnectionPoolBuilder().url(url)
+
+    if "max_size" in kwargs:
+        builder = builder.max_size(kwargs["max_size"])
+    if "connection_timeout" in kwargs:
+        builder = builder.connection_timeout(kwargs["connection_timeout"])
+    if "config" in kwargs:
+        builder = builder.config(kwargs["config"])
+    if "tls_config" in kwargs:
+        builder = builder.tls(kwargs["tls_config"])
+
+    return builder.build()

@@ -46,7 +46,7 @@ class TestPoolConfiguration:
     )
     def test_default_pool_config(self):
         """Test default pool configuration."""
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         url = os.environ["HANA_TEST_URI"]
         pool = create_pool(url)
@@ -59,7 +59,7 @@ class TestPoolConfiguration:
     )
     def test_custom_pool_config(self):
         """Test custom pool configuration."""
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         url = os.environ["HANA_TEST_URI"]
         pool = create_pool(url, max_size=20, connection_timeout=60)
@@ -76,7 +76,7 @@ class TestPoolStatus:
     )
     def test_pool_status_attributes(self):
         """Test that pool status has required attributes."""
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         url = os.environ["HANA_TEST_URI"]
         pool = create_pool(url, max_size=5)
@@ -109,7 +109,7 @@ class TestPoolOperations:
         """Test running concurrent queries through pool."""
         import asyncio
 
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         pool = create_pool(hana_url, max_size=3)
 
@@ -127,7 +127,7 @@ class TestPoolOperations:
     @pytest.mark.asyncio
     async def test_pool_connection_reuse(self, hana_url):
         """Test that connections are reused."""
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         pool = create_pool(hana_url, max_size=1)
 
@@ -146,7 +146,7 @@ class TestPoolOperations:
     @pytest.mark.asyncio
     async def test_pool_transaction(self, hana_url):
         """Test transaction operations through pooled connection."""
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         pool = create_pool(hana_url, max_size=1)
 
@@ -163,7 +163,7 @@ class TestPoolOperations:
     @pytest.mark.asyncio
     async def test_pool_close(self, hana_url):
         """Test closing the pool."""
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         pool = create_pool(hana_url, max_size=2)
 

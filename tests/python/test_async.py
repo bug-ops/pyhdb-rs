@@ -47,8 +47,6 @@ class TestAsyncImports:
         from pyhdb_rs import aio
 
         assert hasattr(aio, "ASYNC_AVAILABLE")
-        assert hasattr(aio, "connect")
-        assert hasattr(aio, "create_pool")
 
     def test_import_async_classes(self):
         """Test importing async classes."""
@@ -138,7 +136,7 @@ class TestAsyncPool:
 
     def test_create_pool(self, hana_url):
         """Test pool creation."""
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         pool = create_pool(hana_url, max_size=5)
         assert pool is not None
@@ -147,7 +145,7 @@ class TestAsyncPool:
     @pytest.mark.asyncio
     async def test_pool_acquire_release(self, hana_url):
         """Test acquiring and releasing connections from pool."""
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         pool = create_pool(hana_url, max_size=2)
 
@@ -162,7 +160,7 @@ class TestAsyncPool:
     @pytest.mark.asyncio
     async def test_pool_status(self, hana_url):
         """Test pool status reporting."""
-        from pyhdb_rs.aio import create_pool
+        from conftest import create_pool
 
         pool = create_pool(hana_url, max_size=3)
         status = pool.status
