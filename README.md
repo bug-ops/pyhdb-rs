@@ -29,10 +29,14 @@ uv pip install pyhdb_rs
 With optional dependencies:
 
 ```bash
-uv pip install pyhdb_rs[polars]    # Polars integration
-uv pip install pyhdb_rs[pandas]    # pandas + PyArrow
 uv pip install pyhdb_rs[async]     # Async support
-uv pip install pyhdb_rs[all]       # All integrations
+```
+
+For DataFrame libraries, install separately:
+
+```bash
+pip install polars              # Polars DataFrame library
+pip install pandas pyarrow      # pandas with Arrow support
 ```
 
 > [!IMPORTANT]

@@ -24,10 +24,14 @@ pip install pyhdb_rs
 With optional dependencies:
 
 ```bash
-pip install pyhdb_rs[polars]    # Polars integration
-pip install pyhdb_rs[pandas]    # pandas + PyArrow
 pip install pyhdb_rs[async]     # Async support
-pip install pyhdb_rs[all]       # All integrations
+```
+
+For DataFrame libraries, install separately:
+
+```bash
+pip install polars              # Polars DataFrame library
+pip install pandas pyarrow      # pandas with Arrow support
 ```
 
 > [!TIP]
