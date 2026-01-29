@@ -331,12 +331,6 @@ class TestAioModuleAll:
 
         assert "ASYNC_AVAILABLE" in aio.__all__
 
-    def test_aio_all_contains_connect(self) -> None:
-        """Test that __all__ contains connect."""
-        from pyhdb_rs import aio
-
-        assert "connect" in aio.__all__
-
     def test_aio_all_contains_async_connection(self) -> None:
         """Test that __all__ contains AsyncConnection."""
         from pyhdb_rs import aio
@@ -366,19 +360,6 @@ class TestAioModuleAll:
         from pyhdb_rs import aio
 
         assert "PoolStatus" in aio.__all__
-
-
-class TestConnectWithoutAsync:
-    """Tests for connect function behavior without async runtime."""
-
-    @pytest.mark.asyncio
-    async def test_connect_invalid_url_raises_interface_error(self) -> None:
-        """Test that connect with invalid URL raises InterfaceError."""
-        import pyhdb_rs
-        from pyhdb_rs.aio import connect
-
-        with pytest.raises(pyhdb_rs.InterfaceError):
-            await connect("invalid://url")
 
 
 class TestCreatePoolErrors:
