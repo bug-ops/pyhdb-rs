@@ -291,8 +291,7 @@ conn = (ConnectionBuilder()
     .build())
 ```
 
-> [!TIP]
-> This is the recommended approach for production deployments. Place all CA certificates in a single directory.
+**Recommended for production:** Place all CA certificates in a single directory for easy management.
 
 #### 2. From Environment Variable
 
@@ -317,8 +316,7 @@ conn = (ConnectionBuilder()
     .build())
 ```
 
-> [!NOTE]
-> Useful for containerized deployments where certificates are injected via environment variables.
+**Note:** Useful for containerized deployments where certificates are injected via environment variables.
 
 #### 3. From Certificate String
 
@@ -355,8 +353,7 @@ conn = (ConnectionBuilder()
     .build())
 ```
 
-> [!TIP]
-> Best choice when your HANA server uses a certificate signed by a well-known CA (e.g., Let's Encrypt, DigiCert).
+**Best choice:** Use this when your HANA server uses a certificate signed by a well-known CA (e.g., Let's Encrypt, DigiCert).
 
 #### 5. Insecure (development only)
 
@@ -374,8 +371,7 @@ conn = (ConnectionBuilder()
     .build())
 ```
 
-> [!CAUTION]
-> `TlsConfig.insecure()` disables server certificate verification completely. **NEVER use in production.** This makes your connection vulnerable to man-in-the-middle attacks.
+**⚠️ SECURITY WARNING:** `TlsConfig.insecure()` disables certificate verification completely. **NEVER use in production.** This makes your connection vulnerable to man-in-the-middle attacks.
 
 ### URL Scheme for TLS
 
@@ -432,8 +428,7 @@ with conn.cursor() as cur:
 | `CursorHoldability.Rollback` | Cursor held across rollbacks, closed on commit |
 | `CursorHoldability.CommitAndRollback` | Cursor held across both operations |
 
-> [!NOTE]
-> Use `CommitAndRollback` when you need to iterate over large result sets while performing intermediate commits to free locks or manage transaction size.
+**Use case:** Use `CommitAndRollback` when you need to iterate over large result sets while performing intermediate commits to free locks or manage transaction size.
 
 </details>
 
@@ -455,8 +450,7 @@ conn = (ConnectionBuilder()
     .build())
 ```
 
-> [!IMPORTANT]
-> Network groups are essential for proper routing in multi-node HANA environments. They determine which network interface the driver uses when multiple options are available.
+**Important:** Network groups are essential for proper routing in multi-node HANA environments. They determine which network interface the driver uses when multiple options are available.
 
 ### Use Cases
 
@@ -523,13 +517,9 @@ async with pool.acquire() as conn:
 
 pyhdb-rs supports async/await operations for non-blocking database access.
 
-> [!NOTE]
-> Async support requires the `async` extra: `uv pip install pyhdb_rs[async]`
+**Installation:** Async support requires the `async` extra: `uv pip install pyhdb_rs[async]`
 
-> [!WARNING]
-> **Async API Memory Behavior**: The async `execute_arrow()` loads ALL rows into
-> memory before streaming batches. For large datasets (>100K rows), use the sync
-> API for true streaming with O(batch_size) memory usage.
+**⚠️ Memory Warning:** The async `execute_arrow()` loads ALL rows into memory before streaming batches. For large datasets (>100K rows), use the sync API for true streaming with O(batch_size) memory usage.
 
 ### Basic async usage
 
@@ -701,8 +691,7 @@ for batch in reader:
 conn.close()
 ```
 
-> [!NOTE]
-> The reader is consumed after use (single-pass iterator). You cannot read from it twice.
+**Note:** The reader is consumed after use (single-pass iterator). You cannot read from it twice.
 
 ### Parameterized Queries with Arrow
 
@@ -837,8 +826,7 @@ pyhdb-rs is designed for high-performance data access:
 
 Benchmarks show 2x+ performance improvement over hdbcli for bulk reads.
 
-> [!TIP]
-> For maximum performance, use `execute_arrow()` with your Arrow-compatible library (Polars, PyArrow, pandas) for zero-copy data transfer.
+**Performance tip:** For maximum performance, use `execute_arrow()` with your Arrow-compatible library (Polars, PyArrow, pandas) for zero-copy data transfer.
 
 </details>
 
