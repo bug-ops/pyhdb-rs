@@ -29,23 +29,6 @@ Basic async usage (builder-first API)::
 
 Connection pooling::
 
-    from pyhdb_rs import ConnectionConfig
-    from pyhdb_rs.aio import ConnectionPool
-    import polars as pl
-
-    config = ConnectionConfig(fetch_size=50000, read_timeout=30.0)
-    pool = ConnectionPool("hdbsql://user:pass@host:39017", max_size=10, config=config)
-
-    async def query():
-        async with pool.acquire() as conn:
-            reader = await conn.execute_arrow("SELECT * FROM products")
-            df = pl.from_arrow(reader)
-            return df
-
-    asyncio.run(query())
-
-Connection pool builder::
-
     from pyhdb_rs import TlsConfig
     from pyhdb_rs.aio import ConnectionPoolBuilder
     import polars as pl

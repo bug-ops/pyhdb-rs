@@ -251,27 +251,18 @@ class AsyncCursor:
 class ConnectionPool:
     """Connection pool for async HANA connections.
 
+    Use ConnectionPoolBuilder to create instances.
+
     Example::
 
-        pool = ConnectionPool(
-            "hdbsql://user:pass@host:30015",
-            max_size=10,
-            tls_config=TlsConfig.with_system_roots()
-        )
-    """
+        from pyhdb_rs.aio import ConnectionPoolBuilder
 
-    def __init__(
-        self,
-        url: str,
-        *,
-        max_size: int = 10,
-        min_idle: int | None = None,
-        connection_timeout: int = 30,
-        config: ConnectionConfig | None = None,
-        tls_config: TlsConfig | None = None,
-    ) -> None:
-        """Create a new connection pool."""
-        ...
+        pool = (ConnectionPoolBuilder()
+            .url("hdbsql://user:pass@host:30015")
+            .max_size(10)
+            .tls(TlsConfig.with_system_roots())
+            .build())
+    """
 
     async def acquire(self) -> PooledConnection:
         """Acquire a connection from the pool."""
