@@ -55,6 +55,11 @@ thiserror = "2.0"
 tokio = "1.49"
 url = "2.5"
 
+# Fast dev profile with minimal optimizations for faster builds
+[profile.dev]
+opt-level = 1  # Some optimization for reasonable test speed
+debug = true   # Keep debug symbols
+
 [profile.release]
 lto = "fat"
 codegen-units = 1

@@ -12,7 +12,7 @@ categories = ["database", "api-bindings"]
 
 [lib]
 name = "hdbconnect"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [lints]
 workspace = true
@@ -26,6 +26,7 @@ async = [
     "dep:deadpool",
     "hdbconnect-arrow/async",
 ]
+test-utils = ["hdbconnect-arrow/test-utils"]
 
 [dependencies]
 arrow-array = { workspace = true }
@@ -48,3 +49,8 @@ tokio = { workspace = true, optional = true, features = ["rt-multi-thread", "syn
 
 [dev-dependencies]
 criterion = { workspace = true }
+
+[[bench]]
+name = "pyo3_overhead"
+harness = false
+required-features = ["test-utils"]

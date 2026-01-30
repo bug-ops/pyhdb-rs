@@ -55,15 +55,15 @@ try:
         PooledConnection,
         PoolStatus,
     )
-except ImportError:
+except ImportError:  # pragma: no cover
     ASYNC_AVAILABLE = False
-    AsyncConnection = None
-    AsyncConnectionBuilder = None
-    AsyncCursor = None
-    ConnectionPool = None
-    ConnectionPoolBuilder = None
-    PooledConnection = None
-    PoolStatus = None
+    AsyncConnection = None  # type: ignore[misc, assignment]
+    AsyncConnectionBuilder = None  # type: ignore[misc, assignment]
+    AsyncCursor = None  # type: ignore[misc, assignment]
+    ConnectionPool = None  # type: ignore[misc, assignment]
+    ConnectionPoolBuilder = None  # type: ignore[misc, assignment]
+    PooledConnection = None  # type: ignore[misc, assignment]
+    PoolStatus = None  # type: ignore[misc, assignment]
 
 
 __all__ = [

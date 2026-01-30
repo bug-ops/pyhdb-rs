@@ -17,24 +17,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-rust:
-    name: Lint Rust
+  lint-rust-fmt:
+    name: Lint Rust (fmt)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
+      - name: Check formatting
+        run: cargo +nightly fmt --check
+
+  lint-rust-clippy:
+    name: Lint Rust (clippy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
-      - name: Check formatting
-        run: cargo +nightly fmt --check
+          shared-key: ubuntu-latest
       - name: Clippy
         run: cargo clippy --workspace --all-features -- -D warnings
 
@@ -56,7 +62,7 @@ jobs:
 
   test-rust:
     name: Test Rust (${{ matrix.os }})
-    needs: [lint-rust, lint-python]
+    needs: [lint-rust-fmt, lint-rust-clippy, lint-python]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -67,6 +73,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ matrix.os }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -77,34 +85,57 @@ jobs:
         run: cargo nextest run --workspace --all-features --exclude hdbconnect-py
 
   # Build wheels for testing (one per OS, abi3 compatible with all Python versions)
+  # Ubuntu builds separately for fast test startup
+  build-test-wheel-ubuntu:
+    name: Build test wheel (ubuntu-latest)
+    needs: [lint-rust-fmt, lint-rust-clippy, lint-python]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-latest
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Build wheel (dev build for fast testing)
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: python
+          args: --out dist
+      - name: Upload wheel
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-wheel-ubuntu-latest
+          path: python/dist/*.whl
+          retention-days: 1
+
+  # Other platforms build together
   build-test-wheels:
     name: Build test wheel (${{ matrix.os }})
-    needs: [lint-rust, lint-python]
+    needs: [lint-rust-fmt, lint-rust-clippy, lint-python]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: test-wheel-${{ matrix.os }}
+          shared-key: ${{ matrix.os }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Build wheel
+      - name: Build wheel (dev build for fast testing)
         uses: PyO3/maturin-action@v1
         with:
           working-directory: python
-          args: --release --out dist
-          sccache: true
-        env:
-          SCCACHE_GHA_ENABLED: "true"
+          args: --out dist
       - name: Upload wheel
         uses: actions/upload-artifact@v6
         with:
@@ -112,6 +143,53 @@ jobs:
           path: python/dist/*.whl
           retention-days: 1
 
+  # Ubuntu tests start immediately after Ubuntu wheel is ready (fast path)
+  test-python-ubuntu:
+    name: Test Python ${{ matrix.python-version }} (ubuntu-latest)
+    needs: [build-test-wheel-ubuntu]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+          cache-suffix: ubuntu-latest-${{ matrix.python-version }}
+      - name: Download wheel
+        uses: actions/download-artifact@v6
+        with:
+          name: test-wheel-ubuntu-latest
+          path: python/dist
+      - name: Install dependencies and wheel
+        run: |
+          uv sync --frozen --extra dev --no-install-project
+          uv pip install --find-links dist pyhdb_rs --reinstall-package pyhdb_rs
+        working-directory: python
+      - name: Run tests with coverage
+        if: matrix.python-version == '3.12'
+        run: uv run pytest --cov=pyhdb_rs --cov-report=xml --benchmark-disable
+        working-directory: python
+      - name: Run tests
+        if: matrix.python-version != '3.12'
+        run: uv run pytest --benchmark-disable
+        working-directory: python
+      - name: Upload Python coverage
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: python/coverage.xml
+          fail_ci_if_error: false
+
+  # Other platforms test after all wheels are ready
   test-python:
     name: Test Python ${{ matrix.python-version }} (${{ matrix.os }})
     needs: [build-test-wheels]
@@ -120,7 +198,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [macos-latest, windows-latest]
         python-version: ["3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v6
@@ -142,21 +220,9 @@ jobs:
           uv sync --frozen --extra dev --no-install-project
           uv pip install --find-links dist pyhdb_rs --reinstall-package pyhdb_rs
         working-directory: python
-      - name: Run tests with coverage
-        if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
-        run: uv run pytest --cov=pyhdb_rs --cov-report=xml
-        working-directory: python
       - name: Run tests
-        if: matrix.python-version != '3.12' || matrix.os != 'ubuntu-latest'
-        run: uv run pytest
+        run: uv run pytest --benchmark-disable
         working-directory: python
-      - name: Upload Python coverage
-        if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: python/coverage.xml
-          fail_ci_if_error: false
 
   # Build cross-platform wheels (parallel with test-python after test-rust)
   build-wheels-cross:
@@ -194,18 +260,18 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: wheels-${{ matrix.target }}
-          workspaces: crates/hdbconnect-py -> ../target
+          shared-key: ${{ matrix.target }}
+          cache-targets: false  # sccache handles compilation artifacts
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Build wheel
+      - name: Build wheel (dev build for cross-platform validation)
         uses: PyO3/maturin-action@v1
         with:
           working-directory: python
           target: ${{ matrix.target }}
-          args: --release --out dist
+          args: --out dist
           manylinux: ${{ matrix.manylinux }}
           sccache: true
         env:
@@ -218,10 +284,10 @@ jobs:
           retention-days: 3
 
   # Collect all wheels (native x86_64 from tests + cross-compiled)
-  # Waits for test-python to ensure quality gate before publishing
+  # Waits for all tests to ensure quality gate before publishing
   collect-wheels:
     name: Collect all wheels
-    needs: [build-test-wheels, build-wheels-cross, test-python]
+    needs: [build-test-wheel-ubuntu, build-test-wheels, build-wheels-cross, test-python-ubuntu, test-python]
     runs-on: ubuntu-latest
     steps:
       - name: Download test wheels (native x86_64)
@@ -245,13 +311,15 @@ jobs:
 
   coverage-rust:
     name: Coverage Rust
-    needs: [lint-rust, lint-python]
+    needs: [lint-rust-fmt, lint-rust-clippy, lint-python]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-latest
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -281,5 +349,7 @@ jobs:
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-latest
       - name: Check MSRV
         run: cargo check --workspace
