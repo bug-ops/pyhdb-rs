@@ -13,8 +13,9 @@ use pyo3::prelude::*;
 use tokio::sync::Mutex as TokioMutex;
 
 use super::common::{
-    ConnectionState, VALIDATION_QUERY, client_info_impl, commit_impl, execute_arrow_impl,
-    get_batch_size, rollback_impl, set_application_impl, set_application_source_impl,
+    ConnectionState, VALIDATION_QUERY, client_info_impl, commit_impl, connection_id_impl,
+    execute_arrow_impl, get_batch_size, rollback_impl, server_memory_usage_impl,
+    server_processing_time_impl, set_application_impl, set_application_source_impl,
     set_application_user_impl, set_application_version_impl, validate_non_negative_f64,
     validate_positive_u32,
 };
@@ -515,6 +516,91 @@ impl AsyncPyConnection {
             match &*guard {
                 AsyncConnectionInner::Connected { connection } => {
                     Ok(client_info_impl(connection).await)
+                }
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
+            }
+        })
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Connection Statistics Methods (using shared implementations from common.rs)
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /// Get the connection ID assigned by SAP HANA server.
+    ///
+    /// Returns:
+    ///     Connection ID as integer.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     conn_id = await conn.connection_id()
+    ///     print(f"Connected with ID: {conn_id}")
+    ///     ```
+    fn connection_id<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = inner.lock().await;
+            match &*guard {
+                AsyncConnectionInner::Connected { connection } => {
+                    Ok(connection_id_impl(connection).await)
+                }
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
+            }
+        })
+    }
+
+    /// Get current server memory usage for this connection.
+    ///
+    /// Returns:
+    ///     Memory usage in bytes.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     memory = await conn.server_memory_usage()
+    ///     print(f"Server memory: {memory / 1024 / 1024:.2f} MB")
+    ///     ```
+    fn server_memory_usage<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = inner.lock().await;
+            match &*guard {
+                AsyncConnectionInner::Connected { connection } => {
+                    Ok(server_memory_usage_impl(connection).await)
+                }
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
+            }
+        })
+    }
+
+    /// Get cumulative server processing time for this connection.
+    ///
+    /// The value accumulates across all queries executed on this connection.
+    /// Useful for monitoring overall query processing overhead.
+    ///
+    /// Returns:
+    ///     Processing time in microseconds.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     proc_time = await conn.server_processing_time()
+    ///     print(f"Server processing time: {proc_time} microseconds")
+    ///     ```
+    fn server_processing_time<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = inner.lock().await;
+            match &*guard {
+                AsyncConnectionInner::Connected { connection } => {
+                    Ok(server_processing_time_impl(connection).await)
                 }
                 AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
             }

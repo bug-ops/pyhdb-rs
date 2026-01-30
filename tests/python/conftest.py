@@ -158,3 +158,17 @@ async def connection_pool(hana_uri: str):
         yield pool
     finally:
         await pool.close()
+
+
+@pytest.fixture
+async def pooled_connection(connection_pool):
+    """Create a pooled connection for tests.
+
+    Yields:
+        PooledConnection object
+
+    After the test completes, the connection is returned to the pool.
+    """
+    pooled = await connection_pool.acquire()
+    async with pooled:
+        yield pooled

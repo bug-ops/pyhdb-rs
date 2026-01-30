@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Connection Statistics API** (Issue #54 Phase 2): Expose server-side connection statistics for performance monitoring
+  - `Connection.connection_id()` - Get server-assigned connection ID
+  - `Connection.server_memory_usage()` - Get current memory usage in bytes
+  - `Connection.server_processing_time()` - Get cumulative processing time in microseconds
+  - Full async support: `AsyncConnection`, `PooledConnection`
+  - Comprehensive type stubs for IDE support in both `_core.pyi` and `aio/_core.pyi`
+  - 15 tests covering sync, async, and pooled connections
+  - Note: `server_cpu_time()` was omitted because hdbconnect's `ServerUsage.accum_cpu_time` field is private
+
 - **Application Metadata API** (Issue #54 Phase 1): Expose application metadata features for production monitoring
   - `Connection.set_application(name)` - Set application name visible in SAP HANA `M_CONNECTIONS`
   - `Connection.set_application_user(user)` - Set application-level user distinct from DB user

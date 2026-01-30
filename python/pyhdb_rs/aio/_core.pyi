@@ -176,6 +176,39 @@ class AsyncConnection:
         """
         ...
 
+    async def connection_id(self) -> int:
+        """Get connection ID assigned by SAP HANA server.
+
+        Returns:
+            Server-assigned connection ID for this session.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def server_memory_usage(self) -> int:
+        """Get current server memory usage in bytes.
+
+        Returns:
+            Memory usage in bytes.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def server_processing_time(self) -> int:
+        """Get cumulative server processing time in microseconds.
+
+        Returns:
+            Cumulative processing time in microseconds.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
     async def __aenter__(self) -> AsyncConnection:
         """Async context manager entry."""
         ...
@@ -501,6 +534,39 @@ class PooledConnection:
 
         Returns:
             Dictionary of client info key-value pairs.
+        """
+        ...
+
+    async def connection_id(self) -> int:
+        """Get connection ID assigned by SAP HANA server.
+
+        Returns:
+            Server-assigned connection ID for this session.
+
+        Raises:
+            OperationalError: If connection returned to pool.
+        """
+        ...
+
+    async def server_memory_usage(self) -> int:
+        """Get current server memory usage in bytes.
+
+        Returns:
+            Memory usage in bytes.
+
+        Raises:
+            OperationalError: If connection returned to pool.
+        """
+        ...
+
+    async def server_processing_time(self) -> int:
+        """Get cumulative server processing time in microseconds.
+
+        Returns:
+            Cumulative processing time in microseconds.
+
+        Raises:
+            OperationalError: If connection returned to pool.
         """
         ...
 

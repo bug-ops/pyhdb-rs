@@ -573,6 +573,97 @@ impl PyConnection {
     }
 
     // ═══════════════════════════════════════════════════════════════════════════════
+    // Connection Statistics Methods
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /// Get the connection ID assigned by SAP HANA server.
+    ///
+    /// Returns:
+    ///     Connection ID as integer.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///     `OperationalError`: If server does not return connection ID.
+    ///
+    /// Example:
+    ///     ```python
+    ///     conn_id = conn.connection_id()
+    ///     print(f"Connected with ID: {conn_id}")
+    ///     ```
+    #[allow(clippy::cast_possible_wrap)]
+    fn connection_id(&self) -> PyResult<i32> {
+        let guard = self.inner.lock();
+        match &*guard {
+            ConnectionInner::Connected(conn) => {
+                let id = conn.id().map_err(PyHdbError::from)?;
+                Ok(id as i32)
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Get current server memory usage for this connection.
+    ///
+    /// Returns:
+    ///     Memory usage in bytes.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///     `OperationalError`: If statistics not available.
+    ///
+    /// Example:
+    ///     ```python
+    ///     memory = conn.server_memory_usage()
+    ///     print(f"Server memory: {memory / 1024 / 1024:.2f} MB")
+    ///     ```
+    #[allow(clippy::cast_possible_wrap)]
+    fn server_memory_usage(&self) -> PyResult<i64> {
+        let guard = self.inner.lock();
+        match &*guard {
+            ConnectionInner::Connected(conn) => {
+                let usage = conn.server_usage().map_err(PyHdbError::from)?;
+                Ok(*usage.server_memory_usage() as i64)
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Get cumulative server processing time for this connection.
+    ///
+    /// The value accumulates across all queries executed on this connection.
+    /// Useful for monitoring overall query processing overhead.
+    ///
+    /// Returns:
+    ///     Processing time in microseconds.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///     `OperationalError`: If statistics not available.
+    ///
+    /// Example:
+    ///     ```python
+    ///     proc_time = conn.server_processing_time()
+    ///     print(f"Server processing time: {proc_time} microseconds")
+    ///     ```
+    #[allow(clippy::cast_possible_wrap)]
+    fn server_processing_time(&self) -> PyResult<i64> {
+        let guard = self.inner.lock();
+        match &*guard {
+            ConnectionInner::Connected(conn) => {
+                let usage = conn.server_usage().map_err(PyHdbError::from)?;
+                Ok(usage.accum_proc_time().as_micros() as i64)
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
     // Arrow Methods
     // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -760,5 +851,16 @@ mod tests {
         assert!(conn.set_application_version("1.0").is_err());
         assert!(conn.set_application_source("test.py").is_err());
         assert!(conn.client_info().is_err());
+    }
+
+    #[test]
+    fn test_connection_statistics_on_disconnected() {
+        let inner = Arc::new(Mutex::new(ConnectionInner::Disconnected));
+        let cache = Mutex::new(PreparedStatementCache::new(16));
+        let conn = PyConnection::from_parts(inner, true, cache);
+
+        assert!(conn.connection_id().is_err());
+        assert!(conn.server_memory_usage().is_err());
+        assert!(conn.server_processing_time().is_err());
     }
 }

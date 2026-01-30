@@ -116,6 +116,30 @@ pub async fn client_info_impl(
     connection.client_info().await.into_iter().collect()
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Connection Statistics Async Implementations
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Gets the connection ID from an async connection.
+#[allow(clippy::cast_possible_wrap)]
+pub async fn connection_id_impl(connection: &hdbconnect_async::Connection) -> i32 {
+    connection.id().await as i32
+}
+
+/// Gets the server memory usage from an async connection (in bytes).
+#[allow(clippy::cast_possible_wrap)]
+pub async fn server_memory_usage_impl(connection: &hdbconnect_async::Connection) -> i64 {
+    let usage = connection.server_usage().await;
+    *usage.server_memory_usage() as i64
+}
+
+/// Gets the cumulative server processing time from an async connection (in microseconds).
+#[allow(clippy::cast_possible_wrap)]
+pub async fn server_processing_time_impl(connection: &hdbconnect_async::Connection) -> i64 {
+    let usage = connection.server_usage().await;
+    usage.accum_proc_time().as_micros() as i64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
