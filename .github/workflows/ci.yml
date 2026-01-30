@@ -199,6 +199,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: python/coverage.xml
+          flags: python
           fail_ci_if_error: false
 
   # Other platforms test after all wheels are ready
@@ -344,6 +345,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
+          flags: hdbconnect-arrow
           fail_ci_if_error: false
 
   msrv:

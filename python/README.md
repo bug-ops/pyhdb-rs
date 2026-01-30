@@ -2,6 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/pyhdb_rs)](https://pypi.org/project/pyhdb_rs)
 [![Python](https://img.shields.io/pypi/pyversions/pyhdb_rs)](https://pypi.org/project/pyhdb_rs)
+[![codecov](https://codecov.io/gh/bug-ops/pyhdb-rs/graph/badge.svg?token=75RR61N6FI&flag=python)](https://codecov.io/gh/bug-ops/pyhdb-rs)
 [![CI](https://img.shields.io/github/actions/workflow/status/bug-ops/pyhdb-rs/ci.yml)](https://github.com/bug-ops/pyhdb-rs/actions)
 [![License](https://img.shields.io/pypi/l/pyhdb_rs)](https://github.com/bug-ops/pyhdb-rs/blob/main/LICENSE-MIT)
 
