@@ -385,11 +385,7 @@ impl AsyncPyConnection {
     ///     ```python
     ///     await conn.set_application(`OrderProcessingService`)
     ///     ```
-    fn set_application<'py>(
-        &self,
-        py: Python<'py>,
-        name: String,
-    ) -> PyResult<Bound<'py, PyAny>> {
+    fn set_application<'py>(&self, py: Python<'py>, name: String) -> PyResult<Bound<'py, PyAny>> {
         let inner = Arc::clone(&self.inner);
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let guard = inner.lock().await;

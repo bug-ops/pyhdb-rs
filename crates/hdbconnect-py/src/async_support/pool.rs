@@ -856,11 +856,7 @@ impl PooledConnection {
     ///     async with pool.acquire() as conn:
     ///         await conn.set_application(`OrderProcessingService`)
     ///     ```
-    fn set_application<'py>(
-        &self,
-        py: Python<'py>,
-        name: String,
-    ) -> PyResult<Bound<'py, PyAny>> {
+    fn set_application<'py>(&self, py: Python<'py>, name: String) -> PyResult<Bound<'py, PyAny>> {
         let object = Arc::clone(&self.object);
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let guard = object.lock().await;

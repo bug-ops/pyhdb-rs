@@ -110,7 +110,9 @@ pub async fn set_application_source_impl(connection: &hdbconnect_async::Connecti
 }
 
 /// Gets client info from an async connection.
-pub async fn client_info_impl(connection: &hdbconnect_async::Connection) -> HashMap<String, String> {
+pub async fn client_info_impl(
+    connection: &hdbconnect_async::Connection,
+) -> HashMap<String, String> {
     connection.client_info().await.into_iter().collect()
 }
 

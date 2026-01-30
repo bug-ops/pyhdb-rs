@@ -14,6 +14,8 @@ import pytest
 # Skip all tests if pyhdb_rs not available
 pytest.importorskip("pyhdb_rs")
 
+from pyhdb_rs import OperationalError
+
 
 @pytest.mark.integration
 class TestSyncApplicationMetadata:
@@ -57,7 +59,7 @@ class TestSyncApplicationMetadata:
     def test_set_application_on_closed_connection_raises(self, sync_connection):
         """Test set_application() raises when connection closed."""
         sync_connection.close()
-        with pytest.raises(Exception):  # Should be OperationalError
+        with pytest.raises(OperationalError):
             sync_connection.set_application("TestApp")
 
     def test_all_methods_chainable(self, sync_connection):
@@ -146,7 +148,7 @@ class TestAsyncApplicationMetadata:
     async def test_async_set_application_on_closed_connection(self, async_connection):
         """Test async set_application() raises when connection closed."""
         await async_connection.close()
-        with pytest.raises(Exception):  # Should be OperationalError
+        with pytest.raises(OperationalError):
             await async_connection.set_application("TestApp")
 
 
