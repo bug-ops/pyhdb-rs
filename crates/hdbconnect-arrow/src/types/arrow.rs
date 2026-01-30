@@ -24,6 +24,8 @@
 //! | BOOLEAN | Boolean | |
 //! | GEOMETRY/POINT | Binary | WKB format |
 
+use std::collections::HashMap;
+
 use arrow_schema::{DataType, Field, TimeUnit};
 use hdbconnect::TypeId;
 
@@ -168,6 +170,7 @@ macro_rules! impl_field_metadata_ext {
                         display
                     }
                 };
+                let type_id = self.type_id();
                 let precision = self.precision();
                 let scale = self.scale();
 
@@ -181,13 +184,25 @@ macro_rules! impl_field_metadata_ext {
                 #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
                 let scale_i8 = (0..=127_i16).contains(&scale).then_some(scale as i8);
 
-                hana_field_to_arrow(
-                    name,
-                    self.type_id(),
-                    self.is_nullable(),
-                    precision_u8,
-                    scale_i8,
-                )
+                // Build field metadata for capacity hints
+                let mut metadata = HashMap::new();
+
+                // For VARCHAR/NVARCHAR, precision contains max_length
+                if matches!(
+                    type_id,
+                    TypeId::VARCHAR | TypeId::NVARCHAR | TypeId::CHAR | TypeId::NCHAR
+                ) {
+                    metadata.insert("max_length".to_string(), precision.to_string());
+                }
+
+                let field =
+                    hana_field_to_arrow(name, type_id, self.is_nullable(), precision_u8, scale_i8);
+
+                if metadata.is_empty() {
+                    field
+                } else {
+                    field.with_metadata(metadata)
+                }
             }
 
             fn arrow_data_type(&self) -> DataType {
