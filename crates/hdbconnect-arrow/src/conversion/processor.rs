@@ -91,11 +91,12 @@ impl SchemaProfile {
 
         // Verify discriminant comparison works correctly for homogeneous schemas
         debug_assert!(
-            !all_same || fields.iter().all(|f| {
-                let kind1 = Self::data_type_to_kind(first_type);
-                let kind2 = Self::data_type_to_kind(f.data_type());
-                kind1 == kind2
-            }),
+            !all_same
+                || fields.iter().all(|f| {
+                    let kind1 = Self::data_type_to_kind(first_type);
+                    let kind2 = Self::data_type_to_kind(f.data_type());
+                    kind1 == kind2
+                }),
             "Discriminant-equivalent types must map to same BuilderKind"
         );
 
