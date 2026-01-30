@@ -45,8 +45,10 @@ use pyo3::prelude::*;
 use tokio::sync::Mutex as TokioMutex;
 
 use super::common::{
-    ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, get_batch_size,
-    rollback_impl, validate_non_negative_f64, validate_positive_u32,
+    ConnectionState, VALIDATION_QUERY, client_info_impl, commit_impl, execute_arrow_impl,
+    get_batch_size, rollback_impl, set_application_impl, set_application_source_impl,
+    set_application_user_impl, set_application_version_impl, validate_non_negative_f64,
+    validate_positive_u32,
 };
 use crate::config::{PyArrowConfig, PyConnectionConfig};
 use crate::connection::PyCacheStats;
@@ -834,6 +836,163 @@ impl PooledConnection {
             Ok(())
         })
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Application Metadata Methods (using shared implementations from common.rs)
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /// Set the application name for monitoring.
+    ///
+    /// Visible in SAP HANA `M_CONNECTIONS` system view as `APPLICATION` column.
+    ///
+    /// Args:
+    ///     name: Application name (e.g., `OrderProcessingService`).
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection returned to pool.
+    ///
+    /// Example:
+    ///     ```python
+    ///     async with pool.acquire() as conn:
+    ///         await conn.set_application(`OrderProcessingService`)
+    ///     ```
+    fn set_application<'py>(
+        &self,
+        py: Python<'py>,
+        name: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = object.lock().await;
+            let obj = guard
+                .as_ref()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+            set_application_impl(&obj.connection, &name).await;
+            Ok(())
+        })
+    }
+
+    /// Set the application user for monitoring.
+    ///
+    /// Typically the end-user making the request, distinct from database user.
+    /// Visible in SAP HANA `M_CONNECTIONS` system view as `APPLICATIONUSER` column.
+    ///
+    /// Args:
+    ///     user: Application-level user identifier.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection returned to pool.
+    ///
+    /// Example:
+    ///     ```python
+    ///     async with pool.acquire() as conn:
+    ///         await conn.set_application_user("alice@company.com")
+    ///     ```
+    fn set_application_user<'py>(
+        &self,
+        py: Python<'py>,
+        user: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = object.lock().await;
+            let obj = guard
+                .as_ref()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+            set_application_user_impl(&obj.connection, &user).await;
+            Ok(())
+        })
+    }
+
+    /// Set the application version for monitoring.
+    ///
+    /// Args:
+    ///     version: Version string (e.g., "2.3.1").
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection returned to pool.
+    ///
+    /// Example:
+    ///     ```python
+    ///     async with pool.acquire() as conn:
+    ///         await conn.set_application_version("2.3.1")
+    ///     ```
+    fn set_application_version<'py>(
+        &self,
+        py: Python<'py>,
+        version: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = object.lock().await;
+            let obj = guard
+                .as_ref()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+            set_application_version_impl(&obj.connection, &version).await;
+            Ok(())
+        })
+    }
+
+    /// Set the application source location for debugging.
+    ///
+    /// Args:
+    ///     source: Source identifier (e.g., "orders/process.py:42").
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection returned to pool.
+    ///
+    /// Example:
+    ///     ```python
+    ///     async with pool.acquire() as conn:
+    ///         await conn.set_application_source("orders/process.py:42")
+    ///     ```
+    fn set_application_source<'py>(
+        &self,
+        py: Python<'py>,
+        source: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = object.lock().await;
+            let obj = guard
+                .as_ref()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+            set_application_source_impl(&obj.connection, &source).await;
+            Ok(())
+        })
+    }
+
+    /// Get client context information sent to server.
+    ///
+    /// Returns a dictionary of all client info key-value pairs that have been
+    /// set on this connection.
+    ///
+    /// Returns:
+    ///     Awaitable[dict[str, str]]: Dictionary of client info key-value pairs.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection returned to pool.
+    ///
+    /// Example:
+    ///     ```python
+    ///     async with pool.acquire() as conn:
+    ///         info = await conn.client_info()
+    ///         print(f"Application: {info.get('APPLICATION')}")
+    ///     ```
+    fn client_info<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = object.lock().await;
+            let obj = guard
+                .as_ref()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+            Ok(client_info_impl(&obj.connection).await)
+        })
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Other Methods
+    // ═══════════════════════════════════════════════════════════════════════════════
 
     /// Check if pooled connection is valid.
     ///

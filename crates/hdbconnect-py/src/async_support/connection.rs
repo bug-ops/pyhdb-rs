@@ -13,8 +13,10 @@ use pyo3::prelude::*;
 use tokio::sync::Mutex as TokioMutex;
 
 use super::common::{
-    ConnectionState, VALIDATION_QUERY, commit_impl, execute_arrow_impl, get_batch_size,
-    rollback_impl, validate_non_negative_f64, validate_positive_u32,
+    ConnectionState, VALIDATION_QUERY, client_info_impl, commit_impl, execute_arrow_impl,
+    get_batch_size, rollback_impl, set_application_impl, set_application_source_impl,
+    set_application_user_impl, set_application_version_impl, validate_non_negative_f64,
+    validate_positive_u32,
 };
 use super::cursor::AsyncPyCursor;
 use crate::config::PyArrowConfig;
@@ -364,6 +366,168 @@ impl AsyncPyConnection {
             }
         })
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Application Metadata Methods (using shared implementations from common.rs)
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /// Set the application name for monitoring.
+    ///
+    /// Visible in SAP HANA `M_CONNECTIONS` system view as `APPLICATION` column.
+    ///
+    /// Args:
+    ///     name: Application name (e.g., `OrderProcessingService`).
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     await conn.set_application(`OrderProcessingService`)
+    ///     ```
+    fn set_application<'py>(
+        &self,
+        py: Python<'py>,
+        name: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = inner.lock().await;
+            match &*guard {
+                AsyncConnectionInner::Connected { connection } => {
+                    set_application_impl(connection, &name).await;
+                    Ok(())
+                }
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
+            }
+        })
+    }
+
+    /// Set the application user for monitoring.
+    ///
+    /// Typically the end-user making the request, distinct from database user.
+    /// Visible in SAP HANA `M_CONNECTIONS` system view as `APPLICATIONUSER` column.
+    ///
+    /// Args:
+    ///     user: Application-level user identifier.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     await conn.set_application_user("alice@company.com")
+    ///     ```
+    fn set_application_user<'py>(
+        &self,
+        py: Python<'py>,
+        user: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = inner.lock().await;
+            match &*guard {
+                AsyncConnectionInner::Connected { connection } => {
+                    set_application_user_impl(connection, &user).await;
+                    Ok(())
+                }
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
+            }
+        })
+    }
+
+    /// Set the application version for monitoring.
+    ///
+    /// Args:
+    ///     version: Version string (e.g., "2.3.1").
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     await conn.set_application_version("2.3.1")
+    ///     ```
+    fn set_application_version<'py>(
+        &self,
+        py: Python<'py>,
+        version: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = inner.lock().await;
+            match &*guard {
+                AsyncConnectionInner::Connected { connection } => {
+                    set_application_version_impl(connection, &version).await;
+                    Ok(())
+                }
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
+            }
+        })
+    }
+
+    /// Set the application source location for debugging.
+    ///
+    /// Args:
+    ///     source: Source identifier (e.g., "orders/process.py:42").
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     await conn.set_application_source("orders/process.py:42")
+    ///     ```
+    fn set_application_source<'py>(
+        &self,
+        py: Python<'py>,
+        source: String,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = inner.lock().await;
+            match &*guard {
+                AsyncConnectionInner::Connected { connection } => {
+                    set_application_source_impl(connection, &source).await;
+                    Ok(())
+                }
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
+            }
+        })
+    }
+
+    /// Get client context information sent to server.
+    ///
+    /// Returns a dictionary of all client info key-value pairs that have been
+    /// set on this connection.
+    ///
+    /// Returns:
+    ///     Awaitable[dict[str, str]]: Dictionary of client info key-value pairs.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     info = await conn.client_info()
+    ///     print(f"Application: {info.get('APPLICATION')}")
+    ///     ```
+    fn client_info<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = inner.lock().await;
+            match &*guard {
+                AsyncConnectionInner::Connected { connection } => {
+                    Ok(client_info_impl(connection).await)
+                }
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
+            }
+        })
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Arrow Methods
+    // ═══════════════════════════════════════════════════════════════════════════════
 
     /// Executes a SQL query and returns an Arrow `RecordBatchReader`.
     ///

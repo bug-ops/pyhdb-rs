@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Application Metadata API** (Issue #54 Phase 1): Expose application metadata features for production monitoring
+  - `Connection.set_application(name)` - Set application name visible in SAP HANA `M_CONNECTIONS`
+  - `Connection.set_application_user(user)` - Set application-level user distinct from DB user
+  - `Connection.set_application_version(version)` - Set application version for monitoring
+  - `Connection.set_application_source(source)` - Set source location for debugging
+  - `Connection.client_info()` - Get client context information as `dict[str, str]`
+  - `ConnectionBuilder.application(name, version, user, source)` - Set metadata during connection setup
+  - Full async support: `AsyncConnection`, `AsyncConnectionBuilder`, `PooledConnection`
+  - Comprehensive type stubs for IDE support in both `_core.pyi` and `aio/_core.pyi`
+  - 24 tests covering sync, async, pooled connections, and builders
+
 ## [0.3.2] - 2026-01-30
 
 ### Changed

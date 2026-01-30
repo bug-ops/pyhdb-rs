@@ -3,6 +3,8 @@
 //! Extracts shared logic from `AsyncPyConnection` and `PooledConnection` to
 //! eliminate code duplication while preserving type safety.
 
+use std::collections::HashMap;
+
 use pyo3::prelude::*;
 
 use crate::config::{DEFAULT_ARROW_BATCH_SIZE, PyArrowConfig};
@@ -78,6 +80,38 @@ pub async fn execute_query_impl(
 ) -> PyResult<()> {
     connection.query(sql).await.map_err(PyHdbError::from)?;
     Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Application Metadata Async Implementations
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Sets the application name on an async connection.
+pub async fn set_application_impl(connection: &hdbconnect_async::Connection, name: &str) {
+    connection.set_application(name).await;
+}
+
+/// Sets the application user on an async connection.
+pub async fn set_application_user_impl(connection: &hdbconnect_async::Connection, user: &str) {
+    connection.set_application_user(user).await;
+}
+
+/// Sets the application version on an async connection.
+pub async fn set_application_version_impl(
+    connection: &hdbconnect_async::Connection,
+    version: &str,
+) {
+    connection.set_application_version(version).await;
+}
+
+/// Sets the application source on an async connection.
+pub async fn set_application_source_impl(connection: &hdbconnect_async::Connection, source: &str) {
+    connection.set_application_source(source).await;
+}
+
+/// Gets client info from an async connection.
+pub async fn client_info_impl(connection: &hdbconnect_async::Connection) -> HashMap<String, String> {
+    connection.client_info().await.into_iter().collect()
 }
 
 #[cfg(test)]

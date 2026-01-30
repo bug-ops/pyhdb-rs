@@ -2,6 +2,7 @@
 //!
 //! Provides thread-safe connection sharing via `Arc<Mutex>`.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -431,6 +432,150 @@ impl PyConnection {
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Application Metadata Methods
+    // ═══════════════════════════════════════════════════════════════════════════════
+
+    /// Set the application name for monitoring.
+    ///
+    /// Visible in SAP HANA `M_CONNECTIONS` system view as `APPLICATION` column.
+    ///
+    /// Args:
+    ///     name: Application name (e.g., `OrderProcessingService`).
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     conn.set_application(`OrderProcessingService`)
+    ///     ```
+    fn set_application(&self, name: &str) -> PyResult<()> {
+        let guard = self.inner.lock();
+        match &*guard {
+            ConnectionInner::Connected(conn) => {
+                conn.set_application(name).map_err(PyHdbError::from)?;
+                Ok(())
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Set the application user for monitoring.
+    ///
+    /// Typically the end-user making the request, distinct from database user.
+    /// Visible in SAP HANA `M_CONNECTIONS` system view as `APPLICATIONUSER` column.
+    ///
+    /// Args:
+    ///     user: Application-level user identifier.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     conn.set_application_user("alice@company.com")
+    ///     ```
+    fn set_application_user(&self, user: &str) -> PyResult<()> {
+        let guard = self.inner.lock();
+        match &*guard {
+            ConnectionInner::Connected(conn) => {
+                conn.set_application_user(user).map_err(PyHdbError::from)?;
+                Ok(())
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Set the application version for monitoring.
+    ///
+    /// Args:
+    ///     version: Version string (e.g., "2.3.1").
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     conn.set_application_version("2.3.1")
+    ///     ```
+    fn set_application_version(&self, version: &str) -> PyResult<()> {
+        let guard = self.inner.lock();
+        match &*guard {
+            ConnectionInner::Connected(conn) => {
+                conn.set_application_version(version)
+                    .map_err(PyHdbError::from)?;
+                Ok(())
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Set the application source location for debugging.
+    ///
+    /// Args:
+    ///     source: Source identifier (e.g., "orders/process.py:42").
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     conn.set_application_source("orders/process.py:42")
+    ///     ```
+    fn set_application_source(&self, source: &str) -> PyResult<()> {
+        let guard = self.inner.lock();
+        match &*guard {
+            ConnectionInner::Connected(conn) => {
+                conn.set_application_source(source)
+                    .map_err(PyHdbError::from)?;
+                Ok(())
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Get client context information sent to server.
+    ///
+    /// Returns a dictionary of all client info key-value pairs that have been
+    /// set on this connection.
+    ///
+    /// Returns:
+    ///     Dictionary of client info key-value pairs.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     info = conn.client_info()
+    ///     print(f"Application: {info.get('APPLICATION')}")
+    ///     ```
+    fn client_info(&self) -> PyResult<HashMap<String, String>> {
+        let guard = self.inner.lock();
+        match &*guard {
+            ConnectionInner::Connected(conn) => {
+                let info = conn.client_info().map_err(PyHdbError::from)?;
+                Ok(info.into_iter().collect())
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // Arrow Methods
+    // ═══════════════════════════════════════════════════════════════════════════════
+
     /// Execute a query and return Arrow `RecordBatchReader`.
     ///
     /// Args:
@@ -602,5 +747,18 @@ mod tests {
 
         assert!(!conn.autocommit);
         assert!(!conn.is_connected());
+    }
+
+    #[test]
+    fn test_application_metadata_on_disconnected() {
+        let inner = Arc::new(Mutex::new(ConnectionInner::Disconnected));
+        let cache = Mutex::new(PreparedStatementCache::new(16));
+        let conn = PyConnection::from_parts(inner, true, cache);
+
+        assert!(conn.set_application("test").is_err());
+        assert!(conn.set_application_user("test").is_err());
+        assert!(conn.set_application_version("1.0").is_err());
+        assert!(conn.set_application_source("test.py").is_err());
+        assert!(conn.client_info().is_err());
     }
 }

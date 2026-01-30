@@ -358,6 +358,37 @@ class ConnectionBuilder:
         """
         ...
 
+    def application(
+        self,
+        name: str,
+        version: str | None = None,
+        user: str | None = None,
+        source: str | None = None,
+    ) -> Self:
+        """Set application metadata for monitoring.
+
+        All values are set on the connection after it's established.
+        Visible in SAP HANA M_CONNECTIONS system view.
+
+        Args:
+            name: Application name (required).
+            version: Application version (optional).
+            user: Application-level user (optional).
+            source: Source location for debugging (optional).
+
+        Returns:
+            Self for method chaining.
+
+        Example::
+
+            conn = (ConnectionBuilder()
+                .host("hana.example.com")
+                .credentials("SYSTEM", "password")
+                .application("OrderService", version="2.0.0", user="alice")
+                .build())
+        """
+        ...
+
     def build(self) -> Connection:
         """Build and connect synchronously.
 
@@ -534,6 +565,37 @@ class AsyncConnectionBuilder:
         Example::
 
             builder.network_group("internal")
+        """
+        ...
+
+    def application(
+        self,
+        name: str,
+        version: str | None = None,
+        user: str | None = None,
+        source: str | None = None,
+    ) -> Self:
+        """Set application metadata for monitoring.
+
+        All values are set on the connection after it's established.
+        Visible in SAP HANA M_CONNECTIONS system view.
+
+        Args:
+            name: Application name (required).
+            version: Application version (optional).
+            user: Application-level user (optional).
+            source: Source location for debugging (optional).
+
+        Returns:
+            Self for method chaining.
+
+        Example::
+
+            conn = await (AsyncConnectionBuilder()
+                .host("hana.example.com")
+                .credentials("SYSTEM", "password")
+                .application("OrderService", version="2.0.0", user="alice")
+                .build())
         """
         ...
 
@@ -941,6 +1003,75 @@ class Connection:
 
         Drops all cached prepared statements. Useful after schema changes
         or to free server resources.
+        """
+        ...
+
+    def set_application(self, name: str) -> None:
+        """Set application name for monitoring.
+
+        Visible in SAP HANA M_CONNECTIONS view as APPLICATION column.
+
+        Args:
+            name: Application name (e.g., "MyApp v2.0").
+
+        Raises:
+            OperationalError: If connection is closed.
+
+        Example::
+
+            conn.set_application("OrderProcessingService")
+        """
+        ...
+
+    def set_application_user(self, user: str) -> None:
+        """Set application user for monitoring.
+
+        Typically the end-user making the request, distinct from DB user.
+        Visible in M_CONNECTIONS as APPLICATIONUSER.
+
+        Args:
+            user: Application-level user identifier.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    def set_application_version(self, version: str) -> None:
+        """Set application version for monitoring.
+
+        Args:
+            version: Version string (e.g., "2.3.1").
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    def set_application_source(self, source: str) -> None:
+        """Set application source location for debugging.
+
+        Args:
+            source: Source identifier (e.g., "orders/process.py:42").
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    def client_info(self) -> dict[str, str]:
+        """Get client context information sent to server.
+
+        Returns:
+            Dictionary of client info key-value pairs.
+
+        Raises:
+            OperationalError: If connection is closed.
+
+        Example::
+
+            info = conn.client_info()
+            print(f"Application: {info.get('APPLICATION')}")
         """
         ...
 
@@ -1365,6 +1496,63 @@ class AsyncConnection:
     ) -> RecordBatchReader: ...
     async def cache_stats(self) -> CacheStats: ...
     async def clear_cache(self) -> None: ...
+    async def set_application(self, name: str) -> None:
+        """Set application name for monitoring.
+
+        Visible in SAP HANA M_CONNECTIONS view as APPLICATION column.
+
+        Args:
+            name: Application name (e.g., "MyApp v2.0").
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def set_application_user(self, user: str) -> None:
+        """Set application user for monitoring.
+
+        Args:
+            user: Application-level user identifier.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def set_application_version(self, version: str) -> None:
+        """Set application version for monitoring.
+
+        Args:
+            version: Version string (e.g., "2.3.1").
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def set_application_source(self, source: str) -> None:
+        """Set application source location for debugging.
+
+        Args:
+            source: Source identifier (e.g., "orders/process.py:42").
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def client_info(self) -> dict[str, str]:
+        """Get client context information sent to server.
+
+        Returns:
+            Dictionary of client info key-value pairs.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
     async def __aenter__(self) -> AsyncConnection: ...
     async def __aexit__(
         self,
@@ -1570,6 +1758,63 @@ class PooledConnection:
     async def is_valid(self, check_connection: bool = True) -> bool: ...
     async def cache_stats(self) -> CacheStats: ...
     async def clear_cache(self) -> None: ...
+    async def set_application(self, name: str) -> None:
+        """Set application name for monitoring.
+
+        Visible in SAP HANA M_CONNECTIONS view as APPLICATION column.
+
+        Args:
+            name: Application name (e.g., "MyApp v2.0").
+
+        Raises:
+            OperationalError: If connection is closed or returned to pool.
+        """
+        ...
+
+    async def set_application_user(self, user: str) -> None:
+        """Set application user for monitoring.
+
+        Args:
+            user: Application-level user identifier.
+
+        Raises:
+            OperationalError: If connection is closed or returned to pool.
+        """
+        ...
+
+    async def set_application_version(self, version: str) -> None:
+        """Set application version for monitoring.
+
+        Args:
+            version: Version string (e.g., "2.3.1").
+
+        Raises:
+            OperationalError: If connection is closed or returned to pool.
+        """
+        ...
+
+    async def set_application_source(self, source: str) -> None:
+        """Set application source location for debugging.
+
+        Args:
+            source: Source identifier (e.g., "orders/process.py:42").
+
+        Raises:
+            OperationalError: If connection is closed or returned to pool.
+        """
+        ...
+
+    async def client_info(self) -> dict[str, str]:
+        """Get client context information sent to server.
+
+        Returns:
+            Dictionary of client info key-value pairs.
+
+        Raises:
+            OperationalError: If connection is closed or returned to pool.
+        """
+        ...
+
     async def __aenter__(self) -> PooledConnection: ...
     async def __aexit__(
         self,

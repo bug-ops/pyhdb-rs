@@ -128,6 +128,54 @@ class AsyncConnection:
         """Clear the prepared statement cache."""
         ...
 
+    async def set_application(self, name: str) -> None:
+        """Set application name for monitoring.
+
+        Visible in SAP HANA `M_CONNECTIONS` system view as `APPLICATION` column.
+
+        Args:
+            name: Application name (e.g., `OrderProcessingService`).
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def set_application_user(self, user: str) -> None:
+        """Set application user for monitoring.
+
+        Typically the end-user making the request, distinct from database user.
+        Visible in `M_CONNECTIONS` as `APPLICATIONUSER`.
+
+        Args:
+            user: Application-level user identifier.
+        """
+        ...
+
+    async def set_application_version(self, version: str) -> None:
+        """Set application version for monitoring.
+
+        Args:
+            version: Version string (e.g., "2.3.1").
+        """
+        ...
+
+    async def set_application_source(self, source: str) -> None:
+        """Set application source location for debugging.
+
+        Args:
+            source: Source identifier (e.g., "orders/process.py:42").
+        """
+        ...
+
+    async def client_info(self) -> dict[str, str]:
+        """Get client context information sent to server.
+
+        Returns:
+            Dictionary of client info key-value pairs.
+        """
+        ...
+
     async def __aenter__(self) -> AsyncConnection:
         """Async context manager entry."""
         ...
@@ -165,6 +213,28 @@ class AsyncConnectionBuilder:
     def config(self, config: ConnectionConfig) -> Self: ...
     def autocommit(self, enabled: bool) -> Self: ...
     def network_group(self, group: str) -> Self: ...
+    def application(
+        self,
+        name: str,
+        version: str | None = None,
+        user: str | None = None,
+        source: str | None = None,
+    ) -> Self:
+        """Set application metadata for monitoring.
+
+        All values are set on the connection after it's established.
+        Visible in SAP HANA `M_CONNECTIONS` system view.
+
+        Args:
+            name: Application name (required).
+            version: Application version (optional).
+            user: Application-level user (optional).
+            source: Source location for debugging (optional).
+
+        Returns:
+            Self for method chaining.
+        """
+        ...
     def build(self) -> Awaitable[AsyncConnection]: ...
     def __repr__(self) -> str: ...
 
@@ -384,6 +454,54 @@ class PooledConnection:
 
     async def clear_cache(self) -> None:
         """Clear the prepared statement cache."""
+        ...
+
+    async def set_application(self, name: str) -> None:
+        """Set application name for monitoring.
+
+        Visible in SAP HANA `M_CONNECTIONS` system view as `APPLICATION` column.
+
+        Args:
+            name: Application name (e.g., `OrderProcessingService`).
+
+        Raises:
+            OperationalError: If connection returned to pool.
+        """
+        ...
+
+    async def set_application_user(self, user: str) -> None:
+        """Set application user for monitoring.
+
+        Typically the end-user making the request, distinct from database user.
+        Visible in `M_CONNECTIONS` as `APPLICATIONUSER`.
+
+        Args:
+            user: Application-level user identifier.
+        """
+        ...
+
+    async def set_application_version(self, version: str) -> None:
+        """Set application version for monitoring.
+
+        Args:
+            version: Version string (e.g., "2.3.1").
+        """
+        ...
+
+    async def set_application_source(self, source: str) -> None:
+        """Set application source location for debugging.
+
+        Args:
+            source: Source identifier (e.g., "orders/process.py:42").
+        """
+        ...
+
+    async def client_info(self) -> dict[str, str]:
+        """Get client context information sent to server.
+
+        Returns:
+            Dictionary of client info key-value pairs.
+        """
         ...
 
     async def __aenter__(self) -> PooledConnection:
