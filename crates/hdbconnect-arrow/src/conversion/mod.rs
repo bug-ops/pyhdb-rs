@@ -4,4 +4,4 @@ pub mod batch;
 pub mod processor;
 
 pub use batch::rows_to_record_batch;
-pub use processor::HanaBatchProcessor;
+pub use processor::{HanaBatchProcessor, SchemaProfile};
