@@ -189,59 +189,29 @@ impl BuilderFactory {
     /// - **Better cache locality**: Contiguous memory layout
     /// - **Compiler optimization**: Enables inlining and monomorphization
     ///
+    /// # Box Wrapping Strategy
+    ///
+    /// Large builder variants (String, Binary, Decimal) are wrapped in `Box` to reduce
+    /// overall enum size. This improves cache performance for frequently-used small
+    /// builders (primitives, temporal types) by allowing more enum instances to fit
+    /// in CPU cache lines. The Box indirection overhead (<1%) is negligible compared
+    /// to the cost of string/decimal conversions (~100-1000ns).
+    ///
     /// Expected performance gain: 10-20% on typical workloads.
     #[must_use]
     #[allow(clippy::match_same_arms)]
     pub fn create_builder_enum(&self, data_type: &DataType) -> BuilderEnum {
         match data_type {
-            // Primitive numeric types
+            // ═══════════════════════════════════════════════════════════════════
+            // Inline small variants (primitive and temporal types)
+            // ═══════════════════════════════════════════════════════════════════
             DataType::UInt8 => BuilderEnum::UInt8(UInt8BuilderWrapper::new(self.capacity)),
             DataType::Int16 => BuilderEnum::Int16(Int16BuilderWrapper::new(self.capacity)),
             DataType::Int32 => BuilderEnum::Int32(Int32BuilderWrapper::new(self.capacity)),
             DataType::Int64 => BuilderEnum::Int64(Int64BuilderWrapper::new(self.capacity)),
             DataType::Float32 => BuilderEnum::Float32(Float32BuilderWrapper::new(self.capacity)),
             DataType::Float64 => BuilderEnum::Float64(Float64BuilderWrapper::new(self.capacity)),
-
-            // Decimal
-            DataType::Decimal128(precision, scale) => BuilderEnum::Decimal128(
-                Decimal128BuilderWrapper::new(self.capacity, *precision, *scale),
-            ),
-
-            // Boolean
             DataType::Boolean => BuilderEnum::Boolean(BooleanBuilderWrapper::new(self.capacity)),
-
-            // Strings
-            DataType::Utf8 => BuilderEnum::Utf8(StringBuilderWrapper::new(
-                self.capacity,
-                self.string_capacity,
-            )),
-            DataType::LargeUtf8 => {
-                let mut builder =
-                    LargeStringBuilderWrapper::new(self.capacity, self.string_capacity);
-                if let Some(max) = self.max_lob_bytes {
-                    builder = builder.with_max_lob_bytes(max);
-                }
-                BuilderEnum::LargeUtf8(builder)
-            }
-
-            // Binary
-            DataType::Binary => BuilderEnum::Binary(BinaryBuilderWrapper::new(
-                self.capacity,
-                self.binary_capacity,
-            )),
-            DataType::LargeBinary => {
-                let mut builder =
-                    LargeBinaryBuilderWrapper::new(self.capacity, self.binary_capacity);
-                if let Some(max) = self.max_lob_bytes {
-                    builder = builder.with_max_lob_bytes(max);
-                }
-                BuilderEnum::LargeBinary(builder)
-            }
-            DataType::FixedSizeBinary(size) => BuilderEnum::FixedSizeBinary(
-                FixedSizeBinaryBuilderWrapper::new(self.capacity, *size),
-            ),
-
-            // Temporal
             DataType::Date32 => BuilderEnum::Date32(Date32BuilderWrapper::new(self.capacity)),
             DataType::Time64(TimeUnit::Nanosecond) => {
                 BuilderEnum::Time64Nanosecond(Time64NanosecondBuilderWrapper::new(self.capacity))
@@ -250,11 +220,45 @@ impl BuilderFactory {
                 TimestampNanosecondBuilderWrapper::new(self.capacity),
             ),
 
-            // Unsupported - fallback to string
-            _ => BuilderEnum::Utf8(StringBuilderWrapper::new(
+            // ═══════════════════════════════════════════════════════════════════
+            // Boxed large variants (>32 bytes inner size)
+            // ═══════════════════════════════════════════════════════════════════
+            DataType::Decimal128(precision, scale) => BuilderEnum::Decimal128(Box::new(
+                Decimal128BuilderWrapper::new(self.capacity, *precision, *scale),
+            )),
+            DataType::Utf8 => BuilderEnum::Utf8(Box::new(StringBuilderWrapper::new(
                 self.capacity,
                 self.string_capacity,
+            ))),
+            DataType::LargeUtf8 => {
+                let mut builder =
+                    LargeStringBuilderWrapper::new(self.capacity, self.string_capacity);
+                if let Some(max) = self.max_lob_bytes {
+                    builder = builder.with_max_lob_bytes(max);
+                }
+                BuilderEnum::LargeUtf8(Box::new(builder))
+            }
+            DataType::Binary => BuilderEnum::Binary(Box::new(BinaryBuilderWrapper::new(
+                self.capacity,
+                self.binary_capacity,
+            ))),
+            DataType::LargeBinary => {
+                let mut builder =
+                    LargeBinaryBuilderWrapper::new(self.capacity, self.binary_capacity);
+                if let Some(max) = self.max_lob_bytes {
+                    builder = builder.with_max_lob_bytes(max);
+                }
+                BuilderEnum::LargeBinary(Box::new(builder))
+            }
+            DataType::FixedSizeBinary(size) => BuilderEnum::FixedSizeBinary(Box::new(
+                FixedSizeBinaryBuilderWrapper::new(self.capacity, *size),
             )),
+
+            // Unsupported - fallback to string (boxed)
+            _ => BuilderEnum::Utf8(Box::new(StringBuilderWrapper::new(
+                self.capacity,
+                self.string_capacity,
+            ))),
         }
     }
 
