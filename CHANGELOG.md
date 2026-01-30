@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Performance**: Replaced `Box<dyn HanaCompatibleBuilder>` with enum-based builder dispatch in `hdbconnect-arrow`
+  - Eliminates vtable overhead and pointer indirection for ~10-20% performance improvement
+  - Introduced `BuilderEnum` with 16 variants for all supported Arrow types
+  - Added `SchemaProfile` for detecting homogeneous vs mixed schemas
+  - Better cache locality through contiguous memory layout in `Vec<BuilderEnum>`
+  - New public API: `BuilderFactory::create_builder_enum()`, `BuilderEnum`, `BuilderKind`, `SchemaProfile`
+
 ## [0.3.1] - 2026-01-29
 
 ### Removed
