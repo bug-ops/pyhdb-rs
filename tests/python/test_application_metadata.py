@@ -97,9 +97,7 @@ class TestConnectionBuilderApplicationMetadata:
         """Test ConnectionBuilder.application() with name only."""
         from pyhdb_rs import ConnectionBuilder
 
-        conn = (
-            ConnectionBuilder.from_url(connection_url).application("MinimalApp").build()
-        )
+        conn = ConnectionBuilder.from_url(connection_url).application("MinimalApp").build()
 
         try:
             info = conn.client_info()
