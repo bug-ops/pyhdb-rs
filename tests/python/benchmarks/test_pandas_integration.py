@@ -82,8 +82,12 @@ class TestPandasArrowConversionBenchmarks:
     ) -> None:
         """Convert Arrow Table to Pandas with zero-copy (100K rows)."""
         data = mock_arrow_data(100_000)
-        table = pa.Table.from_pydict(data)
-        benchmark(lambda: table.to_pandas(self_destruct=True))
+
+        def to_pandas_zero_copy() -> pd.DataFrame:
+            table = pa.Table.from_pydict(data)
+            return table.to_pandas(self_destruct=True)
+
+        benchmark(to_pandas_zero_copy)
 
     @pytest.mark.benchmark(group="pandas_arrow_conversion")
     def test_arrow_batches_to_pandas_100k(
