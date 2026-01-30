@@ -258,12 +258,12 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Build wheel
+      - name: Build wheel (dev build for cross-platform validation)
         uses: PyO3/maturin-action@v1
         with:
           working-directory: python
           target: ${{ matrix.target }}
-          args: --release --out dist
+          args: --out dist
           manylinux: ${{ matrix.manylinux }}
           sccache: true
         env:
