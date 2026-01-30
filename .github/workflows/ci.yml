@@ -86,8 +86,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test-wheel-ubuntu-latest
@@ -99,9 +97,6 @@ jobs:
         with:
           working-directory: python
           args: --out dist
-          sccache: true
-        env:
-          SCCACHE_GHA_ENABLED: "true"
       - name: Upload wheel
         uses: actions/upload-artifact@v6
         with:
@@ -122,8 +117,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test-wheel-${{ matrix.os }}
@@ -135,9 +128,6 @@ jobs:
         with:
           working-directory: python
           args: --out dist
-          sccache: true
-        env:
-          SCCACHE_GHA_ENABLED: "true"
       - name: Upload wheel
         uses: actions/upload-artifact@v6
         with:
@@ -263,7 +253,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: wheels-${{ matrix.target }}
-          workspaces: crates/hdbconnect-py -> ../target
+          cache-targets: false  # sccache handles compilation artifacts
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/setup-python@v6
         with:
