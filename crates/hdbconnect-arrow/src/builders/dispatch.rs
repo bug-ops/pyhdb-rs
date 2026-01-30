@@ -2,6 +2,9 @@
 //!
 //! This module provides `BuilderEnum` which wraps all concrete builder types
 //! in a single enum, enabling monomorphized dispatch instead of vtable lookups.
+//!
+//! Large variants (string, binary, decimal) are wrapped in `Box` to reduce
+//! enum size and improve cache locality for temporal/primitive builders.
 
 use arrow_array::ArrayRef;
 
@@ -66,10 +69,16 @@ pub enum BuilderKind {
 /// Wraps all concrete builder types in a single enum, eliminating vtable
 /// lookups and enabling the compiler to inline and optimize dispatch.
 ///
+/// Large variants (string, binary, decimal) are wrapped in `Box` to reduce
+/// enum size and improve cache locality for temporal/primitive builders.
+///
 /// For homogeneous schemas (all columns same type), the match can be hoisted
 /// outside the row loop for monomorphized inner loops.
 #[derive(Debug)]
 pub enum BuilderEnum {
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Inline small variants (primitive and temporal types)
+    // ═══════════════════════════════════════════════════════════════════════════
     /// `UInt8` builder variant
     UInt8(UInt8BuilderWrapper),
     /// `Int16` builder variant
@@ -82,26 +91,30 @@ pub enum BuilderEnum {
     Float32(Float32BuilderWrapper),
     /// `Float64` builder variant
     Float64(Float64BuilderWrapper),
-    /// `Decimal128` builder variant
-    Decimal128(Decimal128BuilderWrapper),
     /// `Boolean` builder variant
     Boolean(BooleanBuilderWrapper),
-    /// `Utf8` builder variant
-    Utf8(StringBuilderWrapper),
-    /// `LargeUtf8` builder variant
-    LargeUtf8(LargeStringBuilderWrapper),
-    /// `Binary` builder variant
-    Binary(BinaryBuilderWrapper),
-    /// `LargeBinary` builder variant
-    LargeBinary(LargeBinaryBuilderWrapper),
-    /// `FixedSizeBinary` builder variant
-    FixedSizeBinary(FixedSizeBinaryBuilderWrapper),
     /// `Date32` builder variant
     Date32(Date32BuilderWrapper),
     /// `Time64Nanosecond` builder variant
     Time64Nanosecond(Time64NanosecondBuilderWrapper),
     /// `TimestampNanosecond` builder variant
     TimestampNanosecond(TimestampNanosecondBuilderWrapper),
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Boxed large variants (string, binary, decimal - larger inner size)
+    // ═══════════════════════════════════════════════════════════════════════════
+    /// `Decimal128` builder variant (boxed)
+    Decimal128(Box<Decimal128BuilderWrapper>),
+    /// `Utf8` builder variant (boxed)
+    Utf8(Box<StringBuilderWrapper>),
+    /// `LargeUtf8` builder variant (boxed)
+    LargeUtf8(Box<LargeStringBuilderWrapper>),
+    /// `Binary` builder variant (boxed)
+    Binary(Box<BinaryBuilderWrapper>),
+    /// `LargeBinary` builder variant (boxed)
+    LargeBinary(Box<LargeBinaryBuilderWrapper>),
+    /// `FixedSizeBinary` builder variant (boxed)
+    FixedSizeBinary(Box<FixedSizeBinaryBuilderWrapper>),
 }
 
 impl BuilderEnum {
@@ -244,6 +257,27 @@ mod tests {
     use super::*;
 
     // ═══════════════════════════════════════════════════════════════════════════
+    // BuilderEnum Size Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_boxed_variants_smaller_than_inline() {
+        // Verify that the boxed variants would be larger if inline
+        let string_wrapper_size = size_of::<StringBuilderWrapper>();
+        let decimal_wrapper_size = size_of::<Decimal128BuilderWrapper>();
+        let box_size = size_of::<Box<StringBuilderWrapper>>();
+
+        assert!(
+            string_wrapper_size > box_size,
+            "StringBuilderWrapper ({string_wrapper_size}) should be larger than Box ({box_size})"
+        );
+        assert!(
+            decimal_wrapper_size > box_size,
+            "Decimal128BuilderWrapper ({decimal_wrapper_size}) should be larger than Box ({box_size})"
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
     // BuilderKind Tests
     // ═══════════════════════════════════════════════════════════════════════════
 
@@ -310,7 +344,7 @@ mod tests {
 
     #[test]
     fn test_builder_enum_decimal128() {
-        let builder = BuilderEnum::Decimal128(Decimal128BuilderWrapper::new(10, 18, 2));
+        let builder = BuilderEnum::Decimal128(Box::new(Decimal128BuilderWrapper::new(10, 18, 2)));
         assert_eq!(builder.kind(), BuilderKind::Decimal128);
     }
 
@@ -322,31 +356,32 @@ mod tests {
 
     #[test]
     fn test_builder_enum_utf8() {
-        let builder = BuilderEnum::Utf8(StringBuilderWrapper::new(10, 100));
+        let builder = BuilderEnum::Utf8(Box::new(StringBuilderWrapper::new(10, 100)));
         assert_eq!(builder.kind(), BuilderKind::Utf8);
     }
 
     #[test]
     fn test_builder_enum_large_utf8() {
-        let builder = BuilderEnum::LargeUtf8(LargeStringBuilderWrapper::new(10, 1000));
+        let builder = BuilderEnum::LargeUtf8(Box::new(LargeStringBuilderWrapper::new(10, 1000)));
         assert_eq!(builder.kind(), BuilderKind::LargeUtf8);
     }
 
     #[test]
     fn test_builder_enum_binary() {
-        let builder = BuilderEnum::Binary(BinaryBuilderWrapper::new(10, 100));
+        let builder = BuilderEnum::Binary(Box::new(BinaryBuilderWrapper::new(10, 100)));
         assert_eq!(builder.kind(), BuilderKind::Binary);
     }
 
     #[test]
     fn test_builder_enum_large_binary() {
-        let builder = BuilderEnum::LargeBinary(LargeBinaryBuilderWrapper::new(10, 1000));
+        let builder = BuilderEnum::LargeBinary(Box::new(LargeBinaryBuilderWrapper::new(10, 1000)));
         assert_eq!(builder.kind(), BuilderKind::LargeBinary);
     }
 
     #[test]
     fn test_builder_enum_fixed_size_binary() {
-        let builder = BuilderEnum::FixedSizeBinary(FixedSizeBinaryBuilderWrapper::new(10, 8));
+        let builder =
+            BuilderEnum::FixedSizeBinary(Box::new(FixedSizeBinaryBuilderWrapper::new(10, 8)));
         assert_eq!(builder.kind(), BuilderKind::FixedSizeBinary);
     }
 
@@ -467,7 +502,7 @@ mod tests {
 
     #[test]
     fn test_builder_enum_utf8_append() {
-        let mut builder = BuilderEnum::Utf8(StringBuilderWrapper::new(10, 100));
+        let mut builder = BuilderEnum::Utf8(Box::new(StringBuilderWrapper::new(10, 100)));
         builder
             .append_hana_value(&HdbValue::STRING("hello".to_string()))
             .unwrap();
@@ -482,7 +517,8 @@ mod tests {
 
     #[test]
     fn test_builder_enum_large_utf8_append() {
-        let mut builder = BuilderEnum::LargeUtf8(LargeStringBuilderWrapper::new(10, 1000));
+        let mut builder =
+            BuilderEnum::LargeUtf8(Box::new(LargeStringBuilderWrapper::new(10, 1000)));
         builder
             .append_hana_value(&HdbValue::STRING("large text".to_string()))
             .unwrap();
@@ -495,7 +531,7 @@ mod tests {
 
     #[test]
     fn test_builder_enum_binary_append() {
-        let mut builder = BuilderEnum::Binary(BinaryBuilderWrapper::new(10, 100));
+        let mut builder = BuilderEnum::Binary(Box::new(BinaryBuilderWrapper::new(10, 100)));
         builder
             .append_hana_value(&HdbValue::BINARY(vec![1, 2, 3]))
             .unwrap();
@@ -510,7 +546,8 @@ mod tests {
 
     #[test]
     fn test_builder_enum_large_binary_append() {
-        let mut builder = BuilderEnum::LargeBinary(LargeBinaryBuilderWrapper::new(10, 1000));
+        let mut builder =
+            BuilderEnum::LargeBinary(Box::new(LargeBinaryBuilderWrapper::new(10, 1000)));
         builder
             .append_hana_value(&HdbValue::BINARY(vec![4, 5, 6, 7]))
             .unwrap();
@@ -640,13 +677,13 @@ mod tests {
             BuilderEnum::Int64(Int64BuilderWrapper::new(1)),
             BuilderEnum::Float32(Float32BuilderWrapper::new(1)),
             BuilderEnum::Float64(Float64BuilderWrapper::new(1)),
-            BuilderEnum::Decimal128(Decimal128BuilderWrapper::new(1, 18, 2)),
+            BuilderEnum::Decimal128(Box::new(Decimal128BuilderWrapper::new(1, 18, 2))),
             BuilderEnum::Boolean(BooleanBuilderWrapper::new(1)),
-            BuilderEnum::Utf8(StringBuilderWrapper::new(1, 10)),
-            BuilderEnum::LargeUtf8(LargeStringBuilderWrapper::new(1, 100)),
-            BuilderEnum::Binary(BinaryBuilderWrapper::new(1, 10)),
-            BuilderEnum::LargeBinary(LargeBinaryBuilderWrapper::new(1, 100)),
-            BuilderEnum::FixedSizeBinary(FixedSizeBinaryBuilderWrapper::new(1, 8)),
+            BuilderEnum::Utf8(Box::new(StringBuilderWrapper::new(1, 10))),
+            BuilderEnum::LargeUtf8(Box::new(LargeStringBuilderWrapper::new(1, 100))),
+            BuilderEnum::Binary(Box::new(BinaryBuilderWrapper::new(1, 10))),
+            BuilderEnum::LargeBinary(Box::new(LargeBinaryBuilderWrapper::new(1, 100))),
+            BuilderEnum::FixedSizeBinary(Box::new(FixedSizeBinaryBuilderWrapper::new(1, 8))),
             BuilderEnum::Date32(Date32BuilderWrapper::new(1)),
             BuilderEnum::Time64Nanosecond(Time64NanosecondBuilderWrapper::new(1)),
             BuilderEnum::TimestampNanosecond(TimestampNanosecondBuilderWrapper::new(1)),

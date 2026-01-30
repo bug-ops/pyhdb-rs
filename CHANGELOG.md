@@ -16,6 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Better cache locality through contiguous memory layout in `Vec<BuilderEnum>`
   - New public API: `BuilderFactory::create_builder_enum()`, `BuilderEnum`, `BuilderKind`, `SchemaProfile`
 
+### Fixed
+
+- **Performance**: Box wrapping optimization for large `BuilderEnum` variants
+  - Wrapped 6 large variants (Decimal128, String, Binary builders) in `Box` to reduce enum size
+  - Improved cache locality for temporal and primitive types
+  - Eliminated temporal types performance regression from Phase 2 (-24% → <1%)
+  - Analytics workload gains maintained (+54-60%)
+  - Box indirection overhead negligible (<1%) on string/decimal operations
+
 ## [0.3.1] - 2026-01-29
 
 ### Removed
