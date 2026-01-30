@@ -144,11 +144,11 @@ jobs:
         working-directory: python
       - name: Run tests with coverage
         if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
-        run: uv run pytest --cov=pyhdb_rs --cov-report=xml
+        run: uv run pytest --cov=pyhdb_rs --cov-report=xml --benchmark-disable
         working-directory: python
       - name: Run tests
         if: matrix.python-version != '3.12' || matrix.os != 'ubuntu-latest'
-        run: uv run pytest
+        run: uv run pytest --benchmark-disable
         working-directory: python
       - name: Upload Python coverage
         if: matrix.python-version == '3.12' && matrix.os == 'ubuntu-latest'
