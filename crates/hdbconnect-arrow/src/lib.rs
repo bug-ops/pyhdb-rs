@@ -36,9 +36,16 @@
 #![warn(clippy::all)]
 #![warn(clippy::pedantic)]
 
+// Profiling support: dhat heap allocator (enabled via `--features profiling`)
+#[cfg(feature = "profiling")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 pub mod builders;
 pub mod conversion;
 pub mod error;
+#[cfg(feature = "profiling")]
+pub mod profiling;
 pub mod schema;
 #[cfg(test)]
 pub mod test_utils;
