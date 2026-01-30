@@ -96,3 +96,49 @@ def create_pool(url: str, **kwargs):
         builder = builder.tls(kwargs["tls_config"])
 
     return builder.build()
+
+
+@pytest.fixture
+def connection_url(hana_uri: str) -> str:
+    """Get the HANA connection URL for tests.
+
+    Returns:
+        HANA connection URL string
+    """
+    return hana_uri
+
+
+@pytest.fixture
+def sync_connection(hana_uri: str) -> Generator[pyhdb_rs.Connection, None, None]:
+    """Create a sync HANA connection for tests.
+
+    Yields:
+        Connection object
+
+    After the test completes, the connection is closed.
+    """
+    import pyhdb_rs
+
+    conn = pyhdb_rs.connect(hana_uri)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@pytest.fixture
+async def async_connection(hana_uri: str):
+    """Create an async HANA connection for tests.
+
+    Yields:
+        AsyncConnection object
+
+    After the test completes, the connection is closed.
+    """
+    import pyhdb_rs.aio
+
+    conn = await pyhdb_rs.aio.connect(hana_uri)
+    try:
+        yield conn
+    finally:
+        await conn.close()
