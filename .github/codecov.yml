@@ -25,6 +25,20 @@ coverage:
       default:
         target: 80%
 
+flags:
+  hdbconnect-arrow:
+    paths:
+      - crates/hdbconnect-arrow/
+    carryforward: true
+  hdbconnect-py:
+    paths:
+      - crates/hdbconnect-py/
+    carryforward: true
+  python:
+    paths:
+      - python/pyhdb_rs/
+    carryforward: true
+
 ignore:
   # PyO3 extension module - cannot be measured with cargo llvm-cov
   - "crates/hdbconnect-py/**"

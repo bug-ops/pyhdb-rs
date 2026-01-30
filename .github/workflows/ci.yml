@@ -38,11 +38,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ubuntu-latest
+          cache-targets: false  # sccache handles compilation artifacts
       - name: Clippy
         run: cargo clippy --workspace --all-features -- -D warnings
+        env:
+          RUSTC_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "true"
 
   lint-python:
     name: Lint Python
@@ -72,9 +78,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ matrix.os }}
+          cache-targets: false  # sccache handles compilation artifacts
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -83,6 +92,9 @@ jobs:
         # Exclude hdbconnect-py: PyO3 abi3 crates can't link Python standalone.
         # hdbconnect-py is tested via Python tests (test-python job).
         run: cargo nextest run --workspace --all-features --exclude hdbconnect-py
+        env:
+          RUSTC_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "true"
 
   # Build wheels for testing (one per OS, abi3 compatible with all Python versions)
   # Ubuntu builds separately for fast test startup
@@ -94,9 +106,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ubuntu-latest
+          cache-targets: false  # sccache handles compilation artifacts
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -105,6 +120,9 @@ jobs:
         with:
           working-directory: python
           args: --out dist
+          sccache: true
+        env:
+          SCCACHE_GHA_ENABLED: "true"
       - name: Upload wheel
         uses: actions/upload-artifact@v6
         with:
@@ -125,9 +143,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ matrix.os }}
+          cache-targets: false  # sccache handles compilation artifacts
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -136,6 +157,9 @@ jobs:
         with:
           working-directory: python
           args: --out dist
+          sccache: true
+        env:
+          SCCACHE_GHA_ENABLED: "true"
       - name: Upload wheel
         uses: actions/upload-artifact@v6
         with:
@@ -187,6 +211,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: python/coverage.xml
+          flags: python
           fail_ci_if_error: false
 
   # Other platforms test after all wheels are ready
@@ -317,9 +342,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ubuntu-latest
+          cache-targets: false  # sccache handles compilation artifacts
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -327,11 +355,15 @@ jobs:
       - name: Generate coverage
         # Exclude hdbconnect-py: PyO3 abi3 crates can't link Python standalone.
         run: cargo llvm-cov --workspace --all-features --exclude hdbconnect-py --lcov --output-path lcov.info
+        env:
+          RUSTC_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "true"
       - name: Upload coverage
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
+          flags: hdbconnect-arrow
           fail_ci_if_error: false
 
   msrv:
@@ -348,8 +380,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ubuntu-latest
+          cache-targets: false  # sccache handles compilation artifacts
       - name: Check MSRV
         run: cargo check --workspace
+        env:
+          RUSTC_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "true"
