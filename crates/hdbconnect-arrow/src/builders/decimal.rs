@@ -3,15 +3,95 @@
 //! Handles HANA DECIMAL and SMALLDECIMAL types with proper precision/scale
 //! preservation using Arrow Decimal128 arrays.
 
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use arrow_array::ArrayRef;
 use arrow_array::builder::Decimal128Builder;
+use num_bigint::BigInt;
 
 use crate::Result;
 use crate::traits::builder::HanaCompatibleBuilder;
 use crate::traits::sealed::private::Sealed;
 use crate::types::hana::{DecimalPrecision, DecimalScale};
+
+// Pre-computed powers of 10 as i128 for O(1) lookup in fast path.
+// Covers 10^0 through 10^38 (39 elements), sufficient for max DECIMAL precision.
+const POWERS_OF_10_I128: [i128; 39] = [
+    1,                                                   // 10^0
+    10,                                                  // 10^1
+    100,                                                 // 10^2
+    1_000,                                               // 10^3
+    10_000,                                              // 10^4
+    100_000,                                             // 10^5
+    1_000_000,                                           // 10^6
+    10_000_000,                                          // 10^7
+    100_000_000,                                         // 10^8
+    1_000_000_000,                                       // 10^9
+    10_000_000_000,                                      // 10^10
+    100_000_000_000,                                     // 10^11
+    1_000_000_000_000,                                   // 10^12
+    10_000_000_000_000,                                  // 10^13
+    100_000_000_000_000,                                 // 10^14
+    1_000_000_000_000_000,                               // 10^15
+    10_000_000_000_000_000,                              // 10^16
+    100_000_000_000_000_000,                             // 10^17
+    1_000_000_000_000_000_000,                           // 10^18
+    10_000_000_000_000_000_000,                          // 10^19
+    100_000_000_000_000_000_000,                         // 10^20
+    1_000_000_000_000_000_000_000,                       // 10^21
+    10_000_000_000_000_000_000_000,                      // 10^22
+    100_000_000_000_000_000_000_000,                     // 10^23
+    1_000_000_000_000_000_000_000_000,                   // 10^24
+    10_000_000_000_000_000_000_000_000,                  // 10^25
+    100_000_000_000_000_000_000_000_000,                 // 10^26
+    1_000_000_000_000_000_000_000_000_000,               // 10^27
+    10_000_000_000_000_000_000_000_000_000,              // 10^28
+    100_000_000_000_000_000_000_000_000_000,             // 10^29
+    1_000_000_000_000_000_000_000_000_000_000,           // 10^30
+    10_000_000_000_000_000_000_000_000_000_000,          // 10^31
+    100_000_000_000_000_000_000_000_000_000_000,         // 10^32
+    1_000_000_000_000_000_000_000_000_000_000_000,       // 10^33
+    10_000_000_000_000_000_000_000_000_000_000_000,      // 10^34
+    100_000_000_000_000_000_000_000_000_000_000_000,     // 10^35
+    1_000_000_000_000_000_000_000_000_000_000_000_000,   // 10^36
+    10_000_000_000_000_000_000_000_000_000_000_000_000,  // 10^37
+    100_000_000_000_000_000_000_000_000_000_000_000_000, // 10^38
+];
+
+// Pre-computed powers of 10 as BigInt for slow path fallback.
+// Initialized lazily on first access, thread-safe via LazyLock.
+static POWERS_OF_10_BIGINT: LazyLock<[BigInt; 39]> =
+    LazyLock::new(|| std::array::from_fn(|i| BigInt::from(POWERS_OF_10_I128[i])));
+
+/// Fast path: multiply mantissa by power of 10 using i128 arithmetic.
+/// Returns `None` if `scale_diff` is out of range or multiplication overflows.
+#[inline]
+fn scale_up_i128(mantissa: i128, scale_diff: i64) -> Option<i128> {
+    let idx = usize::try_from(scale_diff).ok()?;
+    let multiplier = POWERS_OF_10_I128.get(idx)?;
+    mantissa.checked_mul(*multiplier)
+}
+
+/// Fast path: divide mantissa by power of 10 using i128 arithmetic.
+/// Returns `None` if `scale_diff` is out of range.
+#[inline]
+fn scale_down_i128(mantissa: i128, scale_diff: i64) -> Option<i128> {
+    let idx = usize::try_from(scale_diff).ok()?;
+    let divisor = POWERS_OF_10_I128.get(idx)?;
+    Some(mantissa / divisor)
+}
+
+/// Slow path: scale up using `BigInt` arithmetic with pre-computed powers.
+fn scale_up_bigint(mantissa: &BigInt, scale_diff: i64) -> BigInt {
+    let exp = usize::try_from(scale_diff).unwrap_or(0).min(38);
+    mantissa * &POWERS_OF_10_BIGINT[exp]
+}
+
+/// Slow path: scale down using `BigInt` arithmetic with pre-computed powers.
+fn scale_down_bigint(mantissa: &BigInt, scale_diff: i64) -> BigInt {
+    let exp = usize::try_from(scale_diff).unwrap_or(0).min(38);
+    mantissa / &POWERS_OF_10_BIGINT[exp]
+}
 
 /// Validated decimal configuration.
 ///
@@ -101,68 +181,56 @@ impl Decimal128BuilderWrapper {
         }
     }
 
+    /// Slow path: `BigInt` arithmetic with pre-computed powers lookup.
+    /// Used when mantissa exceeds i128 range or fast path overflows.
+    fn convert_decimal_slow(&self, mantissa: &BigInt, scale_diff: i64) -> Result<i128> {
+        use num_traits::ToPrimitive;
+
+        let scaled_value = if scale_diff >= 0 {
+            scale_up_bigint(mantissa, scale_diff)
+        } else {
+            scale_down_bigint(mantissa, -scale_diff)
+        };
+
+        scaled_value.to_i128().ok_or_else(|| {
+            crate::ArrowConversionError::decimal_overflow(
+                self.config.precision(),
+                self.config.scale(),
+            )
+        })
+    }
+
     /// Convert a HANA decimal value to i128 with proper scaling.
     ///
-    /// Uses direct `BigDecimal` arithmetic via `as_bigint_and_exponent()` to avoid
-    /// heap allocations from string parsing.
-    ///
-    /// # Implementation Note
-    ///
-    /// HANA DECIMAL values are represented as `BigDecimal` in hdbconnect.
-    /// We need to:
-    /// 1. Extract mantissa and exponent using `as_bigint_and_exponent()`
-    /// 2. Scale to match Arrow Decimal128 scale
-    /// 3. Convert to i128
+    /// Uses fast path (i128 arithmetic) when possible, falling back to
+    /// `BigInt` arithmetic for edge cases (mantissa exceeds i128 or overflow).
     ///
     /// # Errors
     ///
     /// Returns error if value cannot be represented in Decimal128.
     fn convert_decimal(&self, value: &hdbconnect::HdbValue) -> Result<i128> {
         use hdbconnect::HdbValue;
-        use num_bigint::BigInt;
         use num_traits::ToPrimitive;
 
         match value {
             HdbValue::DECIMAL(decimal) => {
                 let (mantissa, exponent) = decimal.as_bigint_and_exponent();
                 let target_scale = i64::from(self.config.scale());
-
-                // BigDecimal::as_bigint_and_exponent() returns (mantissa, scale) where:
-                // - mantissa is the unscaled integer representation
-                // - scale is POSITIVE for fractional parts: 123.45 -> (12345, 2) meaning:
-                //   actual_value = mantissa / 10^scale
-                // We need to rescale to target_scale for Arrow Decimal128
                 let scale_diff = target_scale - exponent;
 
-                let scaled_value = if scale_diff >= 0 {
-                    // Need to multiply by 10^scale_diff
-                    // scale_diff is bounded by max precision (38) + exponent range, fits in u32
-                    let exp = u32::try_from(scale_diff).map_err(|_| {
-                        crate::ArrowConversionError::decimal_overflow(
-                            self.config.precision(),
-                            self.config.scale(),
-                        )
-                    })?;
-                    let multiplier = BigInt::from(10_i128).pow(exp);
-                    &mantissa * &multiplier
-                } else {
-                    // Need to divide by 10^(-scale_diff) - may lose precision
-                    let exp = u32::try_from(-scale_diff).map_err(|_| {
-                        crate::ArrowConversionError::decimal_overflow(
-                            self.config.precision(),
-                            self.config.scale(),
-                        )
-                    })?;
-                    let divisor = BigInt::from(10_i128).pow(exp);
-                    &mantissa / &divisor
-                };
+                // Fast path: try i128 arithmetic first (covers >99% of cases)
+                if let Some(m) = mantissa.to_i128() {
+                    if scale_diff >= 0 {
+                        if let Some(result) = scale_up_i128(m, scale_diff) {
+                            return Ok(result);
+                        }
+                    } else if let Some(result) = scale_down_i128(m, -scale_diff) {
+                        return Ok(result);
+                    }
+                }
 
-                scaled_value.to_i128().ok_or_else(|| {
-                    crate::ArrowConversionError::decimal_overflow(
-                        self.config.precision(),
-                        self.config.scale(),
-                    )
-                })
+                // Slow path: BigInt arithmetic with cached powers
+                self.convert_decimal_slow(&mantissa, scale_diff)
             }
             other => Err(crate::ArrowConversionError::value_conversion(
                 "decimal",
@@ -427,6 +495,132 @@ mod tests {
         builder.reset();
         assert_eq!(builder.len(), 0);
         assert!(builder.is_empty());
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Powers of 10 Lookup Table Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_powers_of_10_i128_correctness() {
+        for (i, &power) in POWERS_OF_10_I128.iter().enumerate() {
+            let expected = 10_i128.pow(i as u32);
+            assert_eq!(power, expected, "POWERS_OF_10_I128[{i}] mismatch");
+        }
+    }
+
+    #[test]
+    fn test_powers_of_10_bigint_correctness() {
+        for (i, power) in POWERS_OF_10_BIGINT.iter().enumerate() {
+            let expected = BigInt::from(10_i128).pow(i as u32);
+            assert_eq!(power, &expected, "POWERS_OF_10_BIGINT[{i}] mismatch");
+        }
+    }
+
+    #[test]
+    fn test_powers_of_10_i128_boundary_values() {
+        assert_eq!(POWERS_OF_10_I128[0], 1);
+        assert_eq!(
+            POWERS_OF_10_I128[38],
+            100_000_000_000_000_000_000_000_000_000_000_000_000
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Fast Path Method Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_scale_up_i128_simple() {
+        assert_eq!(scale_up_i128(100, 2), Some(10000));
+    }
+
+    #[test]
+    fn test_scale_up_i128_zero_scale_diff() {
+        assert_eq!(scale_up_i128(12345, 0), Some(12345));
+    }
+
+    #[test]
+    fn test_scale_up_i128_max_scale_diff() {
+        assert_eq!(scale_up_i128(1, 38), Some(POWERS_OF_10_I128[38]));
+    }
+
+    #[test]
+    fn test_scale_up_i128_overflow() {
+        // i128::MAX * 10 would overflow
+        assert_eq!(scale_up_i128(i128::MAX, 1), None);
+    }
+
+    #[test]
+    fn test_scale_up_i128_negative_scale_diff() {
+        assert_eq!(scale_up_i128(100, -1), None);
+    }
+
+    #[test]
+    fn test_scale_up_i128_out_of_range_scale_diff() {
+        assert_eq!(scale_up_i128(1, 39), None);
+    }
+
+    #[test]
+    fn test_scale_down_i128_simple() {
+        assert_eq!(scale_down_i128(12345, 2), Some(123));
+    }
+
+    #[test]
+    fn test_scale_down_i128_zero_scale_diff() {
+        assert_eq!(scale_down_i128(12345, 0), Some(12345));
+    }
+
+    #[test]
+    fn test_scale_down_i128_truncation() {
+        assert_eq!(scale_down_i128(12399, 2), Some(123));
+    }
+
+    #[test]
+    fn test_scale_down_i128_negative_scale_diff() {
+        assert_eq!(scale_down_i128(100, -1), None);
+    }
+
+    #[test]
+    fn test_scale_down_i128_out_of_range() {
+        assert_eq!(scale_down_i128(1, 39), None);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Slow Path Method Tests
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_convert_decimal_slow_scale_up() {
+        let builder = Decimal128BuilderWrapper::new(10, 18, 2);
+        let mantissa = BigInt::from(100_i128);
+        assert_eq!(builder.convert_decimal_slow(&mantissa, 2).unwrap(), 10000);
+    }
+
+    #[test]
+    fn test_convert_decimal_slow_scale_down() {
+        let builder = Decimal128BuilderWrapper::new(10, 18, 0);
+        let mantissa = BigInt::from(12345_i128);
+        assert_eq!(builder.convert_decimal_slow(&mantissa, -2).unwrap(), 123);
+    }
+
+    #[test]
+    fn test_convert_decimal_slow_large_mantissa() {
+        let builder = Decimal128BuilderWrapper::new(10, 38, 0);
+        // Value that fits in i128 but tests slow path
+        let mantissa = BigInt::from(i128::MAX);
+        assert_eq!(
+            builder.convert_decimal_slow(&mantissa, 0).unwrap(),
+            i128::MAX
+        );
+    }
+
+    #[test]
+    fn test_convert_decimal_slow_overflow() {
+        let builder = Decimal128BuilderWrapper::new(10, 38, 0);
+        // Value exceeding i128::MAX
+        let mantissa = BigInt::from(i128::MAX) * 10;
+        assert!(builder.convert_decimal_slow(&mantissa, 0).is_err());
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -746,6 +940,59 @@ mod tests {
             // 12300e-2 = 123 with scale=0
             let value = convert_and_get_value(10, 0, "12300e-2");
             assert_eq!(value, 123);
+        }
+
+        // ───────────────────────────────────────────────────────────────────────
+        // Fast path boundary tests
+        // ───────────────────────────────────────────────────────────────────────
+
+        #[test]
+        fn test_fast_path_boundary_i128_max() {
+            // i128::MAX with scale=0 should use fast path (no scaling needed)
+            let value = convert_and_get_value(38, 0, "170141183460469231731687303715884105727");
+            assert_eq!(value, i128::MAX);
+        }
+
+        #[test]
+        fn test_fast_path_boundary_i128_min() {
+            // i128::MIN with scale=0 should use fast path
+            let value = convert_and_get_value(38, 0, "-170141183460469231731687303715884105728");
+            assert_eq!(value, i128::MIN);
+        }
+
+        #[test]
+        fn test_fast_path_boundary_scale_38() {
+            // Maximum scale difference (38)
+            let value = convert_and_get_value(38, 38, "1");
+            assert_eq!(value, POWERS_OF_10_I128[38]);
+        }
+
+        // ───────────────────────────────────────────────────────────────────────
+        // Slow path fallback tests
+        // ───────────────────────────────────────────────────────────────────────
+
+        #[test]
+        fn test_slow_path_fallback_overflow_triggers_slow_path() {
+            // Large value that fits in i128 but scaling causes fast path overflow
+            // 10^37 * 10 = 10^38 which fits in i128
+            let value = convert_and_get_value(38, 1, "10000000000000000000000000000000000000");
+            assert_eq!(value, POWERS_OF_10_I128[38]);
+        }
+
+        #[test]
+        fn test_slow_path_mantissa_exceeds_i128() {
+            // Mantissa that exceeds i128 but result fits after scale down
+            // This tests that slow path is triggered when mantissa.to_i128() returns None
+            let mut builder = Decimal128BuilderWrapper::new(10, 38, 0);
+            // 10^39 / 10 = 10^38 which fits
+            let row = MockRowBuilder::new()
+                .decimal_str("1000000000000000000000000000000000000000")
+                .build();
+            // Scale down from source scale to 0 should result in truncation
+            // BigDecimal "1000000000000000000000000000000000000000" has 40 digits
+            let result = builder.append_hana_value(&row[0]);
+            // This exceeds i128::MAX, so should error
+            assert!(result.is_err());
         }
     }
 }

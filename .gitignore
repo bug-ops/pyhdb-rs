@@ -57,3 +57,4 @@ credentials.json
 secrets.yaml
 *.pem
 *.key
+.cargo/
