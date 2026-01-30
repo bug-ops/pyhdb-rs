@@ -1222,6 +1222,53 @@ class Cursor:
         """
         ...
 
+    def callproc(
+        self,
+        procname: str,
+        parameters: Sequence[Any] | None = None,
+    ) -> Sequence[Any] | None:
+        """Call a stored database procedure.
+
+        DB-API 2.0 compliant stored procedure execution.
+
+        Args:
+            procname: Procedure name (can include schema: "SCHEMA.PROC")
+            parameters: Optional input parameters as sequence
+
+        Returns:
+            Input parameters unchanged (per DB-API 2.0 spec).
+            For output values, use fetchone() after callproc().
+
+        Raises:
+            ProgrammingError: If procedure name is invalid or empty
+            OperationalError: If connection is closed
+
+        Example::
+
+            >>> cursor.callproc("GET_USER_INFO", [user_id])
+            >>> result = cursor.fetchone()
+
+        Note:
+            SAP HANA does not support OUT/INOUT parameter modification via
+            prepared statements. Output values should be retrieved via
+            fetchone()/fetchall() after callproc().
+        """
+        ...
+
+    def nextset(self) -> bool:
+        """Skip to next result set.
+
+        DB-API 2.0 optional extension.
+
+        Returns:
+            False (multiple result sets not yet supported)
+
+        Note:
+            This is a stub implementation. Full multiple result set
+            support is planned for a future release.
+        """
+        ...
+
     def fetchone(self) -> tuple[Any, ...] | None:
         """Fetch the next row from the result set.
 
@@ -1660,6 +1707,45 @@ class AsyncCursor:
         sql: str,
         seq_of_parameters: Sequence[Sequence[Any]] | None = None,
     ) -> None: ...
+    async def callproc(
+        self,
+        procname: str,
+        parameters: Sequence[Any] | None = None,
+    ) -> None:
+        """Call a stored database procedure (async).
+
+        Note: Parameters not supported in async cursor.
+        Use connection.execute_arrow() for data retrieval.
+
+        Args:
+            procname: Procedure name (can include schema: "SCHEMA.PROC")
+            parameters: Not supported, raises NotSupportedError if provided
+
+        Returns:
+            None (parameters not supported in async cursor)
+
+        Raises:
+            NotSupportedError: If parameters provided
+            ProgrammingError: If procedure name is invalid
+
+        Example::
+
+            >>> await cursor.callproc("CLEANUP_OLD_RECORDS")
+        """
+        ...
+
+    def nextset(self) -> bool:
+        """Skip to next result set.
+
+        Returns:
+            False (stub implementation)
+
+        Note:
+            This is a stub implementation. Full multiple result set
+            support is planned for a future release.
+        """
+        ...
+
     async def fetchone(self) -> tuple[Any, ...] | None: ...
     async def fetchmany(self, size: int | None = None) -> list[tuple[Any, ...]]: ...
     async def fetchall(self) -> list[tuple[Any, ...]]: ...

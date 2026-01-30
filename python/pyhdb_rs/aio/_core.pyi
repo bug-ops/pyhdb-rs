@@ -300,6 +300,45 @@ class AsyncCursor:
         """
         ...
 
+    async def callproc(
+        self,
+        procname: str,
+        parameters: Sequence[Any] | None = None,
+    ) -> None:
+        """Call a stored database procedure (async).
+
+        Note: Parameters not supported in async cursor.
+        Use connection.execute_arrow() for data retrieval.
+
+        Args:
+            procname: Procedure name (can include schema: "SCHEMA.PROC")
+            parameters: Not supported, raises NotSupportedError if provided
+
+        Returns:
+            None (parameters not supported in async cursor)
+
+        Raises:
+            NotSupportedError: If parameters provided
+            ProgrammingError: If procedure name is invalid or empty
+
+        Example::
+
+            >>> await cursor.callproc("CLEANUP_OLD_RECORDS")
+        """
+        ...
+
+    def nextset(self) -> bool:
+        """Skip to next result set.
+
+        Returns:
+            False (stub implementation)
+
+        Note:
+            This is a stub implementation. Full multiple result set
+            support is planned for a future release.
+        """
+        ...
+
     def fetchone(self) -> None:
         """Fetch one row.
 

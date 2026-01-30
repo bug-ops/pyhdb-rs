@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Stored Procedures API** (Issue #54 Phase 3): DB-API 2.0 compliant stored procedure support
+  - `Cursor.callproc(procname, parameters)` - Execute stored procedures with optional parameters
+  - `Cursor.nextset()` - Skip to next result set (stub returning False, Phase 4 will implement full support)
+  - Sync cursor: Full parameter support via prepared statements
+  - Async cursor: Parameterless procedure calls only (parameters raise `NotSupportedError`)
+  - Procedure name validation to prevent SQL injection
+  - Returns input parameters unchanged per DB-API 2.0 spec
+  - Comprehensive type stubs for IDE support in both `_core.pyi` and `aio/_core.pyi`
+  - 12 tests covering validation, sync, async, and integration scenarios
+
 - **Connection Statistics API** (Issue #54 Phase 2): Expose server-side connection statistics for performance monitoring
   - `Connection.connection_id()` - Get server-assigned connection ID
   - `Connection.server_memory_usage()` - Get current memory usage in bytes
