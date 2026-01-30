@@ -40,6 +40,7 @@ arrow-schema = "57.0"
 bigdecimal = "0.4"
 criterion = "0.8"
 deadpool = { version = "0.12", default-features = false }
+dhat = "0.3"
 hdbconnect = "0.32"
 hdbconnect_async = "0.32"
 hdbconnect-arrow = { path = "crates/hdbconnect-arrow", version = "0.3.1" }

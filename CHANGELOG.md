@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Better cache locality through contiguous memory layout in `Vec<BuilderEnum>`
   - New public API: `BuilderFactory::create_builder_enum()`, `BuilderEnum`, `BuilderKind`, `SchemaProfile`
 
+### Added
+
+- **Developer Tools**: Profiling infrastructure for performance analysis
+  - Added optional `profiling` feature flag with dhat heap profiler integration
+  - Zero impact on release builds through conditional compilation
+  - Baseline profiling identified BigInt clone as optimization target (8MB per 1M decimals)
+  - Comprehensive profiling methodology documentation
+
 ### Fixed
 
 - **Performance**: Box wrapping optimization for large `BuilderEnum` variants

@@ -3,6 +3,7 @@
 *.so
 *.dylib
 *.dll
+dhat-heap.json
 
 # IDE
 .idea/
