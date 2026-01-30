@@ -142,3 +142,19 @@ async def async_connection(hana_uri: str):
         yield conn
     finally:
         await conn.close()
+
+
+@pytest.fixture
+async def connection_pool(hana_uri: str):
+    """Create a connection pool for tests.
+
+    Yields:
+        ConnectionPool object
+
+    After the test completes, the pool is closed.
+    """
+    pool = create_pool(hana_uri, max_size=5)
+    try:
+        yield pool
+    finally:
+        await pool.close()
