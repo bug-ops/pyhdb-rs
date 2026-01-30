@@ -44,6 +44,12 @@ impl StringBuilderWrapper {
         }
     }
 
+    /// Create builder with custom capacity for values and data.
+    #[must_use]
+    pub fn with_capacity(item_capacity: usize, data_capacity: usize) -> Self {
+        Self::new(item_capacity, data_capacity)
+    }
+
     /// Create with default capacities (1024 items, 32KB data).
     #[must_use]
     pub fn default_capacity() -> Self {
@@ -110,6 +116,12 @@ impl LargeStringBuilderWrapper {
             len: 0,
             max_lob_bytes: None,
         }
+    }
+
+    /// Create builder with custom capacity for values and data.
+    #[must_use]
+    pub fn with_capacity(item_capacity: usize, data_capacity: usize) -> Self {
+        Self::new(item_capacity, data_capacity)
     }
 
     /// Create with default capacities.
@@ -485,6 +497,13 @@ mod tests {
     }
 
     #[test]
+    fn test_string_builder_with_capacity() {
+        let builder = StringBuilderWrapper::with_capacity(10, 100);
+        assert_eq!(builder.len(), 0);
+        assert!(builder.capacity().is_none());
+    }
+
+    #[test]
     fn test_string_builder_default_capacity() {
         let builder = StringBuilderWrapper::default_capacity();
         assert_eq!(builder.len(), 0);
@@ -572,6 +591,13 @@ mod tests {
     #[test]
     fn test_large_string_builder_new() {
         let builder = LargeStringBuilderWrapper::new(10, 1000);
+        assert_eq!(builder.len(), 0);
+        assert!(builder.max_lob_bytes.is_none());
+    }
+
+    #[test]
+    fn test_large_string_builder_with_capacity() {
+        let builder = LargeStringBuilderWrapper::with_capacity(10, 1000);
         assert_eq!(builder.len(), 0);
         assert!(builder.max_lob_bytes.is_none());
     }

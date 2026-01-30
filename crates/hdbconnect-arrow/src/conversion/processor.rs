@@ -154,7 +154,7 @@ impl HanaBatchProcessor {
     #[must_use]
     pub fn new(schema: SchemaRef, config: BatchConfig) -> Self {
         let factory = BuilderFactory::from_config(&config);
-        let builders = factory.create_builders_enum_for_schema(&schema);
+        let builders = factory.create_builders_enum_for_schema_with_metadata(&schema);
         let profile = SchemaProfile::analyze(&schema);
 
         Self {

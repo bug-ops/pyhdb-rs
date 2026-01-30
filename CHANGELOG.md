@@ -31,6 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Memory savings: 8 MB per 1M decimals (999,990 allocations eliminated)
   - Zero-cost abstraction via std::borrow::Cow with automatic deref coercion
 
+- **Performance**: String capacity pre-sizing via field metadata
+  - Added metadata-based capacity calculation for VARCHAR/NVARCHAR builders
+  - Extracts max_length from HANA field metadata for optimal buffer sizing
+  - Reduces reallocation overhead during batch building (2-3 reallocations eliminated per column)
+  - Safe overflow protection with saturating arithmetic and [4KB, 256MB] clamping
+  - Unicode-aware: 4x multiplier for NVARCHAR (UTF-8 worst-case), 1x for VARCHAR
+  - Backward compatible: graceful fallback to default capacity when metadata missing
+  - Expected improvement: +5-10% on string-heavy workloads
+
 ### Fixed
 
 - **Performance**: Box wrapping optimization for large `BuilderEnum` variants

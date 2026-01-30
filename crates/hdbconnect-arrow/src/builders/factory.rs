@@ -3,7 +3,7 @@
 //! The factory pattern ensures that builders are created with correct
 //! configurations for each Arrow data type.
 
-use arrow_schema::{DataType, Schema, TimeUnit};
+use arrow_schema::{DataType, Field, Schema, TimeUnit};
 
 use super::boolean::BooleanBuilderWrapper;
 use super::decimal::Decimal128BuilderWrapper;
@@ -274,6 +274,87 @@ impl BuilderFactory {
             .map(|field| self.create_builder_enum(field.data_type()))
             .collect()
     }
+
+    /// Calculate safe string data capacity from field metadata.
+    ///
+    /// Reads `max_length` from field metadata and applies Unicode multiplier:
+    /// - VARCHAR (Utf8): 1x multiplier
+    /// - NVARCHAR (LargeUtf8): 4x multiplier (worst-case UTF-8 encoding)
+    ///
+    /// Clamps result to `[4 KB, 256 MB]` to prevent overflow and excessive memory.
+    fn calculate_string_data_capacity(&self, field: &Field) -> usize {
+        const MIN_CAPACITY: usize = 4 * 1024; // 4 KB
+        const MAX_CAPACITY: usize = 256 * 1024 * 1024; // 256 MB
+
+        // Read max_length from field metadata
+        let max_length = field
+            .metadata()
+            .get("max_length")
+            .and_then(|s| s.parse::<usize>().ok());
+
+        let max_length = match max_length {
+            Some(len) if len > 0 => len,
+            _ => return self.string_capacity, // Fallback to default
+        };
+
+        // Unicode multiplier: 4x for LargeUtf8 (NVARCHAR), 1x for Utf8 (VARCHAR)
+        let multiplier = match field.data_type() {
+            DataType::Utf8 => 1,
+            DataType::LargeUtf8 => 4,
+            _ => return 0,
+        };
+
+        // Calculate with overflow protection
+        max_length
+            .saturating_mul(multiplier)
+            .saturating_mul(self.capacity)
+            .clamp(MIN_CAPACITY, MAX_CAPACITY)
+    }
+
+    /// Create builder enum with capacity hints from field metadata.
+    ///
+    /// For string types (Utf8, `LargeUtf8`), uses `max_length` metadata to calculate
+    /// optimal data capacity. Falls back to `create_builder_enum()` for other types.
+    #[must_use]
+    pub fn create_builder_enum_for_field(&self, field: &Field) -> BuilderEnum {
+        match field.data_type() {
+            DataType::Utf8 => {
+                let capacity = self.calculate_string_data_capacity(field);
+                BuilderEnum::Utf8(Box::new(StringBuilderWrapper::with_capacity(
+                    self.capacity,
+                    capacity,
+                )))
+            }
+            DataType::LargeUtf8 => {
+                let capacity = self.calculate_string_data_capacity(field);
+                let mut builder = LargeStringBuilderWrapper::with_capacity(self.capacity, capacity);
+                if let Some(max) = self.max_lob_bytes {
+                    builder = builder.with_max_lob_bytes(max);
+                }
+                BuilderEnum::LargeUtf8(Box::new(builder))
+            }
+            _ => {
+                // Delegate to existing method for non-string types
+                self.create_builder_enum(field.data_type())
+            }
+        }
+    }
+
+    /// Create builders for schema with metadata support.
+    ///
+    /// Uses field metadata (e.g., `max_length`) to optimize string buffer pre-sizing.
+    /// Prefer this over `create_builders_enum_for_schema()` when schema has metadata.
+    #[must_use]
+    pub fn create_builders_enum_for_schema_with_metadata(
+        &self,
+        schema: &Schema,
+    ) -> Vec<BuilderEnum> {
+        schema
+            .fields()
+            .iter()
+            .map(|field| self.create_builder_enum_for_field(field))
+            .collect()
+    }
 }
 
 impl Default for BuilderFactory {
@@ -284,6 +365,8 @@ impl Default for BuilderFactory {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use arrow_schema::{DataType, Field, Schema, TimeUnit};
 
     use super::*;
@@ -897,5 +980,106 @@ mod tests {
         for (builder, expected) in builders.iter().zip(expected_kinds.iter()) {
             assert_eq!(builder.kind(), *expected);
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // String Capacity Pre-sizing Tests (Phase 6)
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_calculate_string_data_capacity_varchar() {
+        let factory = BuilderFactory::new(1000);
+        let mut metadata = HashMap::new();
+        metadata.insert("max_length".to_string(), "100".to_string());
+        let field = Field::new("test", DataType::Utf8, false).with_metadata(metadata);
+
+        let capacity = factory.calculate_string_data_capacity(&field);
+        assert_eq!(capacity, 100 * 1 * 1000); // max_length * multiplier * batch_size
+    }
+
+    #[test]
+    fn test_calculate_string_data_capacity_nvarchar() {
+        let factory = BuilderFactory::new(1000);
+        let mut metadata = HashMap::new();
+        metadata.insert("max_length".to_string(), "100".to_string());
+        let field = Field::new("test", DataType::LargeUtf8, false).with_metadata(metadata);
+
+        let capacity = factory.calculate_string_data_capacity(&field);
+        assert_eq!(capacity, 100 * 4 * 1000); // 4x multiplier for Unicode
+    }
+
+    #[test]
+    fn test_calculate_string_data_capacity_overflow() {
+        let factory = BuilderFactory::new(65536);
+        let mut metadata = HashMap::new();
+        metadata.insert("max_length".to_string(), "100000".to_string());
+        let field = Field::new("test", DataType::Utf8, false).with_metadata(metadata);
+
+        let capacity = factory.calculate_string_data_capacity(&field);
+        assert_eq!(capacity, 256 * 1024 * 1024); // Clamped to MAX
+    }
+
+    #[test]
+    fn test_calculate_string_data_capacity_missing_metadata() {
+        let factory = BuilderFactory::new(1000);
+        let field = Field::new("test", DataType::Utf8, false);
+
+        let capacity = factory.calculate_string_data_capacity(&field);
+        assert_eq!(capacity, factory.string_capacity); // Falls back
+    }
+
+    #[test]
+    fn test_calculate_string_data_capacity_min_clamp() {
+        let factory = BuilderFactory::new(10);
+        let mut metadata = HashMap::new();
+        metadata.insert("max_length".to_string(), "1".to_string());
+        let field = Field::new("test", DataType::Utf8, false).with_metadata(metadata);
+
+        let capacity = factory.calculate_string_data_capacity(&field);
+        assert_eq!(capacity, 4 * 1024); // Clamped to MIN_CAPACITY
+    }
+
+    #[test]
+    fn test_create_builder_enum_for_field_varchar_with_metadata() {
+        let factory = BuilderFactory::new(1000);
+        let mut metadata = HashMap::new();
+        metadata.insert("max_length".to_string(), "50".to_string());
+        let field = Field::new("name", DataType::Utf8, false).with_metadata(metadata);
+
+        let builder = factory.create_builder_enum_for_field(&field);
+        assert_eq!(builder.kind(), BuilderKind::Utf8);
+    }
+
+    #[test]
+    fn test_create_builder_enum_for_field_nvarchar_with_metadata() {
+        let factory = BuilderFactory::new(1000);
+        let mut metadata = HashMap::new();
+        metadata.insert("max_length".to_string(), "50".to_string());
+        let field = Field::new("name", DataType::LargeUtf8, false).with_metadata(metadata);
+
+        let builder = factory.create_builder_enum_for_field(&field);
+        assert_eq!(builder.kind(), BuilderKind::LargeUtf8);
+    }
+
+    #[test]
+    fn test_create_builders_enum_for_schema_with_metadata() {
+        let mut varchar_meta = HashMap::new();
+        varchar_meta.insert("max_length".to_string(), "100".to_string());
+        let mut nvarchar_meta = HashMap::new();
+        nvarchar_meta.insert("max_length".to_string(), "200".to_string());
+
+        let schema = Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("name", DataType::Utf8, false).with_metadata(varchar_meta),
+            Field::new("description", DataType::LargeUtf8, true).with_metadata(nvarchar_meta),
+        ]);
+
+        let factory = BuilderFactory::new(1000);
+        let builders = factory.create_builders_enum_for_schema_with_metadata(&schema);
+
+        assert_eq!(builders.len(), 3);
+        assert_eq!(builders[0].kind(), BuilderKind::Int32);
+        assert_eq!(builders[1].kind(), BuilderKind::Utf8);
+        assert_eq!(builders[2].kind(), BuilderKind::LargeUtf8);
     }
 }
