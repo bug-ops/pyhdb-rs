@@ -17,24 +17,28 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-rust:
-    name: Lint Rust
+  lint-rust-fmt:
+    name: Lint Rust (fmt)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@nightly
         with:
           components: rustfmt
+      - name: Check formatting
+        run: cargo +nightly fmt --check
+
+  lint-rust-clippy:
+    name: Lint Rust (clippy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-      - name: Check formatting
-        run: cargo +nightly fmt --check
       - name: Clippy
         run: cargo clippy --workspace --all-features -- -D warnings
 
@@ -56,7 +60,7 @@ jobs:
 
   test-rust:
     name: Test Rust (${{ matrix.os }})
-    needs: [lint-rust, lint-python]
+    needs: [lint-rust-fmt, lint-rust-clippy, lint-python]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -80,7 +84,7 @@ jobs:
   # Ubuntu builds separately for fast test startup
   build-test-wheel-ubuntu:
     name: Build test wheel (ubuntu-latest)
-    needs: [lint-rust, lint-python]
+    needs: [lint-rust-fmt, lint-rust-clippy, lint-python]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -107,7 +111,7 @@ jobs:
   # Other platforms build together
   build-test-wheels:
     name: Build test wheel (${{ matrix.os }})
-    needs: [lint-rust, lint-python]
+    needs: [lint-rust-fmt, lint-rust-clippy, lint-python]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -303,7 +307,7 @@ jobs:
 
   coverage-rust:
     name: Coverage Rust
-    needs: [lint-rust, lint-python]
+    needs: [lint-rust-fmt, lint-rust-clippy, lint-python]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
