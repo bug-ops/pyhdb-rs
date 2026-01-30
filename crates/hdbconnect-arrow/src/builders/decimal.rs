@@ -214,7 +214,11 @@ impl Decimal128BuilderWrapper {
 
         match value {
             HdbValue::DECIMAL(decimal) => {
-                let (mantissa, exponent) = decimal.as_bigint_and_exponent();
+                // Zero-copy mantissa extraction via Cow::Borrowed.
+                // as_bigint_and_scale() returns (Cow<'_, BigInt>, i64) which borrows
+                // the mantissa instead of cloning it. Cow<BigInt> automatically derefs
+                // to &BigInt when needed, providing transparent zero-cost abstraction.
+                let (mantissa, exponent) = decimal.as_bigint_and_scale();
                 let target_scale = i64::from(self.config.scale());
                 let scale_diff = target_scale - exponent;
 
@@ -230,6 +234,7 @@ impl Decimal128BuilderWrapper {
                 }
 
                 // Slow path: BigInt arithmetic with cached powers
+                // Cow<BigInt> derefs to &BigInt automatically
                 self.convert_decimal_slow(&mantissa, scale_diff)
             }
             other => Err(crate::ArrowConversionError::value_conversion(

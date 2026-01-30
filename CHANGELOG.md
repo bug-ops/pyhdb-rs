@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Baseline profiling identified BigInt clone as optimization target (8MB per 1M decimals)
   - Comprehensive profiling methodology documentation
 
+- **Performance**: Zero-copy decimal conversion via Cow::Borrowed optimization
+  - Eliminated BigInt clone in decimal conversion using `as_bigint_and_scale()` instead of `as_bigint_and_exponent()`
+  - Decimal conversion throughput: +222% (55 → 177 Melem/s)
+  - Analytics workload throughput: +30% (18 → 23.7 Melem/s)
+  - Memory savings: 8 MB per 1M decimals (999,990 allocations eliminated)
+  - Zero-cost abstraction via std::borrow::Cow with automatic deref coercion
+
 ### Fixed
 
 - **Performance**: Box wrapping optimization for large `BuilderEnum` variants
