@@ -39,6 +39,8 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-latest
       - name: Clippy
         run: cargo clippy --workspace --all-features -- -D warnings
 
@@ -71,6 +73,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ matrix.os }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -92,7 +96,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: test-wheel-ubuntu-latest
+          shared-key: ubuntu-latest
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -123,7 +127,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: test-wheel-${{ matrix.os }}
+          shared-key: ${{ matrix.os }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -256,7 +260,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: wheels-${{ matrix.target }}
+          shared-key: ${{ matrix.target }}
           cache-targets: false  # sccache handles compilation artifacts
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/setup-python@v6
@@ -314,6 +318,8 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-latest
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -343,5 +349,7 @@ jobs:
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-latest
       - name: Check MSRV
         run: cargo check --workspace
