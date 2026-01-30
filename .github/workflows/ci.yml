@@ -94,9 +94,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ubuntu-latest
+          cache-targets: false  # sccache handles compilation artifacts
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -105,6 +108,9 @@ jobs:
         with:
           working-directory: python
           args: --out dist
+          sccache: true
+        env:
+          SCCACHE_GHA_ENABLED: "true"
       - name: Upload wheel
         uses: actions/upload-artifact@v6
         with:
@@ -125,9 +131,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: ${{ matrix.os }}
+          cache-targets: false  # sccache handles compilation artifacts
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -136,6 +145,9 @@ jobs:
         with:
           working-directory: python
           args: --out dist
+          sccache: true
+        env:
+          SCCACHE_GHA_ENABLED: "true"
       - name: Upload wheel
         uses: actions/upload-artifact@v6
         with:
