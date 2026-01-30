@@ -15,6 +15,7 @@ PyO3 bindings for SAP HANA via hdbconnect, exposing the native Rust driver to Py
 - **Native integrations** — Direct Polars/pandas support
 - **Async support** — Non-blocking operations with connection pooling
 - **Type-safe** — Full Python type hints via inline stubs
+- **High performance** — Enum-based dispatch eliminates vtable overhead (v0.3.2+)
 
 ## Architecture
 
@@ -33,7 +34,19 @@ hdbconnect (Rust)
 SAP HANA Database
 ```
 
-## Exposed types
+## Installation
+
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+hdbconnect-py = "0.3"
+```
+
+> [!IMPORTANT]
+> Requires Rust 1.88 or later. Uses PyO3 ABI3 for Python 3.12+ compatibility from a single wheel.
+
+## Exposed Types
 
 ### Synchronous API
 
@@ -64,14 +77,22 @@ DB-API 2.0 exception hierarchy:
 
 ## Feature Flags
 
-### async
+| Feature | Description | Default |
+|---------|-------------|---------|
+| `async` | Async/await support with tokio runtime and deadpool connection pool | Yes |
+| `test-utils` | Test utilities for benchmarking (internal use only) | No |
+
+### Async Feature
 
 Enables async/await support with tokio runtime and deadpool connection pool.
 
 ```toml
 [dependencies]
-hdbconnect-py = { version = "0.2", features = ["async"] }
+hdbconnect-py = { version = "0.3", features = ["async"] }
 ```
+
+> [!TIP]
+> The `async` feature is enabled by default. Use `default-features = false` if you only need synchronous operations to reduce compile time.
 
 Dependencies enabled:
 - `hdbconnect_async` - Async HANA protocol implementation
@@ -88,18 +109,18 @@ cd crates/hdbconnect-py
 # Development build
 maturin develop
 
-# Development build with async support
+# Development build with async support (default)
 maturin develop --features async
+
+# Development build without async
+maturin develop --no-default-features
 
 # Release build
 maturin build --release
 
-# Release build with async support
+# Release build with all features
 maturin build --release --features async
 ```
-
-> [!NOTE]
-> Uses PyO3 ABI3 for Python 3.12+ compatibility from a single wheel.
 
 ## Testing
 
@@ -113,6 +134,17 @@ maturin develop
 pytest
 ```
 
+## Performance Improvements in v0.3.2
+
+This release includes significant internal performance optimizations:
+
+- **Enum-based builder dispatch** — Replaced `Box<dyn HanaCompatibleBuilder>` with `BuilderEnum` to eliminate vtable overhead (~10-20% improvement)
+- **Zero-copy decimal conversion** — Using `Cow::Borrowed` optimization eliminates unnecessary `BigInt` clones
+- **Schema profiling** — `SchemaProfile` detects homogeneous vs mixed schemas for optimized processing
+
+> [!NOTE]
+> All performance improvements are internal. No API changes are required to benefit from these optimizations.
+
 ## Part of pyhdb-rs
 
 This crate is part of the [pyhdb-rs](https://github.com/bug-ops/pyhdb-rs) workspace.
@@ -122,6 +154,11 @@ Related crates:
 
 Python package:
 - [`pyhdb_rs`](https://pypi.org/project/pyhdb_rs/) — Published Python package on PyPI
+
+## MSRV Policy
+
+> [!NOTE]
+> Minimum Supported Rust Version: **1.88**. MSRV increases are minor version bumps.
 
 ## License
 

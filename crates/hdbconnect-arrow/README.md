@@ -28,7 +28,7 @@ Apache Arrow integration for the [hdbconnect](https://crates.io/crates/hdbconnec
 
 ```toml
 [dependencies]
-hdbconnect-arrow = "0.1"
+hdbconnect-arrow = "0.3"
 ```
 
 Or with cargo-add:
@@ -95,6 +95,33 @@ use std::num::NonZeroUsize;
 
 let config = BatchConfig::new(NonZeroUsize::new(10_000).unwrap());
 ```
+
+## Performance
+
+The crate is optimized for high-throughput data transfer with several performance enhancements in v0.3.2:
+
+### Optimization Techniques
+
+- **Enum-based dispatch** — Eliminates vtable overhead by replacing `Box<dyn HanaCompatibleBuilder>` with `BuilderEnum`, resulting in ~10-20% performance improvement through better cache locality and monomorphized dispatch
+- **Homogeneous loop hoisting** — Detects schemas where all columns share the same type and hoists the dispatch match outside the row loop for +4-8% throughput on wide tables (100+ columns)
+- **Zero-copy decimal conversion** — Uses `Cow::Borrowed` to avoid cloning BigInt during decimal conversion, improving decimal throughput by +222% (55 → 177 Melem/s) and saving 8MB per 1M decimals
+- **String capacity pre-sizing** — Extracts max_length from HANA field metadata to pre-allocate optimal buffer sizes, reducing reallocation overhead by 2-3x per string column
+- **Batch processing** — Configurable batch sizes to balance memory usage and throughput
+- **Builder reuse** — Builders reset between batches, eliminating repeated allocations
+
+> [!TIP]
+> For large result sets, use `LendingBatchIterator` to stream data with constant memory usage.
+
+### Profiling Support
+
+Enable the optional `profiling` feature flag to integrate [dhat](https://docs.rs/dhat) heap profiler:
+
+```toml
+[dependencies]
+hdbconnect-arrow = { version = "0.3", features = ["profiling"] }
+```
+
+This enables allocation tracking with zero impact on release builds through conditional compilation. See `src/profiling.rs` for usage examples.
 
 ## Ecosystem integration
 
@@ -204,13 +231,14 @@ Enable optional features in `Cargo.toml`:
 
 ```toml
 [dependencies]
-hdbconnect-arrow = { version = "0.1", features = ["async", "test-utils"] }
+hdbconnect-arrow = { version = "0.3", features = ["async", "test-utils", "profiling"] }
 ```
 
 | Feature | Description | Default |
 |---------|-------------|---------|
 | `async` | Async support via `hdbconnect_async` | No |
 | `test-utils` | Expose `MockRow`/`MockRowBuilder` for testing | No |
+| `profiling` | dhat heap profiler integration for performance analysis | No |
 
 > [!TIP]
 > Enable `test-utils` in dev-dependencies for unit testing without a HANA connection.
@@ -251,6 +279,15 @@ hdbconnect-arrow = { version = "0.1", features = ["async", "test-utils"] }
 - **`SchemaMapper`** — Maps HANA result set metadata to Arrow schemas
 - **`BuilderFactory`** — Creates appropriate Arrow array builders for HANA types
 - **`TypeCategory`** — Centralized HANA type classification enum
+
+</details>
+
+<details>
+<summary><strong>Performance types (v0.3.2+)</strong></summary>
+
+- **`BuilderEnum`** — Enum-wrapped builder for static dispatch (eliminates vtable overhead)
+- **`BuilderKind`** — Discriminant identifying builder type for schema profiling
+- **`SchemaProfile`** — Classifies schemas as homogeneous or mixed for optimized processing paths
 
 </details>
 
@@ -299,18 +336,6 @@ fn convert_data() -> Result<()> {
 ```
 
 </details>
-
-## Performance
-
-The crate is optimized for high-throughput data transfer:
-
-- **Zero-copy conversion** — Arrow builders write directly to memory without intermediate allocations
-- **Batch processing** — Configurable batch sizes to balance memory usage and throughput
-- **Decimal optimization** — Direct BigInt arithmetic avoids string parsing overhead
-- **Builder reuse** — Builders reset between batches, eliminating repeated allocations
-
-> [!NOTE]
-> For large result sets, use `LendingBatchIterator` to stream data with constant memory usage.
 
 ## Part of pyhdb-rs
 
