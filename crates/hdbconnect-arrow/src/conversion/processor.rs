@@ -10,8 +10,52 @@ use arrow_schema::{DataType, Schema, SchemaRef, TimeUnit};
 use crate::Result;
 use crate::builders::dispatch::{BuilderEnum, BuilderKind};
 use crate::builders::factory::BuilderFactory;
+use crate::traits::builder::HanaCompatibleBuilder;
 use crate::traits::row::RowLike;
 use crate::traits::streaming::BatchConfig;
+
+/// Append a HANA value to a builder, handling NULL values.
+#[inline]
+fn append_value_to_builder<B: HanaCompatibleBuilder>(
+    builder: &mut B,
+    value: &hdbconnect::HdbValue,
+) -> Result<()> {
+    match value {
+        hdbconnect::HdbValue::NULL => {
+            builder.append_null();
+            Ok(())
+        }
+        v => builder.append_hana_value(v),
+    }
+}
+
+/// Macro to generate specialized homogeneous processing loops for inline variants.
+///
+/// Eliminates per-value enum dispatch by extracting concrete builder type per column.
+macro_rules! specialize_homogeneous_loop {
+    ($self:expr, $row:expr, $variant:ident) => {{
+        for (i, builder) in $self.builders.iter_mut().enumerate() {
+            let BuilderEnum::$variant(concrete_builder) = builder else {
+                unreachable!("SchemaProfile guarantees homogeneous type")
+            };
+            append_value_to_builder(concrete_builder, &$row.get(i))?;
+        }
+        Ok(())
+    }};
+}
+
+/// Macro for boxed variants that require explicit deref.
+macro_rules! specialize_homogeneous_loop_boxed {
+    ($self:expr, $row:expr, $variant:ident) => {{
+        for (i, builder) in $self.builders.iter_mut().enumerate() {
+            let BuilderEnum::$variant(boxed) = builder else {
+                unreachable!("SchemaProfile guarantees homogeneous type")
+            };
+            append_value_to_builder(boxed.as_mut(), &$row.get(i))?;
+        }
+        Ok(())
+    }};
+}
 
 /// Schema profile for processor optimization.
 ///
@@ -44,6 +88,17 @@ impl SchemaProfile {
             .iter()
             .skip(1)
             .all(|f| Self::types_equivalent(first_type, f.data_type()));
+
+        // Verify discriminant comparison works correctly for homogeneous schemas
+        debug_assert!(
+            !all_same
+                || fields.iter().all(|f| {
+                    let kind1 = Self::data_type_to_kind(first_type);
+                    let kind2 = Self::data_type_to_kind(f.data_type());
+                    kind1 == kind2
+                }),
+            "Discriminant-equivalent types must map to same BuilderKind"
+        );
 
         if all_same {
             Self::Homogeneous {
@@ -232,26 +287,30 @@ impl HanaBatchProcessor {
 
     /// Process row for homogeneous schemas with specialized dispatch.
     ///
-    /// Currently uses the same implementation as mixed schema processing,
-    /// but maintains semantic separation for potential future optimizations.
+    /// Hoists type match outside the column loop, creating monomorphized
+    /// inner loops with zero enum dispatch overhead. Specialized for the
+    /// top 5 most common HANA types (Int64, Decimal128, Utf8, Int32, Float64).
     ///
-    /// # Future Optimization (TODO)
-    ///
-    /// For homogeneous schemas, we could hoist the match on `kind` outside
-    /// the row loop to create monomorphized inner loops. This requires
-    /// extracting the inner builder from each `BuilderEnum` variant, which
-    /// currently faces trait method visibility issues in macro context.
-    fn process_row_homogeneous<R: RowLike>(&mut self, row: &R, _kind: BuilderKind) -> Result<()> {
-        // Use same implementation as mixed - enum dispatch is already efficient
-        // The main optimization comes from replacing Box<dyn> with enum
-        for (i, builder) in self.builders.iter_mut().enumerate() {
-            let value = row.get(i);
-            match value {
-                hdbconnect::HdbValue::NULL => builder.append_null(),
-                v => builder.append_hana_value(v)?,
+    /// Other types fall back to generic enum dispatch path.
+    fn process_row_homogeneous<R: RowLike>(&mut self, row: &R, kind: BuilderKind) -> Result<()> {
+        match kind {
+            BuilderKind::Int64 => {
+                specialize_homogeneous_loop!(self, row, Int64)
             }
+            BuilderKind::Decimal128 => {
+                specialize_homogeneous_loop_boxed!(self, row, Decimal128)
+            }
+            BuilderKind::Utf8 => {
+                specialize_homogeneous_loop_boxed!(self, row, Utf8)
+            }
+            BuilderKind::Int32 => {
+                specialize_homogeneous_loop!(self, row, Int32)
+            }
+            BuilderKind::Float64 => {
+                specialize_homogeneous_loop!(self, row, Float64)
+            }
+            _ => self.process_row_mixed(row),
         }
-        Ok(())
     }
 
     /// Process row for mixed schemas with enum dispatch per column.
@@ -823,6 +882,130 @@ mod tests {
     }
 
     #[test]
+    fn test_processor_homogeneous_int32() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("col1", DataType::Int32, false),
+            Field::new("col2", DataType::Int32, false),
+            Field::new("col3", DataType::Int32, false),
+        ]));
+        let config = BatchConfig::with_batch_size(2);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+
+        processor
+            .process_row_generic(&MockRowBuilder::new().int(10).int(20).int(30).build())
+            .unwrap();
+        let result = processor
+            .process_row_generic(&MockRowBuilder::new().int(40).int(50).int(60).build())
+            .unwrap();
+
+        let batch = result.expect("batch should be ready");
+        assert_eq!(batch.num_rows(), 2);
+        assert_eq!(batch.num_columns(), 3);
+    }
+
+    #[test]
+    fn test_processor_homogeneous_float64() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("col1", DataType::Float64, false),
+            Field::new("col2", DataType::Float64, false),
+        ]));
+        let config = BatchConfig::with_batch_size(2);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+
+        processor
+            .process_row_generic(&MockRowBuilder::new().double(1.5).double(2.5).build())
+            .unwrap();
+        let result = processor
+            .process_row_generic(&MockRowBuilder::new().double(3.5).double(4.5).build())
+            .unwrap();
+
+        let batch = result.expect("batch should be ready");
+        assert_eq!(batch.num_rows(), 2);
+        assert_eq!(batch.num_columns(), 2);
+    }
+
+    #[test]
+    fn test_processor_homogeneous_decimal128() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("col1", DataType::Decimal128(18, 2), false),
+            Field::new("col2", DataType::Decimal128(18, 2), false),
+        ]));
+        let config = BatchConfig::with_batch_size(2);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+
+        processor
+            .process_row_generic(
+                &MockRowBuilder::new()
+                    .decimal_str("100.50")
+                    .decimal_str("200.75")
+                    .build(),
+            )
+            .unwrap();
+        let result = processor
+            .process_row_generic(
+                &MockRowBuilder::new()
+                    .decimal_str("300.25")
+                    .decimal_str("400.99")
+                    .build(),
+            )
+            .unwrap();
+
+        let batch = result.expect("batch should be ready");
+        assert_eq!(batch.num_rows(), 2);
+        assert_eq!(batch.num_columns(), 2);
+    }
+
+    #[test]
+    fn test_processor_homogeneous_utf8() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("col1", DataType::Utf8, true),
+            Field::new("col2", DataType::Utf8, true),
+            Field::new("col3", DataType::Utf8, true),
+        ]));
+        let config = BatchConfig::with_batch_size(2);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+
+        processor
+            .process_row_generic(
+                &MockRowBuilder::new()
+                    .string("alice")
+                    .string("bob")
+                    .string("charlie")
+                    .build(),
+            )
+            .unwrap();
+        let result = processor
+            .process_row_generic(
+                &MockRowBuilder::new()
+                    .string("diana")
+                    .string("eve")
+                    .string("frank")
+                    .build(),
+            )
+            .unwrap();
+
+        let batch = result.expect("batch should be ready");
+        assert_eq!(batch.num_rows(), 2);
+        assert_eq!(batch.num_columns(), 3);
+    }
+
+    #[test]
     fn test_processor_mixed_schema() {
         use crate::traits::row::MockRowBuilder;
 
@@ -883,5 +1066,261 @@ mod tests {
 
         let batch = result.expect("batch should be ready");
         assert_eq!(batch.num_rows(), 2);
+    }
+
+    #[test]
+    fn test_processor_homogeneous_int32_with_nulls() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("col1", DataType::Int32, true),
+            Field::new("col2", DataType::Int32, true),
+            Field::new("col3", DataType::Int32, true),
+        ]));
+        let config = BatchConfig::with_batch_size(3);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+
+        processor
+            .process_row_generic(&MockRowBuilder::new().int(1).null().int(3).build())
+            .unwrap();
+        processor
+            .process_row_generic(&MockRowBuilder::new().null().int(5).null().build())
+            .unwrap();
+        let result = processor
+            .process_row_generic(&MockRowBuilder::new().int(7).int(8).null().build())
+            .unwrap();
+
+        let batch = result.expect("batch should be ready");
+        assert_eq!(batch.num_rows(), 3);
+        assert_eq!(batch.num_columns(), 3);
+    }
+
+    #[test]
+    fn test_processor_homogeneous_float64_with_nulls() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("col1", DataType::Float64, true),
+            Field::new("col2", DataType::Float64, true),
+        ]));
+        let config = BatchConfig::with_batch_size(2);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+
+        processor
+            .process_row_generic(&MockRowBuilder::new().double(1.5).null().build())
+            .unwrap();
+        let result = processor
+            .process_row_generic(&MockRowBuilder::new().null().double(3.5).build())
+            .unwrap();
+
+        let batch = result.expect("batch should be ready");
+        assert_eq!(batch.num_rows(), 2);
+    }
+
+    #[test]
+    fn test_processor_homogeneous_decimal128_with_nulls() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("col1", DataType::Decimal128(18, 2), true),
+            Field::new("col2", DataType::Decimal128(18, 2), true),
+        ]));
+        let config = BatchConfig::with_batch_size(2);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+
+        processor
+            .process_row_generic(&MockRowBuilder::new().decimal_str("100.50").null().build())
+            .unwrap();
+        let result = processor
+            .process_row_generic(&MockRowBuilder::new().null().decimal_str("400.99").build())
+            .unwrap();
+
+        let batch = result.expect("batch should be ready");
+        assert_eq!(batch.num_rows(), 2);
+    }
+
+    #[test]
+    fn test_processor_homogeneous_utf8_with_nulls() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("col1", DataType::Utf8, true),
+            Field::new("col2", DataType::Utf8, true),
+        ]));
+        let config = BatchConfig::with_batch_size(2);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+
+        processor
+            .process_row_generic(&MockRowBuilder::new().string("hello").null().build())
+            .unwrap();
+        let result = processor
+            .process_row_generic(&MockRowBuilder::new().null().string("world").build())
+            .unwrap();
+
+        let batch = result.expect("batch should be ready");
+        assert_eq!(batch.num_rows(), 2);
+    }
+
+    #[test]
+    fn test_processor_homogeneous_wide_schema() {
+        use crate::traits::row::MockRowBuilder;
+
+        let mut fields = vec![];
+        for i in 0..100 {
+            fields.push(Field::new(&format!("col{}", i), DataType::Int64, false));
+        }
+
+        let schema = Arc::new(Schema::new(fields));
+        let config = BatchConfig::with_batch_size(1);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+
+        let mut row_builder = MockRowBuilder::new();
+        for i in 0..100 {
+            row_builder = row_builder.bigint(i as i64);
+        }
+
+        let result = processor.process_row_generic(&row_builder.build()).unwrap();
+
+        let batch = result.expect("batch should be ready");
+        assert_eq!(batch.num_rows(), 1);
+        assert_eq!(batch.num_columns(), 100);
+    }
+
+    #[test]
+    fn test_processor_homogeneous_unsupported_type_fallback() {
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("col1", DataType::Boolean, false),
+            Field::new("col2", DataType::Boolean, false),
+        ]));
+        let config = BatchConfig::with_batch_size(2);
+        let processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+    }
+
+    #[test]
+    fn test_processor_multiple_batches_homogeneous() {
+        use crate::traits::row::MockRowBuilder;
+
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("col1", DataType::Int64, false),
+            Field::new("col2", DataType::Int64, false),
+        ]));
+        let config = BatchConfig::with_batch_size(2);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+
+        // First batch
+        processor
+            .process_row_generic(&MockRowBuilder::new().bigint(1).bigint(2).build())
+            .unwrap();
+        let batch1 = processor
+            .process_row_generic(&MockRowBuilder::new().bigint(3).bigint(4).build())
+            .unwrap();
+        assert!(batch1.is_some());
+
+        // Second batch
+        processor
+            .process_row_generic(&MockRowBuilder::new().bigint(5).bigint(6).build())
+            .unwrap();
+        let batch2 = processor
+            .process_row_generic(&MockRowBuilder::new().bigint(7).bigint(8).build())
+            .unwrap();
+        assert!(batch2.is_some());
+
+        // Verify both batches
+        assert_eq!(processor.buffered_rows(), 0);
+    }
+
+    #[test]
+    fn test_processor_homogeneous_int32_wide() {
+        use crate::traits::row::MockRowBuilder;
+
+        let mut fields = vec![];
+        for i in 0..50 {
+            fields.push(Field::new(&format!("col{}", i), DataType::Int32, false));
+        }
+
+        let schema = Arc::new(Schema::new(fields));
+        let config = BatchConfig::with_batch_size(1);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+
+        let mut row_builder = MockRowBuilder::new();
+        for i in 0..50 {
+            row_builder = row_builder.int(i as i32);
+        }
+
+        let result = processor.process_row_generic(&row_builder.build()).unwrap();
+
+        let batch = result.expect("batch should be ready");
+        assert_eq!(batch.num_rows(), 1);
+        assert_eq!(batch.num_columns(), 50);
+    }
+
+    #[test]
+    fn test_processor_homogeneous_float64_wide() {
+        use crate::traits::row::MockRowBuilder;
+
+        let mut fields = vec![];
+        for i in 0..30 {
+            fields.push(Field::new(&format!("col{}", i), DataType::Float64, false));
+        }
+
+        let schema = Arc::new(Schema::new(fields));
+        let config = BatchConfig::with_batch_size(1);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+
+        let mut row_builder = MockRowBuilder::new();
+        for i in 0..30 {
+            row_builder = row_builder.double(i as f64 * 1.5);
+        }
+
+        let result = processor.process_row_generic(&row_builder.build()).unwrap();
+
+        let batch = result.expect("batch should be ready");
+        assert_eq!(batch.num_rows(), 1);
+        assert_eq!(batch.num_columns(), 30);
+    }
+
+    #[test]
+    fn test_processor_homogeneous_utf8_wide() {
+        use crate::traits::row::MockRowBuilder;
+
+        let mut fields = vec![];
+        for i in 0..20 {
+            fields.push(Field::new(&format!("col{}", i), DataType::Utf8, true));
+        }
+
+        let schema = Arc::new(Schema::new(fields));
+        let config = BatchConfig::with_batch_size(1);
+        let mut processor = HanaBatchProcessor::new(schema, config);
+
+        assert!(processor.profile().is_homogeneous());
+
+        let mut row_builder = MockRowBuilder::new();
+        for i in 0..20 {
+            row_builder = row_builder.string(&format!("value{}", i));
+        }
+
+        let result = processor.process_row_generic(&row_builder.build()).unwrap();
+
+        let batch = result.expect("batch should be ready");
+        assert_eq!(batch.num_rows(), 1);
+        assert_eq!(batch.num_columns(), 20);
     }
 }

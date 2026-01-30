@@ -48,6 +48,12 @@ mod workload_tests {
     use crate::traits::streaming::BatchConfig;
     use crate::{HanaBatchProcessor, MockRow};
 
+    fn create_int64_rows(count: usize) -> Vec<MockRow> {
+        (0..count)
+            .map(|i| MockRowBuilder::new().bigint(i as i64).build())
+            .collect()
+    }
+
     fn create_decimal_rows(count: usize) -> Vec<MockRow> {
         (0..count)
             .map(|i| {
@@ -73,6 +79,14 @@ mod workload_tests {
                     .build()
             })
             .collect()
+    }
+
+    fn int64_schema() -> Arc<Schema> {
+        Arc::new(Schema::new(vec![Field::new(
+            "value",
+            DataType::Int64,
+            false,
+        )]))
     }
 
     fn decimal_schema() -> Arc<Schema> {
@@ -107,6 +121,21 @@ mod workload_tests {
             batch_count += 1;
         }
         batch_count
+    }
+
+    #[test]
+    #[ignore]
+    fn profile_int64_100k() {
+        let _profiler = init();
+
+        let rows = create_int64_rows(100_000);
+        let schema = int64_schema();
+
+        for _ in 0..10 {
+            let config = BatchConfig::with_batch_size(8192);
+            let mut processor = HanaBatchProcessor::new(Arc::clone(&schema), config);
+            black_box(process_rows(&mut processor, &rows));
+        }
     }
 
     #[test]

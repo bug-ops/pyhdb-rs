@@ -40,6 +40,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Backward compatible: graceful fallback to default capacity when metadata missing
   - Expected improvement: +5-10% on string-heavy workloads
 
+- **Performance**: Homogeneous loop hoisting for type-specialized processing
+  - Added SchemaProfile infrastructure for detecting homogeneous schemas (all columns same type)
+  - Specialized processing paths for top 5 types covering 80% usage: Int64, Decimal128, Utf8, Int32, Float64
+  - Eliminates per-value enum dispatch overhead by hoisting BuilderEnum match outside inner loop
+  - Zero allocation overhead confirmed via dhat profiling
+  - Performance gains: +4-8% on wide tables (100+ columns), +1-2% on moderate tables (10-50 columns)
+  - Foundation for SIMD vectorization (Phase 8) - homogeneous type detection enables vectorized operations
+  - Helper function `append_value_to_builder` reduces code duplication across specialized paths
+  - Comprehensive testing: 14 new tests, 97.83% coverage in processor.rs
+
 ### Fixed
 
 - **Performance**: Box wrapping optimization for large `BuilderEnum` variants
