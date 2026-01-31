@@ -1,6 +1,7 @@
 //! Type definitions for MCP tools
 
-use rmcp::{ErrorData, handler::server::wrapper::Json};
+use rmcp::handler::server::wrapper::Json;
+use rmcp::{ErrorData, elicit_safe};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -68,14 +69,26 @@ pub struct QueryResult {
     pub row_count: usize,
 }
 
+/// Schema name for elicitation
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(description = "Schema name")]
+pub struct SchemaName {
+    /// Schema name
+    #[schemars(description = "Name of the schema")]
+    pub name: String,
+}
+
+elicit_safe!(SchemaName);
+
 /// Parameters for listing tables
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ListTablesParams {
     /// Optional schema name filter. If not provided, uses `CURRENT_SCHEMA`.
-    /// Ask the user which schema to use if not specified.
     #[serde(default)]
-    #[schemars(description = "Schema name to filter tables. Leave empty to use CURRENT_SCHEMA (default behavior). Example: 'SYSTEM', 'MY_SCHEMA'")]
-    pub schema: Option<String>,
+    #[schemars(
+        description = "Schema name to filter tables. Leave empty to use CURRENT_SCHEMA (default behavior). Example: 'SYSTEM', 'MY_SCHEMA'"
+    )]
+    pub schema: Option<SchemaName>,
 }
 
 /// Parameters for describing a table
@@ -85,10 +98,11 @@ pub struct DescribeTableParams {
     #[schemars(description = "Name of the table to describe. Example: 'EMPLOYEES', 'ORDERS'")]
     pub table: String,
     /// Optional schema name. If not provided, uses `CURRENT_SCHEMA`.
-    /// Ask the user which schema the table belongs to if not specified.
     #[serde(default)]
-    #[schemars(description = "Schema name where the table is located. Leave empty to use CURRENT_SCHEMA. Example: 'SYSTEM', 'MY_SCHEMA'")]
-    pub schema: Option<String>,
+    #[schemars(
+        description = "Schema name where the table is located. Leave empty to use CURRENT_SCHEMA. Example: 'SYSTEM', 'MY_SCHEMA'"
+    )]
+    pub schema: Option<SchemaName>,
 }
 
 /// Parameters for SQL query execution

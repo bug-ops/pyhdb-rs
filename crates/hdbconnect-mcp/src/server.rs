@@ -7,13 +7,19 @@ use hdbconnect_async::HdbValue;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::model::{ServerCapabilities, ServerInfo};
+use rmcp::service::{RequestContext, RoleServer};
 use rmcp::{ErrorData, ServerHandler as RmcpServerHandler, tool, tool_handler, tool_router};
 
+use crate::constants::{
+    DESCRIBE_TABLE_CURRENT_SCHEMA, DESCRIBE_TABLE_TEMPLATE, ELICIT_SCHEMA_DESCRIBE_TABLE,
+    ELICIT_SCHEMA_LIST_TABLES, HEALTH_CHECK_QUERY, LIST_TABLES_CURRENT_SCHEMA,
+    LIST_TABLES_TEMPLATE, SQL_TRUE, STATUS_OK,
+};
 use crate::helpers::{get_connection, hdb_value_to_json};
 use crate::pool::Pool;
 use crate::types::{
     ColumnInfo, DescribeTableParams, ExecuteSqlParams, ListTablesParams, PingResult, QueryResult,
-    TableInfo, TableSchema, ToolResult,
+    SchemaName, TableInfo, TableSchema, ToolResult,
 };
 use crate::validation::validate_read_only_sql;
 use crate::{Config, Error};
@@ -51,12 +57,12 @@ impl ServerHandler {
         let start = std::time::Instant::now();
         let conn = get_connection(&self.pool).await?;
 
-        conn.query("SELECT 1 FROM DUMMY")
+        conn.query(HEALTH_CHECK_QUERY)
             .await
             .map_err(|e| ErrorData::from(Error::Connection(e)))?;
 
         Ok(Json(PingResult {
-            status: "ok".to_string(),
+            status: STATUS_OK.to_string(),
             latency_ms: start.elapsed().as_millis() as u64,
         }))
     }
@@ -64,20 +70,25 @@ impl ServerHandler {
     #[tool(description = "List all tables in the specified schema")]
     async fn list_tables(
         &self,
-        Parameters(params): Parameters<ListTablesParams>,
+        context: RequestContext<RoleServer>,
+        Parameters(mut params): Parameters<ListTablesParams>,
     ) -> ToolResult<Vec<TableInfo>> {
+        // If schema not provided and client supports elicitation, ask user
+        if params.schema.is_none()
+            && context.peer.supports_elicitation()
+            && let Ok(Some(selection)) = context
+                .peer
+                .elicit::<SchemaName>(ELICIT_SCHEMA_LIST_TABLES.to_string())
+                .await
+        {
+            params.schema = Some(selection);
+        }
+
         let conn = get_connection(&self.pool).await?;
 
         let query = params.schema.as_ref().map_or_else(
-            || {
-                "SELECT TABLE_NAME, TABLE_TYPE FROM SYS.TABLES WHERE SCHEMA_NAME = CURRENT_SCHEMA"
-                    .to_string()
-            },
-            |schema_name| {
-                format!(
-                    "SELECT TABLE_NAME, TABLE_TYPE FROM SYS.TABLES WHERE SCHEMA_NAME = '{schema_name}'",
-                )
-            },
+            || LIST_TABLES_CURRENT_SCHEMA.to_string(),
+            |schema_name| LIST_TABLES_TEMPLATE.replace("{SCHEMA}", &schema_name.name),
         );
 
         let result_set = conn
@@ -109,22 +120,28 @@ impl ServerHandler {
     #[tool(description = "Get column definitions for a table")]
     async fn describe_table(
         &self,
-        Parameters(params): Parameters<DescribeTableParams>,
+        context: RequestContext<RoleServer>,
+        Parameters(mut params): Parameters<DescribeTableParams>,
     ) -> ToolResult<TableSchema> {
+        // If schema not provided and client supports elicitation, ask user
+        if params.schema.is_none()
+            && context.peer.supports_elicitation()
+            && let Ok(Some(selection)) = context
+                .peer
+                .elicit::<SchemaName>(ELICIT_SCHEMA_DESCRIBE_TABLE.to_string())
+                .await
+        {
+            params.schema = Some(selection);
+        }
+
         let conn = get_connection(&self.pool).await?;
 
         let query = params.schema.as_ref().map_or_else(
-            || {
-                format!(
-                    "SELECT COLUMN_NAME, DATA_TYPE_NAME, IS_NULLABLE FROM SYS.TABLE_COLUMNS WHERE SCHEMA_NAME = CURRENT_SCHEMA AND TABLE_NAME = '{}'",
-                    params.table
-                )
-            },
+            || DESCRIBE_TABLE_CURRENT_SCHEMA.replace("{TABLE}", &params.table),
             |schema_name| {
-                format!(
-                    "SELECT COLUMN_NAME, DATA_TYPE_NAME, IS_NULLABLE FROM SYS.TABLE_COLUMNS WHERE SCHEMA_NAME = '{schema_name}' AND TABLE_NAME = '{}'",
-                    params.table
-                )
+                DESCRIBE_TABLE_TEMPLATE
+                    .replace("{SCHEMA}", &schema_name.name)
+                    .replace("{TABLE}", &params.table)
             },
         );
 
@@ -150,7 +167,7 @@ impl ServerHandler {
                     Some(ColumnInfo {
                         name,
                         data_type,
-                        nullable: nullable == "TRUE",
+                        nullable: nullable == SQL_TRUE,
                     })
                 } else {
                     None

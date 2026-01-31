@@ -32,7 +32,7 @@ clap = { workspace = true, features = ["derive"] }
 deadpool = { workspace = true, features = ["managed", "rt_tokio_1"] }
 hdbconnect = { workspace = true }
 hdbconnect_async = { workspace = true }
-rmcp = { workspace = true, features = ["server", "macros", "transport-io"] }
+rmcp = { workspace = true, features = ["server", "macros", "transport-io", "elicitation", "schemars"] }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
