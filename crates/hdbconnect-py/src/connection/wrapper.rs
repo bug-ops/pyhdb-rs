@@ -663,6 +663,66 @@ impl PyConnection {
         }
     }
 
+    /// Get connection performance statistics.
+    ///
+    /// Returns snapshot of connection performance metrics including:
+    /// - Roundtrip count and average latency
+    /// - Request/reply compression ratios
+    /// - Total accumulated wait time
+    ///
+    /// Returns:
+    ///     `ConnectionStatistics` object.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     stats = conn.statistics()
+    ///     print(f"Roundtrips: {stats.call_count}")
+    ///     print(f"Avg latency: {stats.avg_wait_time:.2f}ms")
+    ///     print(f"Request compression: {stats.request_compression_ratio:.1%}")
+    ///     ```
+    fn statistics(&self) -> PyResult<crate::connection_statistics::PyConnectionStatistics> {
+        let guard = self.inner.lock();
+        match &*guard {
+            ConnectionInner::Connected(conn) => {
+                let stats = conn.statistics().map_err(PyHdbError::from)?;
+                Ok(stats.into())
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
+    /// Reset connection statistics to zero.
+    ///
+    /// Useful for measuring specific operations or time windows.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     conn.reset_statistics()
+    ///     # Execute some queries
+    ///     stats = conn.statistics()
+    ///     print(f"Queries executed: {stats.call_count}")
+    ///     ```
+    fn reset_statistics(&self) -> PyResult<()> {
+        let mut guard = self.inner.lock();
+        match &mut *guard {
+            ConnectionInner::Connected(conn) => {
+                conn.reset_statistics().map_err(PyHdbError::from)?;
+                Ok(())
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════════
     // Arrow Methods
     // ═══════════════════════════════════════════════════════════════════════════════

@@ -820,6 +820,86 @@ class CacheStats:
 
     def __repr__(self) -> str: ...
 
+class ConnectionStatistics:
+    """Connection performance statistics.
+
+    Provides metrics for monitoring connection performance, query latency,
+    and network compression efficiency.
+
+    Example::
+
+        stats = conn.statistics()
+        print(f"Roundtrips: {stats.call_count}")
+        print(f"Avg latency: {stats.avg_wait_time:.2f}ms")
+        print(f"Request compression: {stats.request_compression_ratio:.1%}")
+    """
+
+    @property
+    def call_count(self) -> int:
+        """Number of roundtrips to the server."""
+        ...
+
+    @property
+    def accumulated_wait_time(self) -> float:
+        """Total accumulated wait time in milliseconds."""
+        ...
+
+    @property
+    def compressed_requests_count(self) -> int:
+        """Number of compressed requests."""
+        ...
+
+    @property
+    def compressed_requests_compressed_size(self) -> int:
+        """Total size of compressed requests in bytes."""
+        ...
+
+    @property
+    def compressed_requests_uncompressed_size(self) -> int:
+        """Total size of uncompressed requests in bytes."""
+        ...
+
+    @property
+    def compressed_replies_count(self) -> int:
+        """Number of compressed replies."""
+        ...
+
+    @property
+    def compressed_replies_compressed_size(self) -> int:
+        """Total size of compressed replies in bytes."""
+        ...
+
+    @property
+    def compressed_replies_uncompressed_size(self) -> int:
+        """Total size of uncompressed replies in bytes."""
+        ...
+
+    @property
+    def avg_wait_time(self) -> float:
+        """Average wait time per roundtrip in milliseconds.
+
+        Returns 0.0 if no calls have been made.
+        """
+        ...
+
+    @property
+    def request_compression_ratio(self) -> float:
+        """Request compression ratio (0.0-1.0, lower is better).
+
+        Returns 1.0 (no compression) if no compressed requests.
+        """
+        ...
+
+    @property
+    def reply_compression_ratio(self) -> float:
+        """Reply compression ratio (0.0-1.0, lower is better).
+
+        Returns 1.0 (no compression) if no compressed replies.
+        """
+        ...
+
+    def __repr__(self) -> str: ...
+
 # =====================================================================
 # Connection
 # =====================================================================
@@ -1114,6 +1194,47 @@ class Connection:
 
         Raises:
             OperationalError: If connection is closed.
+        """
+        ...
+
+    def statistics(self) -> ConnectionStatistics:
+        """Get connection performance statistics.
+
+        Returns snapshot of connection performance metrics including:
+        - Roundtrip count and average latency
+        - Request/reply compression ratios
+        - Total accumulated wait time
+
+        Returns:
+            ConnectionStatistics object with performance metrics.
+
+        Raises:
+            OperationalError: If connection is closed.
+
+        Example::
+
+            stats = conn.statistics()
+            print(f"Roundtrips: {stats.call_count}")
+            print(f"Avg latency: {stats.avg_wait_time:.2f}ms")
+            print(f"Request compression: {stats.request_compression_ratio:.1%}")
+        """
+        ...
+
+    def reset_statistics(self) -> None:
+        """Reset connection statistics to zero.
+
+        Useful for measuring specific operations or time windows.
+
+        Raises:
+            OperationalError: If connection is closed.
+
+        Example::
+
+            conn.reset_statistics()
+            # Execute some queries
+            cursor.execute("SELECT * FROM USERS")
+            stats = conn.statistics()
+            print(f"Queries executed: {stats.call_count}")
         """
         ...
 
