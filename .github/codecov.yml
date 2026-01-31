@@ -30,6 +30,10 @@ flags:
     paths:
       - crates/hdbconnect-arrow/
     carryforward: true
+  hdbconnect-mcp:
+    paths:
+      - crates/hdbconnect-mcp/
+    carryforward: true
   hdbconnect-py:
     paths:
       - crates/hdbconnect-py/
