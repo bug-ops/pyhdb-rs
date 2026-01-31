@@ -32,12 +32,15 @@ multiple_crate_versions = "allow"
 
 # Dependencies sorted ALPHABETICALLY - versions only (features in crates)
 [workspace.dependencies]
+anyhow = "1.0"
 arrow = { version = "57.0", default-features = false }
 arrow-array = "57.0"
 arrow-buffer = "57.0"
 arrow-data = "57.0"
 arrow-schema = "57.0"
+async-trait = "0.1"
 bigdecimal = "0.4"
+clap = "4.5"
 criterion = "0.8"
 deadpool = { version = "0.12", default-features = false }
 dhat = "0.3"
@@ -51,9 +54,15 @@ parking_lot = "0.12.5"
 pyo3 = "0.27"
 pyo3-arrow = "0.15"
 pyo3-async-runtimes = "0.27"
+rmcp = "0.14"
+schemars = "1.0"
 serde = "1.0"
+serde_json = "1.0"
 thiserror = "2.0"
 tokio = "1.49"
+tokio-test = "0.4"
+tracing = "0.1"
+tracing-subscriber = "0.3"
 url = "2.5"
 
 # Fast dev profile with minimal optimizations for faster builds

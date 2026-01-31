@@ -1,0 +1,46 @@
+[package]
+name = "hdbconnect-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "MCP server for SAP HANA database"
+keywords = ["sap", "hana", "mcp", "ai", "database"]
+categories = ["database", "command-line-utilities"]
+authors.workspace = true
+readme = "README.md"
+
+[lib]
+name = "hdbconnect_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hdbconnect-mcp"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+http = ["rmcp/server-side-http"]
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
+deadpool = { workspace = true, features = ["managed", "rt_tokio_1"] }
+hdbconnect = { workspace = true }
+hdbconnect_async = { workspace = true }
+rmcp = { workspace = true, features = ["server", "macros", "transport-io"] }
+schemars = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "signal", "macros"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+url = { workspace = true }
+
+[dev-dependencies]
+tokio-test = { workspace = true }
