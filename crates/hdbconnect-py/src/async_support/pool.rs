@@ -46,10 +46,10 @@ use tokio::sync::Mutex as TokioMutex;
 
 use super::common::{
     ConnectionState, VALIDATION_QUERY, client_info_impl, commit_impl, connection_id_impl,
-    execute_arrow_impl, get_batch_size, rollback_impl, server_memory_usage_impl,
-    server_processing_time_impl, set_application_impl, set_application_source_impl,
-    set_application_user_impl, set_application_version_impl, validate_non_negative_f64,
-    validate_positive_u32,
+    execute_arrow_impl, get_batch_size, reset_statistics_impl, rollback_impl,
+    server_memory_usage_impl, server_processing_time_impl, set_application_impl,
+    set_application_source_impl, set_application_user_impl, set_application_version_impl,
+    statistics_impl, validate_non_negative_f64, validate_positive_u32,
 };
 use crate::config::{PyArrowConfig, PyConnectionConfig};
 use crate::connection::PyCacheStats;
@@ -1066,6 +1066,62 @@ impl PooledConnection {
                 .as_ref()
                 .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
             Ok(server_processing_time_impl(&obj.connection).await)
+        })
+    }
+
+    /// Get connection performance statistics.
+    ///
+    /// Returns snapshot of connection performance metrics including:
+    /// - Roundtrip count and average latency
+    /// - Request/reply compression ratios
+    /// - Total accumulated wait time
+    ///
+    /// Returns:
+    ///     `ConnectionStatistics` object.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection returned to pool.
+    ///
+    /// Example:
+    ///     ```python
+    ///     async with pool.acquire() as conn:
+    ///         stats = await conn.statistics()
+    ///         print(f"Roundtrips: {stats.call_count}")
+    ///     ```
+    fn statistics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = object.lock().await;
+            let obj = guard
+                .as_ref()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+            Ok(statistics_impl(&obj.connection).await)
+        })
+    }
+
+    /// Reset connection statistics to zero.
+    ///
+    /// Useful for measuring specific operations or time windows.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection returned to pool.
+    ///
+    /// Example:
+    ///     ```python
+    ///     async with pool.acquire() as conn:
+    ///         await conn.reset_statistics()
+    ///         # Execute some queries
+    ///         stats = await conn.statistics()
+    ///     ```
+    fn reset_statistics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let object = Arc::clone(&self.object);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = object.lock().await;
+            let obj = guard
+                .as_mut()
+                .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+            reset_statistics_impl(&mut obj.connection).await;
+            Ok(())
         })
     }
 

@@ -14,10 +14,10 @@ use tokio::sync::Mutex as TokioMutex;
 
 use super::common::{
     ConnectionState, VALIDATION_QUERY, client_info_impl, commit_impl, connection_id_impl,
-    execute_arrow_impl, get_batch_size, rollback_impl, server_memory_usage_impl,
-    server_processing_time_impl, set_application_impl, set_application_source_impl,
-    set_application_user_impl, set_application_version_impl, validate_non_negative_f64,
-    validate_positive_u32,
+    execute_arrow_impl, get_batch_size, reset_statistics_impl, rollback_impl,
+    server_memory_usage_impl, server_processing_time_impl, set_application_impl,
+    set_application_source_impl, set_application_user_impl, set_application_version_impl,
+    statistics_impl, validate_non_negative_f64, validate_positive_u32,
 };
 use super::cursor::AsyncPyCursor;
 use crate::config::PyArrowConfig;
@@ -601,6 +601,66 @@ impl AsyncPyConnection {
             match &*guard {
                 AsyncConnectionInner::Connected { connection } => {
                     Ok(server_processing_time_impl(connection).await)
+                }
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
+            }
+        })
+    }
+
+    /// Get connection performance statistics.
+    ///
+    /// Returns snapshot of connection performance metrics including:
+    /// - Roundtrip count and average latency
+    /// - Request/reply compression ratios
+    /// - Total accumulated wait time
+    ///
+    /// Returns:
+    ///     `ConnectionStatistics` object.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     stats = await conn.statistics()
+    ///     print(f"Roundtrips: {stats.call_count}")
+    ///     print(f"Avg latency: {stats.avg_wait_time:.2f}ms")
+    ///     ```
+    fn statistics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = inner.lock().await;
+            match &*guard {
+                AsyncConnectionInner::Connected { connection } => {
+                    Ok(statistics_impl(connection).await)
+                }
+                AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
+            }
+        })
+    }
+
+    /// Reset connection statistics to zero.
+    ///
+    /// Useful for measuring specific operations or time windows.
+    ///
+    /// Raises:
+    ///     `OperationalError`: If connection is closed.
+    ///
+    /// Example:
+    ///     ```python
+    ///     await conn.reset_statistics()
+    ///     # Execute some queries
+    ///     stats = await conn.statistics()
+    ///     print(f"Queries executed: {stats.call_count}")
+    ///     ```
+    fn reset_statistics<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let inner = Arc::clone(&self.inner);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = inner.lock().await;
+            match &mut *guard {
+                AsyncConnectionInner::Connected { connection } => {
+                    reset_statistics_impl(connection).await;
+                    Ok(())
                 }
                 AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
             }

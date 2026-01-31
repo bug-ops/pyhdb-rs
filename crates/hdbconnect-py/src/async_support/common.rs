@@ -140,6 +140,19 @@ pub async fn server_processing_time_impl(connection: &hdbconnect_async::Connecti
     usage.accum_proc_time().as_micros() as i64
 }
 
+/// Gets connection performance statistics from an async connection.
+pub async fn statistics_impl(
+    connection: &hdbconnect_async::Connection,
+) -> crate::connection_statistics::PyConnectionStatistics {
+    let stats = connection.statistics().await;
+    stats.into()
+}
+
+/// Resets connection statistics on an async connection.
+pub async fn reset_statistics_impl(connection: &mut hdbconnect_async::Connection) {
+    connection.reset_statistics().await;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -10,7 +10,14 @@ from collections.abc import Awaitable, Sequence
 from types import TracebackType
 from typing import Any, Literal, Self
 
-from pyhdb_rs._core import ArrowConfig, CacheStats, ConnectionConfig, RecordBatchReader, TlsConfig
+from pyhdb_rs._core import (
+    ArrowConfig,
+    CacheStats,
+    ConnectionConfig,
+    ConnectionStatistics,
+    RecordBatchReader,
+    TlsConfig,
+)
 
 # Feature flag
 ASYNC_AVAILABLE: bool
@@ -206,6 +213,44 @@ class AsyncConnection:
 
         Raises:
             OperationalError: If connection is closed.
+        """
+        ...
+
+    async def statistics(self) -> ConnectionStatistics:
+        """Get connection performance statistics.
+
+        Returns snapshot of connection performance metrics including:
+        - Roundtrip count and average latency
+        - Request/reply compression ratios
+        - Total accumulated wait time
+
+        Returns:
+            ConnectionStatistics object with performance metrics.
+
+        Raises:
+            OperationalError: If connection is closed.
+
+        Example::
+
+            stats = await conn.statistics()
+            print(f"Roundtrips: {stats.call_count}")
+            print(f"Avg latency: {stats.avg_wait_time:.2f}ms")
+        """
+        ...
+
+    async def reset_statistics(self) -> None:
+        """Reset connection statistics to zero.
+
+        Useful for measuring specific operations or time windows.
+
+        Raises:
+            OperationalError: If connection is closed.
+
+        Example::
+
+            await conn.reset_statistics()
+            # Execute some queries
+            stats = await conn.statistics()
         """
         ...
 
@@ -606,6 +651,45 @@ class PooledConnection:
 
         Raises:
             OperationalError: If connection returned to pool.
+        """
+        ...
+
+    async def statistics(self) -> ConnectionStatistics:
+        """Get connection performance statistics.
+
+        Returns snapshot of connection performance metrics including:
+        - Roundtrip count and average latency
+        - Request/reply compression ratios
+        - Total accumulated wait time
+
+        Returns:
+            ConnectionStatistics object with performance metrics.
+
+        Raises:
+            OperationalError: If connection returned to pool.
+
+        Example::
+
+            async with pool.acquire() as conn:
+                stats = await conn.statistics()
+                print(f"Roundtrips: {stats.call_count}")
+        """
+        ...
+
+    async def reset_statistics(self) -> None:
+        """Reset connection statistics to zero.
+
+        Useful for measuring specific operations or time windows.
+
+        Raises:
+            OperationalError: If connection returned to pool.
+
+        Example::
+
+            async with pool.acquire() as conn:
+                await conn.reset_statistics()
+                # Execute some queries
+                stats = await conn.statistics()
         """
         ...
 

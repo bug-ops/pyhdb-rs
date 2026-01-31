@@ -33,6 +33,7 @@ use pyo3::prelude::*;
 
 pub mod config;
 pub mod connection;
+pub mod connection_statistics;
 pub mod cursor;
 pub mod cursor_holdability;
 pub mod error;
@@ -53,6 +54,7 @@ pub use config::{PyArrowConfig, PyConnectionConfig};
 #[cfg(feature = "async")]
 pub use connection::PyAsyncConnectionBuilder;
 pub use connection::{PyCacheStats, PyConnection, PyConnectionBuilder};
+pub use connection_statistics::PyConnectionStatistics;
 pub use cursor::PyCursor;
 pub use cursor_holdability::PyCursorHoldability;
 pub use error::PyHdbError;
@@ -126,6 +128,7 @@ fn pyhdb_rs_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyConnectionConfig>()?;
     m.add_class::<PyArrowConfig>()?;
     m.add_class::<PyCacheStats>()?;
+    m.add_class::<PyConnectionStatistics>()?;
 
     // Builder API classes
     m.add_class::<PyTlsConfig>()?;
