@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Stored Procedures API** (Issue #54 Phase 3): DB-API 2.0 compliant stored procedure support
+  - `Cursor.callproc(procname, parameters)` - Execute stored procedures with optional parameters
+  - `Cursor.nextset()` - Skip to next result set (stub returning False, Phase 4 will implement full support)
+  - Sync cursor: Full parameter support via prepared statements
+  - Async cursor: Parameterless procedure calls only (parameters raise `NotSupportedError`)
+  - Procedure name validation to prevent SQL injection
+  - Returns input parameters unchanged per DB-API 2.0 spec
+  - Comprehensive type stubs for IDE support in both `_core.pyi` and `aio/_core.pyi`
+  - 12 tests covering validation, sync, async, and integration scenarios
+
+- **Connection Statistics API** (Issue #54 Phase 2): Expose server-side connection statistics for performance monitoring
+  - `Connection.connection_id()` - Get server-assigned connection ID
+  - `Connection.server_memory_usage()` - Get current memory usage in bytes
+  - `Connection.server_processing_time()` - Get cumulative processing time in microseconds
+  - Full async support: `AsyncConnection`, `PooledConnection`
+  - Comprehensive type stubs for IDE support in both `_core.pyi` and `aio/_core.pyi`
+  - 15 tests covering sync, async, and pooled connections
+  - Note: `server_cpu_time()` was omitted because hdbconnect's `ServerUsage.accum_cpu_time` field is private
+
+- **Application Metadata API** (Issue #54 Phase 1): Expose application metadata features for production monitoring
+  - `Connection.set_application(name)` - Set application name visible in SAP HANA `M_CONNECTIONS`
+  - `Connection.set_application_user(user)` - Set application-level user distinct from DB user
+  - `Connection.set_application_version(version)` - Set application version for monitoring
+  - `Connection.set_application_source(source)` - Set source location for debugging
+  - `Connection.client_info()` - Get client context information as `dict[str, str]`
+  - `ConnectionBuilder.application(name, version, user, source)` - Set metadata during connection setup
+  - Full async support: `AsyncConnection`, `AsyncConnectionBuilder`, `PooledConnection`
+  - Comprehensive type stubs for IDE support in both `_core.pyi` and `aio/_core.pyi`
+  - 24 tests covering sync, async, pooled connections, and builders
+
 ## [0.3.2] - 2026-01-30
 
 ### Changed

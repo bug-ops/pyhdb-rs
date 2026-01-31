@@ -358,6 +358,37 @@ class ConnectionBuilder:
         """
         ...
 
+    def application(
+        self,
+        name: str,
+        version: str | None = None,
+        user: str | None = None,
+        source: str | None = None,
+    ) -> Self:
+        """Set application metadata for monitoring.
+
+        All values are set on the connection after it's established.
+        Visible in SAP HANA M_CONNECTIONS system view.
+
+        Args:
+            name: Application name (required).
+            version: Application version (optional).
+            user: Application-level user (optional).
+            source: Source location for debugging (optional).
+
+        Returns:
+            Self for method chaining.
+
+        Example::
+
+            conn = (ConnectionBuilder()
+                .host("hana.example.com")
+                .credentials("SYSTEM", "password")
+                .application("OrderService", version="2.0.0", user="alice")
+                .build())
+        """
+        ...
+
     def build(self) -> Connection:
         """Build and connect synchronously.
 
@@ -534,6 +565,37 @@ class AsyncConnectionBuilder:
         Example::
 
             builder.network_group("internal")
+        """
+        ...
+
+    def application(
+        self,
+        name: str,
+        version: str | None = None,
+        user: str | None = None,
+        source: str | None = None,
+    ) -> Self:
+        """Set application metadata for monitoring.
+
+        All values are set on the connection after it's established.
+        Visible in SAP HANA M_CONNECTIONS system view.
+
+        Args:
+            name: Application name (required).
+            version: Application version (optional).
+            user: Application-level user (optional).
+            source: Source location for debugging (optional).
+
+        Returns:
+            Self for method chaining.
+
+        Example::
+
+            conn = await (AsyncConnectionBuilder()
+                .host("hana.example.com")
+                .credentials("SYSTEM", "password")
+                .application("OrderService", version="2.0.0", user="alice")
+                .build())
         """
         ...
 
@@ -944,6 +1006,117 @@ class Connection:
         """
         ...
 
+    def set_application(self, name: str) -> None:
+        """Set application name for monitoring.
+
+        Visible in SAP HANA M_CONNECTIONS view as APPLICATION column.
+
+        Args:
+            name: Application name (e.g., "MyApp v2.0").
+
+        Raises:
+            OperationalError: If connection is closed.
+
+        Example::
+
+            conn.set_application("OrderProcessingService")
+        """
+        ...
+
+    def set_application_user(self, user: str) -> None:
+        """Set application user for monitoring.
+
+        Typically the end-user making the request, distinct from DB user.
+        Visible in M_CONNECTIONS as APPLICATIONUSER.
+
+        Args:
+            user: Application-level user identifier.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    def set_application_version(self, version: str) -> None:
+        """Set application version for monitoring.
+
+        Args:
+            version: Version string (e.g., "2.3.1").
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    def set_application_source(self, source: str) -> None:
+        """Set application source location for debugging.
+
+        Args:
+            source: Source identifier (e.g., "orders/process.py:42").
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    def client_info(self) -> dict[str, str]:
+        """Get client context information sent to server.
+
+        Returns:
+            Dictionary of client info key-value pairs.
+
+        Raises:
+            OperationalError: If connection is closed.
+
+        Example::
+
+            info = conn.client_info()
+            print(f"Application: {info.get('APPLICATION')}")
+        """
+        ...
+
+    def connection_id(self) -> int:
+        """Get connection ID assigned by SAP HANA server.
+
+        Returns:
+            Server-assigned connection ID for this session.
+
+        Raises:
+            OperationalError: If connection is closed.
+
+        Example::
+
+            conn_id = conn.connection_id()
+            print(f"Connected with ID: {conn_id}")
+        """
+        ...
+
+    def server_memory_usage(self) -> int:
+        """Get current server memory usage in bytes.
+
+        Returns the memory currently allocated for this connection on the server.
+
+        Returns:
+            Memory usage in bytes.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    def server_processing_time(self) -> int:
+        """Get cumulative server processing time in microseconds.
+
+        Returns the total processing time for this connection on the server.
+
+        Returns:
+            Cumulative processing time in microseconds.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
     def __enter__(self) -> Connection: ...
     def __exit__(
         self,
@@ -1046,6 +1219,53 @@ class Cursor:
                     ("Charlie", 35),
                 ]
             )
+        """
+        ...
+
+    def callproc(
+        self,
+        procname: str,
+        parameters: Sequence[Any] | None = None,
+    ) -> Sequence[Any] | None:
+        """Call a stored database procedure.
+
+        DB-API 2.0 compliant stored procedure execution.
+
+        Args:
+            procname: Procedure name (can include schema: "SCHEMA.PROC")
+            parameters: Optional input parameters as sequence
+
+        Returns:
+            Input parameters unchanged (per DB-API 2.0 spec).
+            For output values, use fetchone() after callproc().
+
+        Raises:
+            ProgrammingError: If procedure name is invalid or empty
+            OperationalError: If connection is closed
+
+        Example::
+
+            >>> cursor.callproc("GET_USER_INFO", [user_id])
+            >>> result = cursor.fetchone()
+
+        Note:
+            SAP HANA does not support OUT/INOUT parameter modification via
+            prepared statements. Output values should be retrieved via
+            fetchone()/fetchall() after callproc().
+        """
+        ...
+
+    def nextset(self) -> bool:
+        """Skip to next result set.
+
+        DB-API 2.0 optional extension.
+
+        Returns:
+            False (multiple result sets not yet supported)
+
+        Note:
+            This is a stub implementation. Full multiple result set
+            support is planned for a future release.
         """
         ...
 
@@ -1365,6 +1585,96 @@ class AsyncConnection:
     ) -> RecordBatchReader: ...
     async def cache_stats(self) -> CacheStats: ...
     async def clear_cache(self) -> None: ...
+    async def set_application(self, name: str) -> None:
+        """Set application name for monitoring.
+
+        Visible in SAP HANA M_CONNECTIONS view as APPLICATION column.
+
+        Args:
+            name: Application name (e.g., "MyApp v2.0").
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def set_application_user(self, user: str) -> None:
+        """Set application user for monitoring.
+
+        Args:
+            user: Application-level user identifier.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def set_application_version(self, version: str) -> None:
+        """Set application version for monitoring.
+
+        Args:
+            version: Version string (e.g., "2.3.1").
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def set_application_source(self, source: str) -> None:
+        """Set application source location for debugging.
+
+        Args:
+            source: Source identifier (e.g., "orders/process.py:42").
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def client_info(self) -> dict[str, str]:
+        """Get client context information sent to server.
+
+        Returns:
+            Dictionary of client info key-value pairs.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def connection_id(self) -> int:
+        """Get connection ID assigned by SAP HANA server.
+
+        Returns:
+            Server-assigned connection ID for this session.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def server_memory_usage(self) -> int:
+        """Get current server memory usage in bytes.
+
+        Returns:
+            Memory usage in bytes.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
+    async def server_processing_time(self) -> int:
+        """Get cumulative server processing time in microseconds.
+
+        Returns:
+            Cumulative processing time in microseconds.
+
+        Raises:
+            OperationalError: If connection is closed.
+        """
+        ...
+
     async def __aenter__(self) -> AsyncConnection: ...
     async def __aexit__(
         self,
@@ -1397,6 +1707,45 @@ class AsyncCursor:
         sql: str,
         seq_of_parameters: Sequence[Sequence[Any]] | None = None,
     ) -> None: ...
+    async def callproc(
+        self,
+        procname: str,
+        parameters: Sequence[Any] | None = None,
+    ) -> None:
+        """Call a stored database procedure (async).
+
+        Note: Parameters not supported in async cursor.
+        Use connection.execute_arrow() for data retrieval.
+
+        Args:
+            procname: Procedure name (can include schema: "SCHEMA.PROC")
+            parameters: Not supported, raises NotSupportedError if provided
+
+        Returns:
+            None (parameters not supported in async cursor)
+
+        Raises:
+            NotSupportedError: If parameters provided
+            ProgrammingError: If procedure name is invalid
+
+        Example::
+
+            >>> await cursor.callproc("CLEANUP_OLD_RECORDS")
+        """
+        ...
+
+    def nextset(self) -> bool:
+        """Skip to next result set.
+
+        Returns:
+            False (stub implementation)
+
+        Note:
+            This is a stub implementation. Full multiple result set
+            support is planned for a future release.
+        """
+        ...
+
     async def fetchone(self) -> tuple[Any, ...] | None: ...
     async def fetchmany(self, size: int | None = None) -> list[tuple[Any, ...]]: ...
     async def fetchall(self) -> list[tuple[Any, ...]]: ...
@@ -1570,6 +1919,96 @@ class PooledConnection:
     async def is_valid(self, check_connection: bool = True) -> bool: ...
     async def cache_stats(self) -> CacheStats: ...
     async def clear_cache(self) -> None: ...
+    async def set_application(self, name: str) -> None:
+        """Set application name for monitoring.
+
+        Visible in SAP HANA M_CONNECTIONS view as APPLICATION column.
+
+        Args:
+            name: Application name (e.g., "MyApp v2.0").
+
+        Raises:
+            OperationalError: If connection is closed or returned to pool.
+        """
+        ...
+
+    async def set_application_user(self, user: str) -> None:
+        """Set application user for monitoring.
+
+        Args:
+            user: Application-level user identifier.
+
+        Raises:
+            OperationalError: If connection is closed or returned to pool.
+        """
+        ...
+
+    async def set_application_version(self, version: str) -> None:
+        """Set application version for monitoring.
+
+        Args:
+            version: Version string (e.g., "2.3.1").
+
+        Raises:
+            OperationalError: If connection is closed or returned to pool.
+        """
+        ...
+
+    async def set_application_source(self, source: str) -> None:
+        """Set application source location for debugging.
+
+        Args:
+            source: Source identifier (e.g., "orders/process.py:42").
+
+        Raises:
+            OperationalError: If connection is closed or returned to pool.
+        """
+        ...
+
+    async def client_info(self) -> dict[str, str]:
+        """Get client context information sent to server.
+
+        Returns:
+            Dictionary of client info key-value pairs.
+
+        Raises:
+            OperationalError: If connection is closed or returned to pool.
+        """
+        ...
+
+    async def connection_id(self) -> int:
+        """Get connection ID assigned by SAP HANA server.
+
+        Returns:
+            Server-assigned connection ID for this session.
+
+        Raises:
+            OperationalError: If connection is closed or returned to pool.
+        """
+        ...
+
+    async def server_memory_usage(self) -> int:
+        """Get current server memory usage in bytes.
+
+        Returns:
+            Memory usage in bytes.
+
+        Raises:
+            OperationalError: If connection is closed or returned to pool.
+        """
+        ...
+
+    async def server_processing_time(self) -> int:
+        """Get cumulative server processing time in microseconds.
+
+        Returns:
+            Cumulative processing time in microseconds.
+
+        Raises:
+            OperationalError: If connection is closed or returned to pool.
+        """
+        ...
+
     async def __aenter__(self) -> PooledConnection: ...
     async def __aexit__(
         self,

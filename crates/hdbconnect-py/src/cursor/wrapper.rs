@@ -57,6 +57,48 @@ impl PyCursor {
     }
 }
 
+/// Validate procedure name for safety and correctness.
+fn validate_procedure_name(name: &str) -> PyResult<()> {
+    if name.is_empty() {
+        return Err(PyHdbError::programming("procedure name cannot be empty").into());
+    }
+
+    // Basic validation: allow alphanumeric, underscores, dots (for schema.procedure)
+    // and reject SQL injection patterns
+    let is_valid = name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '$' || c == '#');
+
+    if !is_valid {
+        return Err(PyHdbError::programming(format!("invalid procedure name: {name}")).into());
+    }
+
+    // Check for consecutive dots or starting/ending with dot
+    if name.starts_with('.') || name.ends_with('.') || name.contains("..") {
+        return Err(PyHdbError::programming(format!("invalid procedure name: {name}")).into());
+    }
+
+    Ok(())
+}
+
+/// Build CALL statement with appropriate number of placeholders.
+fn build_call_statement(procname: &str, parameters: Option<&Bound<'_, PyAny>>) -> PyResult<String> {
+    let param_count = match parameters {
+        Some(params) => {
+            let sequence = params.cast::<PySequence>()?;
+            sequence.len()?
+        }
+        None => 0,
+    };
+
+    if param_count == 0 {
+        Ok(format!("CALL {procname}()"))
+    } else {
+        let placeholders = vec!["?"; param_count].join(", ");
+        Ok(format!("CALL {procname}({placeholders})"))
+    }
+}
+
 #[pymethods]
 impl PyCursor {
     /// Column descriptions from the last query.
@@ -183,6 +225,53 @@ impl PyCursor {
                 Err(PyHdbError::operational("connection is closed").into())
             }
         }
+    }
+
+    /// Call a stored database procedure.
+    ///
+    /// DB-API 2.0 compliant stored procedure execution.
+    ///
+    /// Args:
+    ///     procname: Procedure name (schema.procedure or procedure)
+    ///     parameters: Optional sequence of input parameters
+    ///
+    /// Returns:
+    ///     Input parameters unchanged (per DB-API 2.0 spec)
+    ///
+    /// Example:
+    ///     ```python
+    ///     # Procedure: CREATE PROCEDURE GET_USER(IN user_id INT)
+    ///     result = cursor.callproc("GET_USER", [123])
+    ///     row = cursor.fetchone()  # Get output from result set
+    ///     ```
+    #[pyo3(signature = (procname, parameters=None))]
+    fn callproc<'py>(
+        &mut self,
+        py: Python<'py>,
+        procname: &str,
+        parameters: Option<&Bound<'py, PyAny>>,
+    ) -> PyResult<Option<Bound<'py, PyAny>>> {
+        validate_procedure_name(procname)?;
+
+        let call_sql = build_call_statement(procname, parameters)?;
+        self.execute(&call_sql, parameters)?;
+
+        // DB-API 2.0: return input parameters unchanged
+        Ok(parameters.map(|p| p.clone().into_any().unbind().into_bound(py)))
+    }
+
+    /// Skip to next result set.
+    ///
+    /// DB-API 2.0 optional extension. Currently returns False
+    /// as multiple result sets are not yet supported.
+    ///
+    /// Returns:
+    ///     False (always, multiple result sets not implemented)
+    // PyO3 #[pymethods] cannot be const fn; clippy suggestion not applicable.
+    #[allow(clippy::unused_self, clippy::missing_const_for_fn)]
+    fn nextset(&self) -> bool {
+        // MVP: stub implementation - multiple result sets deferred to Phase 4
+        false
     }
 
     /// Fetch one row from the result set.
@@ -524,4 +613,39 @@ fn python_to_serializable(obj: &Bound<'_, PyAny>) -> PyResult<SerializableValue>
         obj.get_type().name()?
     ))
     .into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_procedure_name_valid() {
+        assert!(validate_procedure_name("MY_PROCEDURE").is_ok());
+        assert!(validate_procedure_name("SCHEMA.PROCEDURE").is_ok());
+        assert!(validate_procedure_name("_PROC_123").is_ok());
+        assert!(validate_procedure_name("PROC$NAME").is_ok());
+        assert!(validate_procedure_name("PROC#NAME").is_ok());
+    }
+
+    #[test]
+    fn test_validate_procedure_name_empty() {
+        let result = validate_procedure_name("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_procedure_name_invalid_characters() {
+        assert!(validate_procedure_name("PROC;DROP TABLE").is_err());
+        assert!(validate_procedure_name("PROC'").is_err());
+        assert!(validate_procedure_name("PROC--").is_err());
+        assert!(validate_procedure_name("PROC()").is_err());
+    }
+
+    #[test]
+    fn test_validate_procedure_name_invalid_dots() {
+        assert!(validate_procedure_name(".PROC").is_err());
+        assert!(validate_procedure_name("PROC.").is_err());
+        assert!(validate_procedure_name("SCHEMA..PROC").is_err());
+    }
 }

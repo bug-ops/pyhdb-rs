@@ -86,6 +86,11 @@ pub struct PyConnectionBuilder {
     connection_config: Option<PyConnectionConfig>,
     cursor_holdability: Option<PyCursorHoldability>,
     network_group: Option<String>,
+    // Application metadata fields
+    application_name: Option<String>,
+    application_user: Option<String>,
+    application_version: Option<String>,
+    application_source: Option<String>,
 }
 
 impl Default for PyConnectionBuilder {
@@ -112,6 +117,10 @@ impl PyConnectionBuilder {
             connection_config: None,
             cursor_holdability: None,
             network_group: None,
+            application_name: None,
+            application_user: None,
+            application_version: None,
+            application_source: None,
         }
     }
 
@@ -158,6 +167,10 @@ impl PyConnectionBuilder {
             connection_config: None,
             cursor_holdability: None,
             network_group: None,
+            application_name: None,
+            application_user: None,
+            application_version: None,
+            application_source: None,
         })
     }
 
@@ -304,6 +317,43 @@ impl PyConnectionBuilder {
         slf
     }
 
+    /// Set application metadata for monitoring.
+    ///
+    /// All values are set on the connection after it's established.
+    /// Visible in SAP HANA `M_CONNECTIONS` system view.
+    ///
+    /// Args:
+    ///     name: Application name (required).
+    ///     version: Application version (optional).
+    ///     user: Application-level user (optional).
+    ///     source: Source location for debugging (optional).
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    ///
+    /// Example:
+    ///     ```python
+    ///     conn = (ConnectionBuilder()
+    ///         .host("hana.example.com")
+    ///         .credentials("SYSTEM", "password")
+    ///         .application("OrderService", version="2.0.0", user="alice")
+    ///         .build())
+    ///     ```
+    #[pyo3(text_signature = "(self, name, version=None, user=None, source=None)")]
+    fn application<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        name: &str,
+        version: Option<&str>,
+        user: Option<&str>,
+        source: Option<&str>,
+    ) -> PyRefMut<'py, Self> {
+        slf.application_name = Some(name.to_string());
+        slf.application_version = version.map(String::from);
+        slf.application_user = user.map(String::from);
+        slf.application_source = source.map(String::from);
+        slf
+    }
+
     /// Build and connect synchronously.
     ///
     /// Returns:
@@ -378,6 +428,24 @@ impl PyConnectionBuilder {
             (connection, DEFAULT_CACHE_CAPACITY)
         };
 
+        // Apply application metadata post-connection
+        if let Some(app_name) = &self.application_name {
+            conn.set_application(app_name)
+                .map_err(|e| PyHdbError::operational(e.to_string()))?;
+        }
+        if let Some(app_user) = &self.application_user {
+            conn.set_application_user(app_user)
+                .map_err(|e| PyHdbError::operational(e.to_string()))?;
+        }
+        if let Some(app_version) = &self.application_version {
+            conn.set_application_version(app_version)
+                .map_err(|e| PyHdbError::operational(e.to_string()))?;
+        }
+        if let Some(app_source) = &self.application_source {
+            conn.set_application_source(app_source)
+                .map_err(|e| PyHdbError::operational(e.to_string()))?;
+        }
+
         Ok(PyConnection::from_parts(
             Arc::new(Mutex::new(ConnectionInner::Connected(conn))),
             true,
@@ -427,6 +495,11 @@ pub struct PyAsyncConnectionBuilder {
     autocommit: bool,
     cursor_holdability: Option<PyCursorHoldability>,
     network_group: Option<String>,
+    // Application metadata fields
+    application_name: Option<String>,
+    application_user: Option<String>,
+    application_version: Option<String>,
+    application_source: Option<String>,
 }
 
 #[cfg(feature = "async")]
@@ -454,6 +527,10 @@ impl PyAsyncConnectionBuilder {
             autocommit: true,
             cursor_holdability: None,
             network_group: None,
+            application_name: None,
+            application_user: None,
+            application_version: None,
+            application_source: None,
         }
     }
 
@@ -482,6 +559,10 @@ impl PyAsyncConnectionBuilder {
             autocommit: true,
             cursor_holdability: None,
             network_group: None,
+            application_name: None,
+            application_user: None,
+            application_version: None,
+            application_source: None,
         })
     }
 
@@ -570,6 +651,43 @@ impl PyAsyncConnectionBuilder {
         slf
     }
 
+    /// Set application metadata for monitoring.
+    ///
+    /// All values are set on the connection after it's established.
+    /// Visible in SAP HANA `M_CONNECTIONS` system view.
+    ///
+    /// Args:
+    ///     name: Application name (required).
+    ///     version: Application version (optional).
+    ///     user: Application-level user (optional).
+    ///     source: Source location for debugging (optional).
+    ///
+    /// Returns:
+    ///     Self for method chaining.
+    ///
+    /// Example:
+    ///     ```python
+    ///     conn = await (AsyncConnectionBuilder()
+    ///         .host("hana.example.com")
+    ///         .credentials("SYSTEM", "password")
+    ///         .application("OrderService", version="2.0.0", user="alice")
+    ///         .build())
+    ///     ```
+    #[pyo3(text_signature = "(self, name, version=None, user=None, source=None)")]
+    fn application<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        name: &str,
+        version: Option<&str>,
+        user: Option<&str>,
+        source: Option<&str>,
+    ) -> PyRefMut<'py, Self> {
+        slf.application_name = Some(name.to_string());
+        slf.application_version = version.map(String::from);
+        slf.application_user = user.map(String::from);
+        slf.application_source = source.map(String::from);
+        slf
+    }
+
     /// Build and connect asynchronously.
     ///
     /// Returns:
@@ -605,6 +723,10 @@ impl PyAsyncConnectionBuilder {
         let autocommit = self.autocommit;
         let cursor_holdability = self.cursor_holdability;
         let network_group = self.network_group.clone();
+        let application_name = self.application_name.clone();
+        let application_user = self.application_user.clone();
+        let application_version = self.application_version.clone();
+        let application_source = self.application_source.clone();
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let mut builder = hdbconnect_async::ConnectParams::builder();
@@ -655,6 +777,20 @@ impl PyAsyncConnectionBuilder {
                 (conn, DEFAULT_CACHE_CAPACITY)
             };
 
+            // Apply application metadata post-connection
+            if let Some(app_name) = &application_name {
+                connection.set_application(app_name).await;
+            }
+            if let Some(app_user) = &application_user {
+                connection.set_application_user(app_user).await;
+            }
+            if let Some(app_version) = &application_version {
+                connection.set_application_version(app_version).await;
+            }
+            if let Some(app_source) = &application_source {
+                connection.set_application_source(app_source).await;
+            }
+
             let inner = Arc::new(TokioMutex::new(AsyncConnectionInner::Connected {
                 connection,
             }));
@@ -701,6 +837,10 @@ mod tests {
         assert!(builder.connection_config.is_none());
         assert!(builder.cursor_holdability.is_none());
         assert!(builder.network_group.is_none());
+        assert!(builder.application_name.is_none());
+        assert!(builder.application_user.is_none());
+        assert!(builder.application_version.is_none());
+        assert!(builder.application_source.is_none());
     }
 
     #[test]
@@ -722,6 +862,10 @@ mod tests {
             connection_config: None,
             cursor_holdability: None,
             network_group: None,
+            application_name: None,
+            application_user: None,
+            application_version: None,
+            application_source: None,
         };
 
         let result = builder.build();
@@ -740,6 +884,10 @@ mod tests {
             connection_config: None,
             cursor_holdability: None,
             network_group: None,
+            application_name: None,
+            application_user: None,
+            application_version: None,
+            application_source: None,
         };
 
         let result = builder.build();
@@ -758,6 +906,10 @@ mod tests {
             connection_config: None,
             cursor_holdability: Some(PyCursorHoldability::Commit),
             network_group: Some("test_group".to_string()),
+            application_name: Some("TestApp".to_string()),
+            application_user: Some("alice".to_string()),
+            application_version: Some("1.0.0".to_string()),
+            application_source: Some("test.py".to_string()),
         };
 
         let cloned = builder.clone();
@@ -766,6 +918,10 @@ mod tests {
         assert_eq!(cloned.user, builder.user);
         assert_eq!(cloned.cursor_holdability, builder.cursor_holdability);
         assert_eq!(cloned.network_group, builder.network_group);
+        assert_eq!(cloned.application_name, builder.application_name);
+        assert_eq!(cloned.application_user, builder.application_user);
+        assert_eq!(cloned.application_version, builder.application_version);
+        assert_eq!(cloned.application_source, builder.application_source);
     }
 
     #[test]
@@ -787,6 +943,10 @@ mod tests {
             connection_config: None,
             cursor_holdability: None,
             network_group: None,
+            application_name: None,
+            application_user: None,
+            application_version: None,
+            application_source: None,
         };
 
         let repr = builder.__repr__();
@@ -822,6 +982,10 @@ mod tests {
         assert!(builder.autocommit);
         assert!(builder.cursor_holdability.is_none());
         assert!(builder.network_group.is_none());
+        assert!(builder.application_name.is_none());
+        assert!(builder.application_user.is_none());
+        assert!(builder.application_version.is_none());
+        assert!(builder.application_source.is_none());
     }
 
     #[cfg(feature = "async")]
@@ -847,6 +1011,10 @@ mod tests {
             autocommit: false,
             cursor_holdability: None,
             network_group: None,
+            application_name: None,
+            application_user: None,
+            application_version: None,
+            application_source: None,
         };
 
         let repr = builder.__repr__();
@@ -869,6 +1037,10 @@ mod tests {
             autocommit: false,
             cursor_holdability: Some(PyCursorHoldability::CommitAndRollback),
             network_group: Some("ha_group".to_string()),
+            application_name: Some("AsyncApp".to_string()),
+            application_user: Some("bob".to_string()),
+            application_version: Some("2.0.0".to_string()),
+            application_source: Some("async_test.py".to_string()),
         };
 
         let cloned = builder.clone();
@@ -876,5 +1048,9 @@ mod tests {
         assert_eq!(cloned.autocommit, builder.autocommit);
         assert_eq!(cloned.cursor_holdability, builder.cursor_holdability);
         assert_eq!(cloned.network_group, builder.network_group);
+        assert_eq!(cloned.application_name, builder.application_name);
+        assert_eq!(cloned.application_user, builder.application_user);
+        assert_eq!(cloned.application_version, builder.application_version);
+        assert_eq!(cloned.application_source, builder.application_source);
     }
 }

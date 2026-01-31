@@ -53,6 +53,30 @@ impl AsyncPyCursor {
     }
 }
 
+/// Validate procedure name for safety and correctness.
+fn validate_procedure_name(name: &str) -> PyResult<()> {
+    if name.is_empty() {
+        return Err(PyHdbError::programming("procedure name cannot be empty").into());
+    }
+
+    // Basic validation: allow alphanumeric, underscores, dots (for schema.procedure)
+    // and reject SQL injection patterns
+    let is_valid = name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '$' || c == '#');
+
+    if !is_valid {
+        return Err(PyHdbError::programming(format!("invalid procedure name: {name}")).into());
+    }
+
+    // Check for consecutive dots or starting/ending with dot
+    if name.starts_with('.') || name.ends_with('.') || name.contains("..") {
+        return Err(PyHdbError::programming(format!("invalid procedure name: {name}")).into());
+    }
+
+    Ok(())
+}
+
 #[pymethods]
 impl AsyncPyCursor {
     // PyO3 requires &self for Python property getter binding.
@@ -105,6 +129,78 @@ impl AsyncPyCursor {
                 })
             }
         }
+    }
+
+    /// Call a stored database procedure (async).
+    ///
+    /// Note: Parameters not supported in async cursor.
+    /// Use `connection.execute_arrow()` for data retrieval.
+    ///
+    /// Args:
+    ///     procname: Procedure name
+    ///     parameters: Not supported, raises `NotSupportedError`
+    ///
+    /// Returns:
+    ///     None (parameters not supported)
+    ///
+    /// Raises:
+    ///     `NotSupportedError`: If parameters provided
+    ///     `ProgrammingError`: If procedure name is invalid
+    #[pyo3(signature = (procname, parameters=None))]
+    fn callproc<'py>(
+        &self,
+        py: Python<'py>,
+        procname: &str,
+        parameters: Option<&Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        if parameters.is_some() {
+            return Err(PyHdbError::not_supported(
+                "parameterized procedures are not supported in async cursor; \
+                 use connection.execute_arrow() or construct SQL directly",
+            )
+            .into());
+        }
+
+        validate_procedure_name(procname)?;
+        let call_sql = format!("CALL {procname}()");
+
+        match &self.connection {
+            CursorConnection::Direct(conn) => {
+                let connection = Arc::clone(conn);
+                pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                    let mut conn_guard = connection.lock().await;
+                    match &mut *conn_guard {
+                        AsyncConnectionInner::Connected { connection, .. } => {
+                            execute_query_impl(connection, &call_sql).await?;
+                            Ok(())
+                        }
+                        AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
+                    }
+                })
+            }
+            CursorConnection::Pooled(pooled) => {
+                let pooled = Arc::clone(pooled);
+                pyo3_async_runtimes::tokio::future_into_py(py, async move {
+                    let mut guard = pooled.lock().await;
+                    let obj = guard
+                        .as_mut()
+                        .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
+                    execute_query_impl(&mut obj.connection, &call_sql).await?;
+                    Ok(())
+                })
+            }
+        }
+    }
+
+    /// Skip to next result set.
+    ///
+    /// Returns:
+    ///     False (stub implementation)
+    // PyO3 #[pymethods] cannot be const fn; clippy suggestion not applicable.
+    #[allow(clippy::unused_self, clippy::missing_const_for_fn)]
+    fn nextset(&self) -> bool {
+        // MVP: stub implementation - multiple result sets deferred to Phase 4
+        false
     }
 
     // PyO3 requires &self for Python method binding; returns NotSupportedError.

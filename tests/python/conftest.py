@@ -96,3 +96,79 @@ def create_pool(url: str, **kwargs):
         builder = builder.tls(kwargs["tls_config"])
 
     return builder.build()
+
+
+@pytest.fixture
+def connection_url(hana_uri: str) -> str:
+    """Get the HANA connection URL for tests.
+
+    Returns:
+        HANA connection URL string
+    """
+    return hana_uri
+
+
+@pytest.fixture
+def sync_connection(hana_uri: str) -> Generator[pyhdb_rs.Connection, None, None]:
+    """Create a sync HANA connection for tests.
+
+    Yields:
+        Connection object
+
+    After the test completes, the connection is closed.
+    """
+    import pyhdb_rs
+
+    conn = pyhdb_rs.connect(hana_uri)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+@pytest.fixture
+async def async_connection(hana_uri: str):
+    """Create an async HANA connection for tests.
+
+    Yields:
+        AsyncConnection object
+
+    After the test completes, the connection is closed.
+    """
+    import pyhdb_rs.aio
+
+    conn = await pyhdb_rs.aio.connect(hana_uri)
+    try:
+        yield conn
+    finally:
+        await conn.close()
+
+
+@pytest.fixture
+async def connection_pool(hana_uri: str):
+    """Create a connection pool for tests.
+
+    Yields:
+        ConnectionPool object
+
+    After the test completes, the pool is closed.
+    """
+    pool = create_pool(hana_uri, max_size=5)
+    try:
+        yield pool
+    finally:
+        await pool.close()
+
+
+@pytest.fixture
+async def pooled_connection(connection_pool):
+    """Create a pooled connection for tests.
+
+    Yields:
+        PooledConnection object
+
+    After the test completes, the connection is returned to the pool.
+    """
+    pooled = await connection_pool.acquire()
+    async with pooled:
+        yield pooled
