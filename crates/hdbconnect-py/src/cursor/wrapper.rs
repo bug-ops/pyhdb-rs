@@ -65,21 +65,17 @@ fn validate_procedure_name(name: &str) -> PyResult<()> {
 
     // Basic validation: allow alphanumeric, underscores, dots (for schema.procedure)
     // and reject SQL injection patterns
-    let is_valid = name.chars().all(|c| {
-        c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '$' || c == '#'
-    });
+    let is_valid = name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '$' || c == '#');
 
     if !is_valid {
-        return Err(
-            PyHdbError::programming(format!("invalid procedure name: {name}")).into(),
-        );
+        return Err(PyHdbError::programming(format!("invalid procedure name: {name}")).into());
     }
 
     // Check for consecutive dots or starting/ending with dot
     if name.starts_with('.') || name.ends_with('.') || name.contains("..") {
-        return Err(
-            PyHdbError::programming(format!("invalid procedure name: {name}")).into(),
-        );
+        return Err(PyHdbError::programming(format!("invalid procedure name: {name}")).into());
     }
 
     Ok(())
