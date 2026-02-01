@@ -277,6 +277,76 @@ fn find_main_operation(sql: &str) -> String {
     sql.to_string()
 }
 
+/// Validate procedure name (schema.procedure or procedure)
+pub fn validate_procedure_name(name: &str) -> Result<(), Error> {
+    if name.is_empty() {
+        return Err(Error::InvalidProcedureName("empty name".to_string()));
+    }
+
+    // Split by dot to get schema.procedure or just procedure
+    let parts: Vec<&str> = name.split('.').collect();
+
+    match parts.len() {
+        1 => {
+            // Just procedure name
+            validate_identifier(parts[0], "procedure name")?;
+        }
+        2 => {
+            // schema.procedure
+            validate_identifier(parts[0], "schema name")?;
+            validate_identifier(parts[1], "procedure name")?;
+        }
+        _ => {
+            return Err(Error::InvalidProcedureName(format!(
+                "too many dots in name: {name}"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate LIKE pattern for SQL injection prevention.
+/// Only allows alphanumeric characters, underscores, and SQL LIKE wildcards (%, _).
+pub fn validate_like_pattern(pattern: &str) -> Result<(), Error> {
+    if pattern.is_empty() {
+        return Err(Error::Config("Empty LIKE pattern".into()));
+    }
+
+    if pattern.len() > MAX_IDENTIFIER_LENGTH {
+        return Err(Error::Config(format!(
+            "LIKE pattern too long: {} characters (max {})",
+            pattern.len(),
+            MAX_IDENTIFIER_LENGTH
+        )));
+    }
+
+    for c in pattern.chars() {
+        if !c.is_ascii_alphanumeric() && c != '_' && c != '%' && c != '$' && c != '#' {
+            return Err(Error::Config(format!(
+                "Invalid character in LIKE pattern: '{c}'. \
+                 Only alphanumeric characters, _, $, #, and SQL wildcards (%, _) are allowed."
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+/// Parse qualified procedure name into (schema, procedure)
+pub fn parse_qualified_name(
+    name: &str,
+    schema_param: Option<&crate::types::SchemaName>,
+) -> (Option<String>, String) {
+    let parts: Vec<&str> = name.split('.').collect();
+
+    match parts.len() {
+        2 => (Some(parts[0].to_string()), parts[1].to_string()),
+        1 => (schema_param.map(|s| s.name.clone()), parts[0].to_string()),
+        _ => (None, name.to_string()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -600,5 +670,61 @@ mod tests {
         assert!(!cleaned.contains("comment"));
         assert!(cleaned.contains("SELECT"));
         assert!(cleaned.contains("*"));
+    }
+
+    // Procedure validation tests
+    #[test]
+    fn test_validate_procedure_name_simple() {
+        assert!(validate_procedure_name("MY_PROCEDURE").is_ok());
+        assert!(validate_procedure_name("get_user").is_ok());
+    }
+
+    #[test]
+    fn test_validate_procedure_name_qualified() {
+        assert!(validate_procedure_name("SCHEMA.PROCEDURE").is_ok());
+        assert!(validate_procedure_name("my_schema.my_proc").is_ok());
+    }
+
+    #[test]
+    fn test_validate_procedure_name_empty() {
+        let result = validate_procedure_name("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_procedure_name_too_many_dots() {
+        let result = validate_procedure_name("a.b.c");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_procedure_name_invalid_chars() {
+        let result = validate_procedure_name("my;proc");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_qualified_name_qualified() {
+        let (schema, proc) = parse_qualified_name("SCHEMA.PROCEDURE", None);
+        assert_eq!(schema, Some("SCHEMA".to_string()));
+        assert_eq!(proc, "PROCEDURE");
+    }
+
+    #[test]
+    fn test_parse_qualified_name_simple_no_schema() {
+        let (schema, proc) = parse_qualified_name("PROCEDURE", None);
+        assert!(schema.is_none());
+        assert_eq!(proc, "PROCEDURE");
+    }
+
+    #[test]
+    fn test_parse_qualified_name_simple_with_schema_param() {
+        use crate::types::SchemaName;
+        let schema_param = SchemaName {
+            name: "DEFAULT".to_string(),
+        };
+        let (schema, proc) = parse_qualified_name("PROCEDURE", Some(&schema_param));
+        assert_eq!(schema, Some("DEFAULT".to_string()));
+        assert_eq!(proc, "PROCEDURE");
     }
 }

@@ -89,9 +89,27 @@ struct Args {
     /// Allowed DML operations (comma-separated: insert,update,delete)
     #[arg(long)]
     dml_ops: Option<String>,
+
+    // Procedure configuration
+    /// Enable stored procedure execution
+    #[arg(long)]
+    allow_procedures: bool,
+
+    /// Skip procedure confirmation prompt
+    #[arg(long)]
+    no_procedure_confirm: bool,
+
+    /// Maximum result sets from procedures
+    #[arg(long, default_value = "10")]
+    procedure_max_result_sets: u32,
+
+    /// Maximum rows per procedure result set
+    #[arg(long, default_value = "1000")]
+    procedure_max_rows: u32,
 }
 
 #[tokio::main]
+#[allow(clippy::too_many_lines)]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
@@ -161,6 +179,18 @@ async fn main() -> anyhow::Result<()> {
         builder = builder.allowed_operations(ops);
     }
 
+    // Procedure configuration from CLI
+    if args.allow_procedures {
+        builder = builder.allow_procedures(true);
+    }
+
+    if args.no_procedure_confirm {
+        builder = builder.require_procedure_confirmation(false);
+    }
+
+    builder = builder.max_result_sets(NonZeroU32::new(args.procedure_max_result_sets));
+    builder = builder.max_rows_per_result_set(NonZeroU32::new(args.procedure_max_rows));
+
     // Build configuration
     let config = builder.build()?;
 
@@ -189,6 +219,21 @@ async fn main() -> anyhow::Result<()> {
         tracing::info!(
             "DML WHERE clause required: {}",
             config.dml.require_where_clause
+        );
+    }
+    tracing::info!("Procedures enabled: {}", config.procedure.allow_procedures);
+    if config.procedure.allow_procedures {
+        tracing::info!(
+            "Procedure confirmation required: {}",
+            config.procedure.require_confirmation
+        );
+        tracing::info!(
+            "Procedure max result sets: {:?}",
+            config.procedure.max_result_sets
+        );
+        tracing::info!(
+            "Procedure max rows per result set: {:?}",
+            config.procedure.max_rows_per_result_set
         );
     }
 

@@ -29,7 +29,6 @@ http = [
     "rmcp/transport-streamable-http-server",
     "dep:axum",
     "dep:tower-http",
-    "dep:futures",
     "dep:tokio-stream",
     "dep:tokio-util",
 ]
@@ -45,7 +44,7 @@ anyhow = { workspace = true }
 axum = { workspace = true, optional = true }
 clap = { workspace = true, features = ["derive", "env"] }
 deadpool = { workspace = true, features = ["managed", "rt_tokio_1"] }
-futures = { workspace = true, optional = true }
+futures = { workspace = true }
 hdbconnect = { workspace = true }
 hdbconnect_async = { workspace = true }
 opentelemetry = { workspace = true, optional = true }

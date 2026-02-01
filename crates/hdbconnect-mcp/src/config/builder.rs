@@ -8,6 +8,7 @@ use std::time::Duration;
 use url::Url;
 
 use super::dml::{AllowedOperations, DmlConfig};
+use super::procedure::ProcedureConfig;
 use crate::Error;
 use crate::security::SchemaFilter;
 
@@ -23,6 +24,7 @@ pub struct Config {
     pub transport: TransportConfig,
     pub telemetry: TelemetryConfig,
     pub dml: DmlConfig,
+    pub procedure: ProcedureConfig,
 }
 
 impl Config {
@@ -54,6 +56,11 @@ impl Config {
     #[must_use]
     pub const fn dml(&self) -> &DmlConfig {
         &self.dml
+    }
+
+    #[must_use]
+    pub const fn procedure(&self) -> &ProcedureConfig {
+        &self.procedure
     }
 }
 
@@ -115,6 +122,7 @@ pub struct ConfigBuilder {
     transport: TransportConfig,
     telemetry: TelemetryConfig,
     dml: DmlConfig,
+    procedure: ProcedureConfig,
 }
 
 impl ConfigBuilder {
@@ -142,6 +150,7 @@ impl ConfigBuilder {
                 json_logs: false,
             },
             dml: DmlConfig::new(),
+            procedure: ProcedureConfig::new(),
         }
     }
 
@@ -260,6 +269,36 @@ impl ConfigBuilder {
         self
     }
 
+    // Procedure configuration methods
+
+    /// Enable stored procedure execution (disabled by default)
+    #[must_use]
+    pub const fn allow_procedures(mut self, allow: bool) -> Self {
+        self.procedure.allow_procedures = allow;
+        self
+    }
+
+    /// Require confirmation before procedure execution
+    #[must_use]
+    pub const fn require_procedure_confirmation(mut self, require: bool) -> Self {
+        self.procedure.require_confirmation = require;
+        self
+    }
+
+    /// Set maximum result sets from procedures
+    #[must_use]
+    pub const fn max_result_sets(mut self, limit: Option<NonZeroU32>) -> Self {
+        self.procedure.max_result_sets = limit;
+        self
+    }
+
+    /// Set maximum rows per result set
+    #[must_use]
+    pub const fn max_rows_per_result_set(mut self, limit: Option<NonZeroU32>) -> Self {
+        self.procedure.max_rows_per_result_set = limit;
+        self
+    }
+
     /// Build the configuration
     pub fn build(self) -> crate::Result<Config> {
         let connection_url = self
@@ -288,6 +327,16 @@ impl ConfigBuilder {
             ..self.dml
         };
 
+        // Apply defaults for procedure config
+        let procedure = ProcedureConfig {
+            max_result_sets: self.procedure.max_result_sets.or(NonZeroU32::new(10)),
+            max_rows_per_result_set: self
+                .procedure
+                .max_rows_per_result_set
+                .or(NonZeroU32::new(1000)),
+            ..self.procedure
+        };
+
         Ok(Config {
             connection_url,
             pool_size: self.pool_size,
@@ -303,6 +352,7 @@ impl ConfigBuilder {
                 json_logs: self.telemetry.json_logs,
             },
             dml,
+            procedure,
         })
     }
 }
@@ -325,6 +375,8 @@ mod tests {
         assert!(!builder.dml.allow_dml);
         assert!(builder.dml.require_confirmation);
         assert!(builder.dml.require_where_clause);
+        assert!(!builder.procedure.allow_procedures);
+        assert!(builder.procedure.require_confirmation);
     }
 
     #[test]
@@ -407,5 +459,38 @@ mod tests {
         assert!(config.dml.allowed_operations.insert);
         assert!(!config.dml.allowed_operations.update);
         assert!(!config.dml.allowed_operations.delete);
+    }
+
+    #[test]
+    fn test_builder_procedure_config() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .allow_procedures(true)
+            .require_procedure_confirmation(false)
+            .max_result_sets(NonZeroU32::new(5))
+            .max_rows_per_result_set(NonZeroU32::new(500))
+            .build()
+            .unwrap();
+
+        assert!(config.procedure.allow_procedures);
+        assert!(!config.procedure.require_confirmation);
+        assert_eq!(config.procedure.max_result_sets, NonZeroU32::new(5));
+        assert_eq!(
+            config.procedure.max_rows_per_result_set,
+            NonZeroU32::new(500)
+        );
+    }
+
+    #[test]
+    fn test_builder_procedure_default_limits() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new().connection_url(url).build().unwrap();
+
+        assert_eq!(config.procedure.max_result_sets, NonZeroU32::new(10));
+        assert_eq!(
+            config.procedure.max_rows_per_result_set,
+            NonZeroU32::new(1000)
+        );
     }
 }
