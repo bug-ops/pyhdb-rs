@@ -12,7 +12,10 @@ pub mod transport;
 pub mod types;
 mod validation;
 
-pub use config::{Config, ConfigBuilder, TelemetryConfig, TransportConfig, TransportMode};
+pub use config::{
+    AllowedOperations, Config, ConfigBuilder, DmlConfig, DmlOperation, TelemetryConfig,
+    TransportConfig, TransportMode,
+};
 pub use error::{Error, Result};
 pub use pool::{Pool, PooledConnection, create_pool};
 pub use security::{QueryGuard, SchemaFilter};

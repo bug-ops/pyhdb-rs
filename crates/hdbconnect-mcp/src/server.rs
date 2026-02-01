@@ -10,9 +10,9 @@ use rmcp::model::{ServerCapabilities, ServerInfo};
 use rmcp::service::{RequestContext, RoleServer};
 use rmcp::{ErrorData, ServerHandler as RmcpServerHandler, tool, tool_handler, tool_router};
 
-use crate::Config;
 use crate::constants::{
-    DESCRIBE_TABLE_CURRENT_SCHEMA, DESCRIBE_TABLE_TEMPLATE, ELICIT_SCHEMA_DESCRIBE_TABLE,
+    DESCRIBE_TABLE_CURRENT_SCHEMA, DESCRIBE_TABLE_TEMPLATE, DML_SQL_PLACEHOLDER,
+    DML_STATUS_SUCCESS, ELICIT_DML_CONFIRMATION, ELICIT_SCHEMA_DESCRIBE_TABLE,
     ELICIT_SCHEMA_LIST_TABLES, HEALTH_CHECK_QUERY, LIST_TABLES_CURRENT_SCHEMA,
     LIST_TABLES_TEMPLATE, SQL_TRUE, STATUS_OK,
 };
@@ -20,10 +20,15 @@ use crate::helpers::{get_connection, hdb_value_to_json};
 use crate::pool::Pool;
 use crate::security::QueryGuard;
 use crate::types::{
-    ColumnInfo, DescribeTableParams, ExecuteSqlParams, ListTablesParams, PingResult, QueryResult,
-    SchemaName, TableInfo, TableSchema, ToolResult,
+    ColumnInfo, DescribeTableParams, DmlConfirmation, DmlResult, ExecuteDmlParams,
+    ExecuteSqlParams, ListTablesParams, PingResult, QueryResult, SchemaName, TableInfo,
+    TableSchema, ToolResult,
 };
-use crate::validation::{validate_identifier, validate_read_only_sql};
+use crate::validation::{
+    is_valid_identifier, validate_dml_sql, validate_identifier, validate_read_only_sql,
+    validate_where_clause,
+};
+use crate::{Config, Error};
 
 pub struct ServerHandler {
     pool: Arc<Pool>,
@@ -303,6 +308,175 @@ impl ServerHandler {
             rows,
             row_count: count,
         }))
+    }
+
+    #[tool(description = "Execute a DML statement (INSERT, UPDATE, DELETE) with safety checks")]
+    async fn execute_dml(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(params): Parameters<ExecuteDmlParams>,
+    ) -> ToolResult<DmlResult> {
+        let dml_config = self.config.dml();
+
+        // 1. Check DML is enabled
+        if !dml_config.allow_dml {
+            return Err(ErrorData::from(Error::DmlDisabled));
+        }
+
+        // 2. Parse and validate statement
+        let operation = validate_dml_sql(&params.sql).map_err(ErrorData::from)?;
+
+        // 3. Check operation whitelist
+        if !dml_config.allowed_operations.is_allowed(operation) {
+            return Err(ErrorData::from(Error::DmlOperationNotAllowed(operation)));
+        }
+
+        // 4. WHERE clause validation for UPDATE/DELETE
+        if dml_config.require_where_clause && operation.requires_where_clause() {
+            validate_where_clause(&params.sql, operation).map_err(ErrorData::from)?;
+        }
+
+        // 5. Schema validation (reuse existing)
+        if let Some(ref schema) = params.schema {
+            validate_identifier(&schema.name, "schema name").map_err(ErrorData::from)?;
+            debug_assert!(is_valid_identifier(&schema.name));
+            self.query_guard
+                .validate_schema(&schema.name)
+                .map_err(ErrorData::from)?;
+        }
+
+        // 6. Request confirmation (unless force)
+        if dml_config.require_confirmation && !params.force && context.peer.supports_elicitation() {
+            let confirmation_msg =
+                ELICIT_DML_CONFIRMATION.replace(DML_SQL_PLACEHOLDER, &params.sql);
+
+            let confirmation_result = context
+                .peer
+                .elicit::<DmlConfirmation>(confirmation_msg)
+                .await;
+
+            match confirmation_result {
+                Ok(Some(confirmation)) if confirmation.is_confirmed() => {
+                    // User confirmed, proceed
+                }
+                _ => {
+                    return Err(ErrorData::from(Error::DmlCancelled));
+                }
+            }
+        }
+
+        // 7. Execute DML statement with transaction control
+        let conn = get_connection(&self.pool).await?;
+
+        // Build the SQL with optional schema prefix
+        let sql_to_execute = if let Some(ref schema) = params.schema {
+            format!("SET SCHEMA \"{}\"; {}", schema.name, params.sql)
+        } else {
+            params.sql.clone()
+        };
+
+        // 8. If row limit is set, use explicit transaction control
+        if let Some(limit) = dml_config.max_affected_rows {
+            // Disable auto-commit to control transaction manually
+            conn.set_auto_commit(false).await;
+
+            let dml_result = self.query_guard.execute(conn.dml(&sql_to_execute)).await;
+
+            let affected_rows = match dml_result {
+                Ok(rows) => rows,
+                Err(e) => {
+                    // Rollback on error and re-enable auto-commit
+                    let _ = conn.rollback().await;
+                    conn.set_auto_commit(true).await;
+                    return Err(ErrorData::from(e));
+                }
+            };
+
+            let affected_rows_u64 = affected_rows as u64;
+
+            // Check row limit BEFORE commit
+            if affected_rows_u64 > u64::from(limit.get()) {
+                // ROLLBACK: limit exceeded
+                let rollback_result = conn.rollback().await;
+                conn.set_auto_commit(true).await;
+
+                if let Err(e) = rollback_result {
+                    tracing::error!(
+                        tool = "execute_dml",
+                        operation = %operation,
+                        affected_rows = affected_rows,
+                        limit = limit.get(),
+                        error = %e,
+                        "Failed to rollback after row limit exceeded"
+                    );
+                }
+
+                tracing::warn!(
+                    tool = "execute_dml",
+                    operation = %operation,
+                    affected_rows = affected_rows,
+                    limit = limit.get(),
+                    "Row limit exceeded, operation rolled back"
+                );
+
+                return Err(ErrorData::from(Error::DmlRowLimitExceeded {
+                    actual: affected_rows_u64,
+                    limit: limit.get(),
+                }));
+            }
+
+            // COMMIT: within limit
+            let commit_result = conn.commit().await;
+            conn.set_auto_commit(true).await;
+
+            if let Err(e) = commit_result {
+                tracing::error!(
+                    tool = "execute_dml",
+                    operation = %operation,
+                    affected_rows = affected_rows,
+                    error = %e,
+                    "Failed to commit DML operation"
+                );
+                return Err(ErrorData::from(Error::Connection(e)));
+            }
+
+            tracing::info!(
+                tool = "execute_dml",
+                operation = %operation,
+                affected_rows = affected_rows,
+                "DML operation committed"
+            );
+
+            Ok(Json(DmlResult {
+                operation: operation.to_string(),
+                affected_rows: affected_rows_u64,
+                status: DML_STATUS_SUCCESS.to_string(),
+                message: None,
+            }))
+        } else {
+            // No row limit: execute with auto-commit (default behavior)
+            let affected_rows = self
+                .query_guard
+                .execute(conn.dml(&sql_to_execute))
+                .await
+                .map_err(ErrorData::from)?;
+
+            let affected_rows_u64 = affected_rows as u64;
+
+            tracing::info!(
+                tool = "execute_dml",
+                operation = %operation,
+                affected_rows = affected_rows,
+                "DML operation completed"
+            );
+
+            Ok(Json(DmlResult {
+                operation: operation.to_string(),
+                affected_rows: affected_rows_u64,
+                status: DML_STATUS_SUCCESS.to_string(),
+                message: None,
+            }))
+        }
     }
 }
 

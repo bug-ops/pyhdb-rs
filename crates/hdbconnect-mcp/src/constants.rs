@@ -31,3 +31,12 @@ pub const STATUS_OK: &str = "ok";
 
 /// SQL nullable value: TRUE
 pub const SQL_TRUE: &str = "TRUE";
+
+/// DML status: success
+pub const DML_STATUS_SUCCESS: &str = "success";
+
+/// Elicitation message template for DML confirmation
+pub const ELICIT_DML_CONFIRMATION: &str = "You are about to execute a DML operation.\n\nStatement: <sql>\n\nThis operation may modify data in the database. Type 'yes' to confirm or 'no' to cancel.";
+
+/// Placeholder for SQL in DML confirmation message
+pub const DML_SQL_PLACEHOLDER: &str = "<sql>";

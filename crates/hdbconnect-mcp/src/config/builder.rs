@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use url::Url;
 
+use super::dml::{AllowedOperations, DmlConfig};
 use crate::Error;
 use crate::security::SchemaFilter;
 
@@ -21,6 +22,7 @@ pub struct Config {
     pub schema_filter: SchemaFilter,
     pub transport: TransportConfig,
     pub telemetry: TelemetryConfig,
+    pub dml: DmlConfig,
 }
 
 impl Config {
@@ -47,6 +49,11 @@ impl Config {
     #[must_use]
     pub const fn schema_filter(&self) -> &SchemaFilter {
         &self.schema_filter
+    }
+
+    #[must_use]
+    pub const fn dml(&self) -> &DmlConfig {
+        &self.dml
     }
 }
 
@@ -107,6 +114,7 @@ pub struct ConfigBuilder {
     schema_filter: SchemaFilter,
     transport: TransportConfig,
     telemetry: TelemetryConfig,
+    dml: DmlConfig,
 }
 
 impl ConfigBuilder {
@@ -133,6 +141,7 @@ impl ConfigBuilder {
                 log_level: String::new(),
                 json_logs: false,
             },
+            dml: DmlConfig::new(),
         }
     }
 
@@ -214,6 +223,43 @@ impl ConfigBuilder {
         self
     }
 
+    // DML configuration methods
+
+    /// Enable DML operations (disabled by default)
+    #[must_use]
+    pub const fn allow_dml(mut self, allow: bool) -> Self {
+        self.dml.allow_dml = allow;
+        self
+    }
+
+    /// Require confirmation before DML execution
+    #[must_use]
+    pub const fn require_dml_confirmation(mut self, require: bool) -> Self {
+        self.dml.require_confirmation = require;
+        self
+    }
+
+    /// Set maximum affected rows limit
+    #[must_use]
+    pub const fn max_affected_rows(mut self, limit: Option<NonZeroU32>) -> Self {
+        self.dml.max_affected_rows = limit;
+        self
+    }
+
+    /// Require WHERE clause for UPDATE/DELETE
+    #[must_use]
+    pub const fn require_where_clause(mut self, require: bool) -> Self {
+        self.dml.require_where_clause = require;
+        self
+    }
+
+    /// Set allowed DML operations
+    #[must_use]
+    pub const fn allowed_operations(mut self, ops: AllowedOperations) -> Self {
+        self.dml.allowed_operations = ops;
+        self
+    }
+
     /// Build the configuration
     pub fn build(self) -> crate::Result<Config> {
         let connection_url = self
@@ -236,6 +282,12 @@ impl ConfigBuilder {
             self.telemetry.log_level
         };
 
+        // Apply default for DML max_affected_rows
+        let dml = DmlConfig {
+            max_affected_rows: self.dml.max_affected_rows.or(NonZeroU32::new(1000)),
+            ..self.dml
+        };
+
         Ok(Config {
             connection_url,
             pool_size: self.pool_size,
@@ -250,6 +302,7 @@ impl ConfigBuilder {
                 log_level,
                 json_logs: self.telemetry.json_logs,
             },
+            dml,
         })
     }
 }
@@ -269,6 +322,9 @@ mod tests {
         let builder = ConfigBuilder::new();
         assert!(builder.read_only);
         assert_eq!(builder.query_timeout, Duration::from_secs(30));
+        assert!(!builder.dml.allow_dml);
+        assert!(builder.dml.require_confirmation);
+        assert!(builder.dml.require_where_clause);
     }
 
     #[test]
@@ -306,5 +362,50 @@ mod tests {
             "unknown".parse::<TransportMode>().unwrap(),
             TransportMode::Stdio
         );
+    }
+
+    #[test]
+    fn test_builder_dml_config() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .allow_dml(true)
+            .require_dml_confirmation(false)
+            .max_affected_rows(NonZeroU32::new(500))
+            .require_where_clause(false)
+            .build()
+            .unwrap();
+
+        assert!(config.dml.allow_dml);
+        assert!(!config.dml.require_confirmation);
+        assert_eq!(config.dml.max_affected_rows, NonZeroU32::new(500));
+        assert!(!config.dml.require_where_clause);
+    }
+
+    #[test]
+    fn test_builder_dml_default_max_rows() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new().connection_url(url).build().unwrap();
+
+        assert_eq!(config.dml.max_affected_rows, NonZeroU32::new(1000));
+    }
+
+    #[test]
+    fn test_builder_allowed_operations() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let ops = AllowedOperations {
+            insert: true,
+            update: false,
+            delete: false,
+        };
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .allowed_operations(ops)
+            .build()
+            .unwrap();
+
+        assert!(config.dml.allowed_operations.insert);
+        assert!(!config.dml.allowed_operations.update);
+        assert!(!config.dml.allowed_operations.delete);
     }
 }

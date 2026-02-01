@@ -18,7 +18,7 @@ pub fn init_observability(config: &TelemetryConfig) -> Result<()> {
 
     #[cfg(not(feature = "telemetry"))]
     {
-        init_basic_logging(config)?;
+        init_basic_logging(config);
     }
 
     Ok(())
@@ -26,7 +26,7 @@ pub fn init_observability(config: &TelemetryConfig) -> Result<()> {
 
 /// Initialize basic logging without OpenTelemetry
 #[cfg(not(feature = "telemetry"))]
-fn init_basic_logging(config: &TelemetryConfig) -> Result<()> {
+fn init_basic_logging(config: &TelemetryConfig) {
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
     use tracing_subscriber::{EnvFilter, Layer};
@@ -47,11 +47,10 @@ fn init_basic_logging(config: &TelemetryConfig) -> Result<()> {
         .with(filter)
         .with(fmt_layer)
         .init();
-
-    Ok(())
 }
 
 /// Shutdown observability stack
+#[allow(clippy::missing_const_for_fn)]
 pub fn shutdown_observability() {
     #[cfg(feature = "telemetry")]
     {

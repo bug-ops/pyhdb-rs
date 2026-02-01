@@ -118,3 +118,229 @@ pub struct ExecuteSqlParams {
     #[schemars(description = "Optional row limit. Server may enforce maximum limit")]
     pub limit: Option<u32>,
 }
+
+/// Parameters for DML execution
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ExecuteDmlParams {
+    /// DML statement (INSERT, UPDATE, DELETE)
+    #[schemars(description = "SQL DML statement. Allowed: INSERT, UPDATE, DELETE")]
+    pub sql: String,
+
+    /// Optional: schema context for the operation
+    #[serde(default)]
+    #[schemars(description = "Schema name. Leave empty to use CURRENT_SCHEMA")]
+    pub schema: Option<SchemaName>,
+
+    /// Force execution without confirmation (requires elevated permissions).
+    ///
+    /// # Security Warning
+    ///
+    /// Setting `force=true` bypasses the user confirmation prompt, allowing DML
+    /// operations to execute without explicit user approval. This should only be
+    /// used in automated pipelines or by trusted clients where:
+    /// - The operation has been pre-validated
+    /// - The caller has appropriate authorization
+    /// - Audit logging is in place
+    ///
+    /// Using `force=true` in interactive contexts increases the risk of
+    /// unintended data modifications.
+    #[serde(default)]
+    #[schemars(description = "Skip confirmation prompt (use with caution)")]
+    pub force: bool,
+}
+
+/// DML execution result
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct DmlResult {
+    /// Operation performed
+    #[schemars(description = "Operation type: INSERT, UPDATE, or DELETE")]
+    pub operation: String,
+
+    /// Number of rows affected
+    #[schemars(description = "Number of rows inserted, updated, or deleted")]
+    pub affected_rows: u64,
+
+    /// Execution status
+    #[schemars(description = "Status: success or error")]
+    pub status: String,
+
+    /// Optional message (e.g., warning about row limit)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(description = "Additional message or warning")]
+    pub message: Option<String>,
+}
+
+/// DML confirmation elicitation
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[schemars(description = "Confirm DML operation execution")]
+pub struct DmlConfirmation {
+    /// User's confirmation response
+    #[schemars(description = "Type 'yes' or 'confirm' to proceed")]
+    pub confirm: String,
+}
+
+elicit_safe!(DmlConfirmation);
+
+impl DmlConfirmation {
+    #[must_use]
+    pub fn is_confirmed(&self) -> bool {
+        let normalized = self.confirm.trim().to_lowercase();
+        matches!(normalized.as_str(), "yes" | "y" | "confirm" | "ok" | "true")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dml_confirmation_is_confirmed() {
+        assert!(
+            DmlConfirmation {
+                confirm: "yes".to_string()
+            }
+            .is_confirmed()
+        );
+        assert!(
+            DmlConfirmation {
+                confirm: "YES".to_string()
+            }
+            .is_confirmed()
+        );
+        assert!(
+            DmlConfirmation {
+                confirm: "y".to_string()
+            }
+            .is_confirmed()
+        );
+        assert!(
+            DmlConfirmation {
+                confirm: "Y".to_string()
+            }
+            .is_confirmed()
+        );
+        assert!(
+            DmlConfirmation {
+                confirm: "confirm".to_string()
+            }
+            .is_confirmed()
+        );
+        assert!(
+            DmlConfirmation {
+                confirm: "CONFIRM".to_string()
+            }
+            .is_confirmed()
+        );
+        assert!(
+            DmlConfirmation {
+                confirm: "ok".to_string()
+            }
+            .is_confirmed()
+        );
+        assert!(
+            DmlConfirmation {
+                confirm: "OK".to_string()
+            }
+            .is_confirmed()
+        );
+        assert!(
+            DmlConfirmation {
+                confirm: "true".to_string()
+            }
+            .is_confirmed()
+        );
+        assert!(
+            DmlConfirmation {
+                confirm: "  yes  ".to_string()
+            }
+            .is_confirmed()
+        );
+    }
+
+    #[test]
+    fn test_dml_confirmation_not_confirmed() {
+        assert!(
+            !DmlConfirmation {
+                confirm: "no".to_string()
+            }
+            .is_confirmed()
+        );
+        assert!(
+            !DmlConfirmation {
+                confirm: "false".to_string()
+            }
+            .is_confirmed()
+        );
+        assert!(
+            !DmlConfirmation {
+                confirm: "cancel".to_string()
+            }
+            .is_confirmed()
+        );
+        assert!(
+            !DmlConfirmation {
+                confirm: "".to_string()
+            }
+            .is_confirmed()
+        );
+        assert!(
+            !DmlConfirmation {
+                confirm: "n".to_string()
+            }
+            .is_confirmed()
+        );
+    }
+
+    #[test]
+    fn test_dml_result_serialization() {
+        let result = DmlResult {
+            operation: "INSERT".to_string(),
+            affected_rows: 5,
+            status: "success".to_string(),
+            message: None,
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("INSERT"));
+        assert!(json.contains("5"));
+        assert!(json.contains("success"));
+        assert!(!json.contains("message"));
+
+        let result_with_message = DmlResult {
+            operation: "DELETE".to_string(),
+            affected_rows: 100,
+            status: "success".to_string(),
+            message: Some("Deleted old records".to_string()),
+        };
+
+        let json = serde_json::to_string(&result_with_message).unwrap();
+        assert!(json.contains("message"));
+        assert!(json.contains("Deleted old records"));
+    }
+
+    #[test]
+    fn test_execute_dml_params_deserialization() {
+        let json = r#"{
+            "sql": "INSERT INTO users VALUES (1, 'test')",
+            "schema": {"name": "APP"}
+        }"#;
+
+        let params: ExecuteDmlParams = serde_json::from_str(json).unwrap();
+        assert_eq!(params.sql, "INSERT INTO users VALUES (1, 'test')");
+        assert!(params.schema.is_some());
+        assert_eq!(params.schema.unwrap().name, "APP");
+        assert!(!params.force);
+    }
+
+    #[test]
+    fn test_execute_dml_params_with_force() {
+        let json = r#"{
+            "sql": "DELETE FROM logs WHERE created_at < '2024-01-01'",
+            "force": true
+        }"#;
+
+        let params: ExecuteDmlParams = serde_json::from_str(json).unwrap();
+        assert!(params.force);
+        assert!(params.schema.is_none());
+    }
+}

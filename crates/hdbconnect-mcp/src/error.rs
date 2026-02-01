@@ -3,6 +3,8 @@ use std::time::Duration;
 use rmcp::ErrorData;
 use thiserror::Error;
 
+use crate::config::DmlOperation;
+
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("Connection error: {0}")]
@@ -28,6 +30,25 @@ pub enum Error {
 
     #[error("Transport error: {0}")]
     Transport(String),
+
+    // DML-specific errors
+    #[error("DML operations are disabled. Set allow_dml=true in configuration")]
+    DmlDisabled,
+
+    #[error("DML operation not allowed: {0}")]
+    DmlOperationNotAllowed(DmlOperation),
+
+    #[error("WHERE clause required for {0} statements")]
+    DmlWhereClauseRequired(DmlOperation),
+
+    #[error("Affected rows ({actual}) exceeds limit ({limit})")]
+    DmlRowLimitExceeded { actual: u64, limit: u32 },
+
+    #[error("DML operation cancelled by user")]
+    DmlCancelled,
+
+    #[error("Not a valid DML statement. Use INSERT, UPDATE, or DELETE")]
+    DmlNotAStatement,
 }
 
 impl Error {
@@ -69,6 +90,19 @@ impl Error {
     pub const fn is_query(&self) -> bool {
         matches!(self, Self::Query(_))
     }
+
+    #[must_use]
+    pub const fn is_dml_error(&self) -> bool {
+        matches!(
+            self,
+            Self::DmlDisabled
+                | Self::DmlOperationNotAllowed(_)
+                | Self::DmlWhereClauseRequired(_)
+                | Self::DmlRowLimitExceeded { .. }
+                | Self::DmlCancelled
+                | Self::DmlNotAStatement
+        )
+    }
 }
 
 /// Convert our Error type to rmcp `ErrorData`
@@ -91,6 +125,26 @@ impl From<Error> for ErrorData {
                 Self::invalid_params(format!("Schema access denied: {schema}"), None)
             }
             Error::Transport(msg) => Self::internal_error(format!("Transport error: {msg}"), None),
+            // DML errors
+            Error::DmlDisabled => Self::invalid_params(
+                "DML operations are disabled. Set allow_dml=true in configuration",
+                None,
+            ),
+            Error::DmlOperationNotAllowed(op) => {
+                Self::invalid_params(format!("DML operation not allowed: {op}"), None)
+            }
+            Error::DmlWhereClauseRequired(op) => {
+                Self::invalid_params(format!("WHERE clause required for {op} statements"), None)
+            }
+            Error::DmlRowLimitExceeded { actual, limit } => Self::invalid_params(
+                format!("Affected rows ({actual}) exceeds limit ({limit})"),
+                None,
+            ),
+            Error::DmlCancelled => Self::invalid_params("DML operation cancelled by user", None),
+            Error::DmlNotAStatement => Self::invalid_params(
+                "Not a valid DML statement. Use INSERT, UPDATE, or DELETE",
+                None,
+            ),
         }
     }
 }
@@ -219,5 +273,72 @@ mod tests {
         let err = Error::Query("invalid SQL".to_string());
         let data: ErrorData = err.into();
         assert!(data.message.contains("Query error"));
+    }
+
+    // DML error tests
+    #[test]
+    fn test_dml_disabled_error() {
+        let err = Error::DmlDisabled;
+        assert!(err.is_dml_error());
+        assert!(err.to_string().contains("disabled"));
+    }
+
+    #[test]
+    fn test_dml_operation_not_allowed_error() {
+        let err = Error::DmlOperationNotAllowed(DmlOperation::Delete);
+        assert!(err.is_dml_error());
+        assert!(err.to_string().contains("DELETE"));
+    }
+
+    #[test]
+    fn test_dml_where_clause_required_error() {
+        let err = Error::DmlWhereClauseRequired(DmlOperation::Update);
+        assert!(err.is_dml_error());
+        assert!(err.to_string().contains("WHERE"));
+        assert!(err.to_string().contains("UPDATE"));
+    }
+
+    #[test]
+    fn test_dml_row_limit_exceeded_error() {
+        let err = Error::DmlRowLimitExceeded {
+            actual: 5000,
+            limit: 1000,
+        };
+        assert!(err.is_dml_error());
+        assert!(err.to_string().contains("5000"));
+        assert!(err.to_string().contains("1000"));
+    }
+
+    #[test]
+    fn test_dml_cancelled_error() {
+        let err = Error::DmlCancelled;
+        assert!(err.is_dml_error());
+        assert!(err.to_string().contains("cancelled"));
+    }
+
+    #[test]
+    fn test_dml_not_a_statement_error() {
+        let err = Error::DmlNotAStatement;
+        assert!(err.is_dml_error());
+        assert!(err.to_string().contains("INSERT"));
+    }
+
+    #[test]
+    fn test_error_to_error_data_dml_disabled() {
+        let err = Error::DmlDisabled;
+        let data: ErrorData = err.into();
+        assert!(data.message.contains("disabled"));
+        assert!(data.message.contains("allow_dml"));
+    }
+
+    #[test]
+    fn test_error_to_error_data_dml_row_limit() {
+        let err = Error::DmlRowLimitExceeded {
+            actual: 2000,
+            limit: 500,
+        };
+        let data: ErrorData = err.into();
+        assert!(data.message.contains("2000"));
+        assert!(data.message.contains("500"));
     }
 }
