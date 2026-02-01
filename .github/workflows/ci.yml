@@ -363,7 +363,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
-          flags: hdbconnect-arrow
+          flags: hdbconnect-arrow,hdbconnect-mcp
           fail_ci_if_error: false
 
   msrv:
