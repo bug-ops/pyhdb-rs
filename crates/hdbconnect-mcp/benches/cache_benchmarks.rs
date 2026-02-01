@@ -404,6 +404,7 @@ fn bench_key_operations(c: &mut Criterion) {
             black_box(CacheKey::query_result(
                 "SELECT * FROM users WHERE id = 1",
                 Some(100),
+                "_benchmark",
             ))
         });
     });
