@@ -13,7 +13,14 @@ all-features = true
 [advisories]
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-ignore = []
+ignore = [
+    # RUSTSEC-2023-0071: Marvin Attack on RSA (timing sidechannel)
+    # Safe to ignore: we only use RSA for JWT signature verification with PUBLIC keys
+    # from JWKS endpoints. The vulnerability affects private key operations (signing,
+    # decryption) over network, which we do not perform. Our use case is a resource
+    # server validating tokens, not generating them.
+    "RUSTSEC-2023-0071",
+]
 
 [licenses]
 confidence-threshold = 0.93
@@ -31,6 +38,7 @@ allow = [
     "CC0-1.0",
     "Unlicense",
     "CDLA-Permissive-2.0",
+    "OpenSSL",
 ]
 
 [[licenses.clarify]]
