@@ -10,10 +10,9 @@ use url::Url;
 use super::dml::{AllowedOperations, DmlConfig};
 use super::procedure::ProcedureConfig;
 use crate::Error;
-use crate::security::SchemaFilter;
-
 #[cfg(feature = "cache")]
 use crate::cache::{CacheBackend, CacheConfig, CacheTtlConfig};
+use crate::security::SchemaFilter;
 
 /// Server configuration
 #[derive(Debug, Clone)]
@@ -448,7 +447,6 @@ impl Default for ConfigBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[cfg(feature = "cache")]
     use crate::cache::DEFAULT_MAX_VALUE_SIZE;
 

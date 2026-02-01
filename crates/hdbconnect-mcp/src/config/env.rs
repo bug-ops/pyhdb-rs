@@ -11,10 +11,9 @@ use url::Url;
 use super::builder::{ConfigBuilder, TransportMode};
 use super::dml::AllowedOperations;
 use crate::Result;
-use crate::security::SchemaFilter;
-
 #[cfg(feature = "cache")]
 use crate::cache::CacheBackend;
+use crate::security::SchemaFilter;
 
 /// Environment variable names
 mod vars {
