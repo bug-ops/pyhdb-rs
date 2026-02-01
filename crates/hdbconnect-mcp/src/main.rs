@@ -5,6 +5,8 @@ use std::str::FromStr;
 
 use clap::Parser;
 use hdbconnect_mcp::config::{self, AllowedOperations, TransportMode};
+#[cfg(feature = "cache")]
+use hdbconnect_mcp::create_cache;
 use hdbconnect_mcp::observability::{init_observability, shutdown_observability};
 use hdbconnect_mcp::security::SchemaFilter;
 use hdbconnect_mcp::transport::run_transport;
@@ -201,6 +203,18 @@ async fn main() -> anyhow::Result<()> {
     let pool = create_pool(config.connection_url.to_string(), config.pool_size.get());
 
     // Initialize server handler
+    #[cfg(feature = "cache")]
+    let handler = {
+        let cache = create_cache(config.cache());
+        tracing::info!(
+            "Cache enabled: {}, backend: {:?}",
+            config.cache.enabled,
+            config.cache.backend
+        );
+        ServerHandler::new(pool, config.clone(), cache)
+    };
+
+    #[cfg(not(feature = "cache"))]
     let handler = ServerHandler::new(pool, config.clone());
 
     // Log startup info

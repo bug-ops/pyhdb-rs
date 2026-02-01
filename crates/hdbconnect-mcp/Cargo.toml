@@ -24,6 +24,11 @@ name = "cache_benchmarks"
 harness = false
 required-features = ["cache"]
 
+[[bench]]
+name = "cache_integration_benchmarks"
+harness = false
+required-features = ["cache"]
+
 [lints]
 workspace = true
 
@@ -74,6 +79,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
 url = { workspace = true }
 
 [dev-dependencies]
+async-trait = { workspace = true }
 criterion = { workspace = true, features = ["async_tokio"] }
 parking_lot = { workspace = true }
 tempfile = { workspace = true }

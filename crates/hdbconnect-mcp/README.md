@@ -173,6 +173,29 @@ hdbconnect-mcp = { version = "0.3", features = ["http"] }
 > [!NOTE]
 > HTTP transport requires additional authentication configuration. See [HTTP Transport Guide](docs/http-transport.md) for setup.
 
+### `cache`
+
+Enable in-memory caching for schema metadata and query results.
+
+```toml
+[dependencies]
+hdbconnect-mcp = { version = "0.3", features = ["cache"] }
+```
+
+## Cache Deployment Notes
+
+The cache feature is designed for **single-user MCP deployments** where all queries run under the same database user or service account.
+
+> [!WARNING]
+> **Multi-User Limitation**: Cache keys do not include user context. In multi-tenant deployments with per-user database permissions (row-level security), disable the cache feature or implement user-scoped cache keys to prevent authorization bypass.
+
+For single-user scenarios (typical MCP usage with personal AI assistant or service account), cache is safe and recommended for performance:
+- Schema metadata cached for 1 hour (configurable)
+- Query results cached for 60 seconds
+- Cache hit latency: 3-6 microseconds vs database round-trip
+
+**Schema staleness**: DDL changes (ALTER TABLE, DROP COLUMN) may not be reflected until TTL expires. For environments with frequent schema changes, reduce TTL or disable caching.
+
 ## Architecture
 
 ```

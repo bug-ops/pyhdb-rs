@@ -11,6 +11,31 @@
 //! # Observability
 //!
 //! Wrap any cache with [`TracedCache`] to add tracing spans and logging.
+//!
+//! # Deployment Considerations
+//!
+//! The cache is designed for **single-user MCP deployments** where all queries
+//! run under the same database user or service account.
+//!
+//! ## Multi-User Limitation
+//!
+//! Cache keys do not include user context. In multi-tenant deployments with
+//! per-user database permissions (row-level security), cached results from
+//! one user may be served to another, potentially bypassing authorization.
+//!
+//! For multi-user environments, consider:
+//! - Disabling the cache feature entirely
+//! - Using cache only for non-sensitive metadata (table lists, column definitions)
+//! - Implementing user-scoped cache keys at the application layer
+//!
+//! For typical single-user MCP scenarios (personal AI assistant, service account),
+//! the cache is safe and recommended for performance.
+//!
+//! ## Schema Staleness
+//!
+//! Schema metadata is cached for 1 hour by default. DDL changes (ALTER TABLE,
+//! DROP COLUMN) may not be reflected until TTL expires. Reduce
+//! [`CacheTtlConfig::schema`] for environments with frequent schema changes.
 
 mod config;
 mod error;

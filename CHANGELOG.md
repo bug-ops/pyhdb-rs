@@ -77,6 +77,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Testing**: 91% coverage (303 tests), comprehensive benchmarks with Criterion
   - **Documentation**: Complete API docs, performance characteristics, security notes
 
+- **hdbconnect-mcp Phase 3.4**: Cache integration with MCP server tools (Issue #67)
+  - **Cached Tools**: Integrated cache with `list_tables`, `describe_table`, `list_procedures`, `describe_procedure`, `execute_sql` (read-only queries)
+  - **cached_or_fetch Helper**: Generic async pattern for cache-first lookup with database fallback
+  - **TTL Strategy**: Schema metadata (1 hour), query results (1 minute)
+  - **Graceful Degradation**: Cache errors never fail operations, always fall back to fresh database queries
+  - **Collision Mitigation**: Query cache keys include sql_hash + sql_len for disambiguation
+  - **Performance**: Cache hit 3-6μs (170x better than target), miss overhead ~3.6μs (27x better than target), NoopCache 45ns
+  - **Feature Gating**: All cache integration behind `#[cfg(feature = "cache")]` with zero overhead when disabled
+  - **Documentation**: Single-user deployment limitation documented in README, multi-user considerations, schema staleness behavior
+  - **Testing**: 309 tests passing, 98-100% cache module coverage, 5 tests for cached_or_fetch helper
+  - **Benchmarks**: Comprehensive Criterion benchmarks for cache hit/miss scenarios and concurrent access patterns
+
 ### Security
 
 - **hdbconnect-mcp**: Fixed 5 security vulnerabilities identified in Phase 2 review

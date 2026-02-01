@@ -1,4 +1,13 @@
 //! MCP server implementation
+//!
+//! # Feature Gating Design
+//!
+//! Tool methods contain duplicate code paths between `#[cfg(feature = "cache")]` and
+//! `#[cfg(not(feature = "cache"))]` blocks. This duplication is intentional:
+//! - Ensures zero runtime overhead when cache is disabled
+//! - Keeps each code path self-contained and easy to verify
+//! - Avoids macro complexity that would reduce readability
+//! - Compile-time elimination of unused paths
 
 use std::fmt;
 use std::num::NonZeroU32;
@@ -11,6 +20,8 @@ use rmcp::model::{ServerCapabilities, ServerInfo};
 use rmcp::service::{RequestContext, RoleServer};
 use rmcp::{ErrorData, ServerHandler as RmcpServerHandler, tool, tool_handler, tool_router};
 
+#[cfg(feature = "cache")]
+use crate::cache::{CacheKey, CacheProvider};
 use crate::constants::{
     DESCRIBE_PROCEDURE_CURRENT_SCHEMA, DESCRIBE_PROCEDURE_TEMPLATE, DESCRIBE_TABLE_CURRENT_SCHEMA,
     DESCRIBE_TABLE_TEMPLATE, DML_SQL_PLACEHOLDER, DML_STATUS_SUCCESS, ELICIT_DML_CONFIRMATION,
@@ -20,6 +31,8 @@ use crate::constants::{
     LIST_TABLES_TEMPLATE, PROCEDURE_NAME_PLACEHOLDER, PROCEDURE_PARAMS_PLACEHOLDER,
     PROCEDURE_STATUS_SUCCESS, SQL_TRUE, STATUS_OK,
 };
+#[cfg(feature = "cache")]
+use crate::helpers::cached_or_fetch;
 use crate::helpers::{get_connection, hdb_value_to_json};
 use crate::pool::Pool;
 use crate::security::QueryGuard;
@@ -40,6 +53,8 @@ pub struct ServerHandler {
     pool: Arc<Pool>,
     config: Arc<Config>,
     query_guard: QueryGuard,
+    #[cfg(feature = "cache")]
+    cache: Arc<dyn CacheProvider>,
     tool_router: ToolRouter<Self>,
 }
 
@@ -49,6 +64,8 @@ impl Clone for ServerHandler {
             pool: Arc::clone(&self.pool),
             config: Arc::clone(&self.config),
             query_guard: self.query_guard.clone(),
+            #[cfg(feature = "cache")]
+            cache: Arc::clone(&self.cache),
             tool_router: Self::tool_router(),
         }
     }
@@ -56,16 +73,35 @@ impl Clone for ServerHandler {
 
 impl fmt::Debug for ServerHandler {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ServerHandler")
-            .field("pool", &"<Pool>")
+        let mut s = f.debug_struct("ServerHandler");
+        s.field("pool", &"<Pool>")
             .field("config", &self.config)
-            .field("query_guard", &self.query_guard)
-            .field("tool_router", &"<ToolRouter>")
-            .finish()
+            .field("query_guard", &self.query_guard);
+        #[cfg(feature = "cache")]
+        s.field("cache", &"<CacheProvider>");
+        s.field("tool_router", &"<ToolRouter>").finish()
     }
 }
 
 impl ServerHandler {
+    #[cfg(feature = "cache")]
+    pub fn new(pool: Pool, config: Config, cache: Arc<dyn CacheProvider>) -> Self {
+        let query_guard = QueryGuard::new(
+            config.query_timeout,
+            config.schema_filter.clone(),
+            config.row_limit,
+        );
+
+        Self {
+            pool: Arc::new(pool),
+            config: Arc::new(config),
+            query_guard,
+            cache,
+            tool_router: Self::tool_router(),
+        }
+    }
+
+    #[cfg(not(feature = "cache"))]
     pub fn new(pool: Pool, config: Config) -> Self {
         let query_guard = QueryGuard::new(
             config.query_timeout,
@@ -79,6 +115,265 @@ impl ServerHandler {
             query_guard,
             tool_router: Self::tool_router(),
         }
+    }
+
+    async fn fetch_tables_from_db(
+        &self,
+        schema: Option<&SchemaName>,
+    ) -> crate::Result<Vec<TableInfo>> {
+        let conn = get_connection(&self.pool)
+            .await
+            .map_err(|e| Error::Query(e.message.to_string()))?;
+
+        let query = schema.map_or_else(
+            || LIST_TABLES_CURRENT_SCHEMA.to_string(),
+            |schema_name| LIST_TABLES_TEMPLATE.replace("{SCHEMA}", &schema_name.name),
+        );
+
+        let result_set = self.query_guard.execute(conn.query(&query)).await?;
+
+        let rows = self.query_guard.execute(result_set.into_rows()).await?;
+
+        let tables: Vec<TableInfo> = rows
+            .into_iter()
+            .filter_map(|mut row| {
+                if let (Some(HdbValue::STRING(name)), Some(HdbValue::STRING(table_type))) =
+                    (row.next_value(), row.next_value())
+                {
+                    Some(TableInfo { name, table_type })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Ok(tables)
+    }
+
+    async fn fetch_table_schema_from_db(
+        &self,
+        table: &str,
+        schema: Option<&SchemaName>,
+    ) -> crate::Result<TableSchema> {
+        let conn = get_connection(&self.pool)
+            .await
+            .map_err(|e| Error::Query(e.message.to_string()))?;
+
+        let query = schema.map_or_else(
+            || DESCRIBE_TABLE_CURRENT_SCHEMA.replace("{TABLE}", table),
+            |schema_name| {
+                DESCRIBE_TABLE_TEMPLATE
+                    .replace("{SCHEMA}", &schema_name.name)
+                    .replace("{TABLE}", table)
+            },
+        );
+
+        let result_set = self.query_guard.execute(conn.query(&query)).await?;
+
+        let rows = self.query_guard.execute(result_set.into_rows()).await?;
+
+        let columns: Vec<ColumnInfo> = rows
+            .into_iter()
+            .filter_map(|mut row| {
+                if let (
+                    Some(HdbValue::STRING(name)),
+                    Some(HdbValue::STRING(data_type)),
+                    Some(HdbValue::STRING(nullable)),
+                ) = (row.next_value(), row.next_value(), row.next_value())
+                {
+                    Some(ColumnInfo {
+                        name,
+                        data_type,
+                        nullable: nullable == SQL_TRUE,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Ok(TableSchema {
+            table_name: table.to_string(),
+            columns,
+        })
+    }
+
+    async fn fetch_procedures_from_db(
+        &self,
+        schema: Option<&SchemaName>,
+        name_pattern: Option<&str>,
+    ) -> crate::Result<Vec<ProcedureInfo>> {
+        let conn = get_connection(&self.pool)
+            .await
+            .map_err(|e| Error::Query(e.message.to_string()))?;
+
+        let query = match (schema, name_pattern) {
+            (Some(s), Some(pattern)) => LIST_PROCEDURES_PATTERN_TEMPLATE
+                .replace("{SCHEMA}", &s.name)
+                .replace("{PATTERN}", pattern),
+            (Some(s), None) => LIST_PROCEDURES_TEMPLATE.replace("{SCHEMA}", &s.name),
+            (None, _) => LIST_PROCEDURES_CURRENT_SCHEMA.to_string(),
+        };
+
+        let result_set = self.query_guard.execute(conn.query(&query)).await?;
+
+        let rows = self.query_guard.execute(result_set.into_rows()).await?;
+
+        let procedures: Vec<ProcedureInfo> = rows
+            .into_iter()
+            .filter_map(|mut row| {
+                if let (
+                    Some(HdbValue::STRING(name)),
+                    Some(HdbValue::STRING(schema)),
+                    Some(HdbValue::STRING(proc_type)),
+                    Some(HdbValue::STRING(read_only)),
+                ) = (
+                    row.next_value(),
+                    row.next_value(),
+                    row.next_value(),
+                    row.next_value(),
+                ) {
+                    Some(ProcedureInfo {
+                        name,
+                        schema,
+                        procedure_type: proc_type,
+                        is_read_only: read_only == SQL_TRUE,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Ok(procedures)
+    }
+
+    async fn fetch_procedure_schema_from_db(
+        &self,
+        proc_name: &str,
+        schema: Option<&SchemaName>,
+    ) -> crate::Result<ProcedureSchema> {
+        let conn = get_connection(&self.pool)
+            .await
+            .map_err(|e| Error::Query(e.message.to_string()))?;
+
+        let query = schema.map_or_else(
+            || DESCRIBE_PROCEDURE_CURRENT_SCHEMA.replace("{PROCEDURE}", proc_name),
+            |s| {
+                DESCRIBE_PROCEDURE_TEMPLATE
+                    .replace("{SCHEMA}", &s.name)
+                    .replace("{PROCEDURE}", proc_name)
+            },
+        );
+
+        let result_set = self.query_guard.execute(conn.query(&query)).await?;
+
+        let rows = self.query_guard.execute(result_set.into_rows()).await?;
+
+        let parameters: Vec<ProcedureParameter> = rows
+            .into_iter()
+            .filter_map(|mut row| {
+                let Some(HdbValue::STRING(name)) = row.next_value() else {
+                    return None;
+                };
+                let position = match row.next_value() {
+                    Some(HdbValue::INT(i)) => i as u32,
+                    Some(HdbValue::BIGINT(i)) => i as u32,
+                    _ => return None,
+                };
+                let Some(HdbValue::STRING(data_type)) = row.next_value() else {
+                    return None;
+                };
+                let Some(HdbValue::STRING(direction_str)) = row.next_value() else {
+                    return None;
+                };
+                let length = match row.next_value() {
+                    Some(HdbValue::INT(i)) if i > 0 => Some(i as u32),
+                    Some(HdbValue::BIGINT(i)) if i > 0 => Some(i as u32),
+                    _ => None,
+                };
+                let precision = match row.next_value() {
+                    Some(HdbValue::INT(i)) if i > 0 => Some(i as u32),
+                    Some(HdbValue::BIGINT(i)) if i > 0 => Some(i as u32),
+                    _ => None,
+                };
+                let scale = match row.next_value() {
+                    Some(HdbValue::INT(i)) if i > 0 => Some(i as u32),
+                    Some(HdbValue::BIGINT(i)) if i > 0 => Some(i as u32),
+                    _ => None,
+                };
+                let has_default = match row.next_value() {
+                    Some(HdbValue::STRING(s)) => s == SQL_TRUE,
+                    Some(HdbValue::BOOLEAN(b)) => b,
+                    _ => false,
+                };
+
+                let direction = ParameterDirection::from_hana_str(&direction_str)?;
+
+                Some(ProcedureParameter {
+                    name,
+                    position,
+                    data_type,
+                    direction,
+                    length,
+                    precision,
+                    scale,
+                    has_default,
+                })
+            })
+            .collect();
+
+        let schema_name = schema.map_or_else(String::new, |s| s.name.clone());
+
+        Ok(ProcedureSchema {
+            name: proc_name.to_string(),
+            schema: schema_name,
+            parameters,
+            result_set_count: None,
+        })
+    }
+
+    async fn fetch_query_from_db(
+        &self,
+        sql: &str,
+        row_limit: Option<u32>,
+    ) -> crate::Result<QueryResult> {
+        let conn = get_connection(&self.pool)
+            .await
+            .map_err(|e| Error::Query(e.message.to_string()))?;
+
+        let result_set = self.query_guard.execute(conn.query(sql)).await?;
+
+        let metadata = result_set.metadata().clone();
+        let all_rows = self.query_guard.execute(result_set.into_rows()).await?;
+
+        let columns: Vec<String> = metadata
+            .iter()
+            .map(|col| col.columnname().to_string())
+            .collect();
+
+        let mut rows = Vec::new();
+        let mut count: usize = 0;
+
+        for row in all_rows {
+            if let Some(limit_val) = row_limit
+                && count >= limit_val as usize
+            {
+                break;
+            }
+
+            let row_data: Vec<serde_json::Value> =
+                row.into_iter().map(|v| hdb_value_to_json(&v)).collect();
+
+            rows.push(row_data);
+            count += 1;
+        }
+
+        Ok(QueryResult {
+            columns,
+            rows,
+            row_count: count,
+        })
     }
 }
 
@@ -128,44 +423,42 @@ impl ServerHandler {
                 .map_err(ErrorData::from)?;
         }
 
-        let conn = get_connection(&self.pool).await?;
+        #[cfg(feature = "cache")]
+        {
+            let cache_key = CacheKey::table_list(params.schema.as_ref().map(|s| s.name.as_str()));
+            let ttl = self.config.cache().ttl.schema;
+            let schema_ref = params.schema.as_ref();
 
-        let query = params.schema.as_ref().map_or_else(
-            || LIST_TABLES_CURRENT_SCHEMA.to_string(),
-            |schema_name| LIST_TABLES_TEMPLATE.replace("{SCHEMA}", &schema_name.name),
-        );
-
-        let result_set = self
-            .query_guard
-            .execute(conn.query(&query))
-            .await
-            .map_err(ErrorData::from)?;
-
-        let rows = self
-            .query_guard
-            .execute(result_set.into_rows())
-            .await
-            .map_err(ErrorData::from)?;
-
-        let tables: Vec<TableInfo> = rows
-            .into_iter()
-            .filter_map(|mut row| {
-                if let (Some(HdbValue::STRING(name)), Some(HdbValue::STRING(table_type))) =
-                    (row.next_value(), row.next_value())
-                {
-                    Some(TableInfo { name, table_type })
-                } else {
-                    None
-                }
+            let tables = cached_or_fetch(self.cache.as_ref(), &cache_key, ttl, || async {
+                self.fetch_tables_from_db(schema_ref).await
             })
-            .collect();
+            .await
+            .map_err(ErrorData::from)?;
 
-        tracing::debug!(
-            tool = "list_tables",
-            count = tables.len(),
-            "Query completed"
-        );
-        Ok(Json(tables))
+            tracing::debug!(
+                tool = "list_tables",
+                count = tables.len(),
+                "Query completed"
+            );
+
+            return Ok(Json(tables));
+        }
+
+        #[cfg(not(feature = "cache"))]
+        {
+            let tables = self
+                .fetch_tables_from_db(params.schema.as_ref())
+                .await
+                .map_err(ErrorData::from)?;
+
+            tracing::debug!(
+                tool = "list_tables",
+                count = tables.len(),
+                "Query completed"
+            );
+
+            Ok(Json(tables))
+        }
     }
 
     #[tool(description = "Get column definitions for a table")]
@@ -196,60 +489,48 @@ impl ServerHandler {
                 .map_err(ErrorData::from)?;
         }
 
-        let conn = get_connection(&self.pool).await?;
+        #[cfg(feature = "cache")]
+        {
+            let cache_key = CacheKey::table_schema(
+                params.schema.as_ref().map(|s| s.name.as_str()),
+                &params.table,
+            );
+            let ttl = self.config.cache().ttl.schema;
+            let table = params.table.clone();
+            let schema_ref = params.schema.as_ref();
 
-        let query = params.schema.as_ref().map_or_else(
-            || DESCRIBE_TABLE_CURRENT_SCHEMA.replace("{TABLE}", &params.table),
-            |schema_name| {
-                DESCRIBE_TABLE_TEMPLATE
-                    .replace("{SCHEMA}", &schema_name.name)
-                    .replace("{TABLE}", &params.table)
-            },
-        );
-
-        let result_set = self
-            .query_guard
-            .execute(conn.query(&query))
-            .await
-            .map_err(ErrorData::from)?;
-
-        let rows = self
-            .query_guard
-            .execute(result_set.into_rows())
-            .await
-            .map_err(ErrorData::from)?;
-
-        let columns: Vec<ColumnInfo> = rows
-            .into_iter()
-            .filter_map(|mut row| {
-                if let (
-                    Some(HdbValue::STRING(name)),
-                    Some(HdbValue::STRING(data_type)),
-                    Some(HdbValue::STRING(nullable)),
-                ) = (row.next_value(), row.next_value(), row.next_value())
-                {
-                    Some(ColumnInfo {
-                        name,
-                        data_type,
-                        nullable: nullable == SQL_TRUE,
-                    })
-                } else {
-                    None
-                }
+            let schema_result = cached_or_fetch(self.cache.as_ref(), &cache_key, ttl, || async {
+                self.fetch_table_schema_from_db(&table, schema_ref).await
             })
-            .collect();
+            .await
+            .map_err(ErrorData::from)?;
 
-        tracing::debug!(
-            tool = "describe_table",
-            table = %params.table,
-            columns = columns.len(),
-            "Query completed"
-        );
+            tracing::debug!(
+                tool = "describe_table",
+                table = %params.table,
+                columns = schema_result.columns.len(),
+                "Query completed"
+            );
 
-        Ok(Json(TableSchema {
-            table_name: params.table.clone(),
-            columns,
-        }))
+            return Ok(Json(schema_result));
+        }
+
+        #[cfg(not(feature = "cache"))]
+        {
+            let schema_result = self
+                .fetch_table_schema_from_db(&params.table, params.schema.as_ref())
+                .await
+                .map_err(ErrorData::from)?;
+
+            tracing::debug!(
+                tool = "describe_table",
+                table = %params.table,
+                columns = schema_result.columns.len(),
+                "Query completed"
+            );
+
+            Ok(Json(schema_result))
+        }
     }
 
     #[tool(description = "Execute a SQL SELECT query")]
@@ -265,55 +546,43 @@ impl ServerHandler {
             .limit
             .or_else(|| self.query_guard.row_limit().map(NonZeroU32::get));
 
-        let conn = get_connection(&self.pool).await?;
+        // Only cache if in read_only mode (SELECT queries only)
+        #[cfg(feature = "cache")]
+        if self.config.read_only() && self.config.cache().enabled {
+            let cache_key = CacheKey::query_result(&params.sql, row_limit);
+            let ttl = self.config.cache().ttl.query;
+            let sql = params.sql.clone();
 
-        let result_set = self
-            .query_guard
-            .execute(conn.query(&params.sql))
+            let result = cached_or_fetch(self.cache.as_ref(), &cache_key, ttl, || async {
+                self.fetch_query_from_db(&sql, row_limit).await
+            })
             .await
             .map_err(ErrorData::from)?;
 
-        let metadata = result_set.metadata().clone();
-        let all_rows = self
-            .query_guard
-            .execute(result_set.into_rows())
-            .await
-            .map_err(ErrorData::from)?;
+            tracing::debug!(
+                tool = "execute_sql",
+                row_count = result.row_count,
+                columns = result.columns.len(),
+                "Query completed"
+            );
 
-        let columns: Vec<String> = metadata
-            .iter()
-            .map(|col| col.columnname().to_string())
-            .collect();
-
-        let mut rows = Vec::new();
-        let mut count: usize = 0;
-
-        for row in all_rows {
-            if let Some(limit_val) = row_limit
-                && count >= limit_val as usize
-            {
-                break;
-            }
-
-            let row_data: Vec<serde_json::Value> =
-                row.into_iter().map(|v| hdb_value_to_json(&v)).collect();
-
-            rows.push(row_data);
-            count += 1;
+            return Ok(Json(result));
         }
+
+        // Non-cached path (DML enabled or cache disabled)
+        let result = self
+            .fetch_query_from_db(&params.sql, row_limit)
+            .await
+            .map_err(ErrorData::from)?;
 
         tracing::debug!(
             tool = "execute_sql",
-            row_count = count,
-            columns = columns.len(),
+            row_count = result.row_count,
+            columns = result.columns.len(),
             "Query completed"
         );
 
-        Ok(Json(QueryResult {
-            columns,
-            rows,
-            row_count: count,
-        }))
+        Ok(Json(result))
     }
 
     #[tool(description = "Execute a DML statement (INSERT, UPDATE, DELETE) with safety checks")]
@@ -531,62 +800,46 @@ impl ServerHandler {
             validate_like_pattern(pattern).map_err(ErrorData::from)?;
         }
 
-        let conn = get_connection(&self.pool).await?;
+        #[cfg(feature = "cache")]
+        {
+            let cache_key = CacheKey::procedure_list(
+                params.schema.as_ref().map(|s| s.name.as_str()),
+                params.name_pattern.as_deref(),
+            );
+            let ttl = self.config.cache().ttl.schema;
+            let schema_ref = params.schema.as_ref();
+            let pattern = params.name_pattern.as_deref();
 
-        // Build query based on parameters
-        let query = match (&params.schema, &params.name_pattern) {
-            (Some(schema), Some(pattern)) => LIST_PROCEDURES_PATTERN_TEMPLATE
-                .replace("{SCHEMA}", &schema.name)
-                .replace("{PATTERN}", pattern),
-            (Some(schema), None) => LIST_PROCEDURES_TEMPLATE.replace("{SCHEMA}", &schema.name),
-            (None, _) => LIST_PROCEDURES_CURRENT_SCHEMA.to_string(),
-        };
-
-        let result_set = self
-            .query_guard
-            .execute(conn.query(&query))
-            .await
-            .map_err(ErrorData::from)?;
-
-        let rows = self
-            .query_guard
-            .execute(result_set.into_rows())
-            .await
-            .map_err(ErrorData::from)?;
-
-        let procedures: Vec<ProcedureInfo> = rows
-            .into_iter()
-            .filter_map(|mut row| {
-                if let (
-                    Some(HdbValue::STRING(name)),
-                    Some(HdbValue::STRING(schema)),
-                    Some(HdbValue::STRING(proc_type)),
-                    Some(HdbValue::STRING(read_only)),
-                ) = (
-                    row.next_value(),
-                    row.next_value(),
-                    row.next_value(),
-                    row.next_value(),
-                ) {
-                    Some(ProcedureInfo {
-                        name,
-                        schema,
-                        procedure_type: proc_type,
-                        is_read_only: read_only == SQL_TRUE,
-                    })
-                } else {
-                    None
-                }
+            let procedures = cached_or_fetch(self.cache.as_ref(), &cache_key, ttl, || async {
+                self.fetch_procedures_from_db(schema_ref, pattern).await
             })
-            .collect();
+            .await
+            .map_err(ErrorData::from)?;
 
-        tracing::debug!(
-            tool = "list_procedures",
-            count = procedures.len(),
-            "Query completed"
-        );
+            tracing::debug!(
+                tool = "list_procedures",
+                count = procedures.len(),
+                "Query completed"
+            );
 
-        Ok(Json(procedures))
+            return Ok(Json(procedures));
+        }
+
+        #[cfg(not(feature = "cache"))]
+        {
+            let procedures = self
+                .fetch_procedures_from_db(params.schema.as_ref(), params.name_pattern.as_deref())
+                .await
+                .map_err(ErrorData::from)?;
+
+            tracing::debug!(
+                tool = "list_procedures",
+                count = procedures.len(),
+                "Query completed"
+            );
+
+            Ok(Json(procedures))
+        }
     }
 
     #[tool(description = "Get parameter definitions for a stored procedure")]
@@ -633,103 +886,49 @@ impl ServerHandler {
                 .map_err(ErrorData::from)?;
         }
 
-        let conn = get_connection(&self.pool).await?;
+        #[cfg(feature = "cache")]
+        {
+            let cache_key = CacheKey::procedure_schema(
+                params.schema.as_ref().map(|s| s.name.as_str()),
+                &proc_name,
+            );
+            let ttl = self.config.cache().ttl.schema;
+            let proc_name_clone = proc_name.clone();
+            let schema_ref = params.schema.as_ref();
 
-        // Build query
-        let query = params.schema.as_ref().map_or_else(
-            || DESCRIBE_PROCEDURE_CURRENT_SCHEMA.replace("{PROCEDURE}", &proc_name),
-            |schema| {
-                DESCRIBE_PROCEDURE_TEMPLATE
-                    .replace("{SCHEMA}", &schema.name)
-                    .replace("{PROCEDURE}", &proc_name)
-            },
-        );
-
-        let result_set = self
-            .query_guard
-            .execute(conn.query(&query))
-            .await
-            .map_err(ErrorData::from)?;
-
-        let rows = self
-            .query_guard
-            .execute(result_set.into_rows())
-            .await
-            .map_err(ErrorData::from)?;
-
-        let parameters: Vec<ProcedureParameter> = rows
-            .into_iter()
-            .filter_map(|mut row| {
-                let Some(HdbValue::STRING(name)) = row.next_value() else {
-                    return None;
-                };
-                let position = match row.next_value() {
-                    Some(HdbValue::INT(i)) => i as u32,
-                    Some(HdbValue::BIGINT(i)) => i as u32,
-                    _ => return None,
-                };
-                let Some(HdbValue::STRING(data_type)) = row.next_value() else {
-                    return None;
-                };
-                let Some(HdbValue::STRING(direction_str)) = row.next_value() else {
-                    return None;
-                };
-                let length = match row.next_value() {
-                    Some(HdbValue::INT(i)) if i > 0 => Some(i as u32),
-                    Some(HdbValue::BIGINT(i)) if i > 0 => Some(i as u32),
-                    _ => None,
-                };
-                let precision = match row.next_value() {
-                    Some(HdbValue::INT(i)) if i > 0 => Some(i as u32),
-                    Some(HdbValue::BIGINT(i)) if i > 0 => Some(i as u32),
-                    _ => None,
-                };
-                let scale = match row.next_value() {
-                    Some(HdbValue::INT(i)) if i > 0 => Some(i as u32),
-                    Some(HdbValue::BIGINT(i)) if i > 0 => Some(i as u32),
-                    _ => None,
-                };
-                let has_default = match row.next_value() {
-                    Some(HdbValue::STRING(s)) => s == SQL_TRUE,
-                    Some(HdbValue::BOOLEAN(b)) => b,
-                    _ => false,
-                };
-
-                let direction = ParameterDirection::from_hana_str(&direction_str)?;
-
-                Some(ProcedureParameter {
-                    name,
-                    position,
-                    data_type,
-                    direction,
-                    length,
-                    precision,
-                    scale,
-                    has_default,
-                })
+            let schema_result = cached_or_fetch(self.cache.as_ref(), &cache_key, ttl, || async {
+                self.fetch_procedure_schema_from_db(&proc_name_clone, schema_ref)
+                    .await
             })
-            .collect();
+            .await
+            .map_err(ErrorData::from)?;
 
-        // Zero-parameter procedures are valid - procedure exists if no DB error occurred.
+            tracing::debug!(
+                tool = "describe_procedure",
+                procedure = %proc_name,
+                parameters = schema_result.parameters.len(),
+                "Query completed"
+            );
 
-        let schema_name = params
-            .schema
-            .as_ref()
-            .map_or_else(String::new, |s| s.name.clone());
+            return Ok(Json(schema_result));
+        }
 
-        tracing::debug!(
-            tool = "describe_procedure",
-            procedure = %proc_name,
-            parameters = parameters.len(),
-            "Query completed"
-        );
+        #[cfg(not(feature = "cache"))]
+        {
+            let schema_result = self
+                .fetch_procedure_schema_from_db(&proc_name, params.schema.as_ref())
+                .await
+                .map_err(ErrorData::from)?;
 
-        Ok(Json(ProcedureSchema {
-            name: proc_name,
-            schema: schema_name,
-            parameters,
-            result_set_count: None,
-        }))
+            tracing::debug!(
+                tool = "describe_procedure",
+                procedure = %proc_name,
+                parameters = schema_result.parameters.len(),
+                "Query completed"
+            );
+
+            Ok(Json(schema_result))
+        }
     }
 
     #[tool(description = "Execute a stored procedure with parameter binding")]
