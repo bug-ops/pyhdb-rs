@@ -110,11 +110,6 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.13.0
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: test-wheels-ubuntu
-          workspaces: python -> target
-          cache-targets: false  # sccache handles compilation artifacts
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -151,11 +146,6 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.13.0
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: test-wheels-${{ matrix.os }}
-          workspaces: python -> target
-          cache-targets: false  # sccache handles compilation artifacts
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -293,16 +283,6 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.13.0
-      - uses: Swatinem/rust-cache@v2
-        with:
-          # Shared cache key across all cross targets to maximize sccache hits
-          # Target-specific artifacts handled by sccache internally
-          shared-key: cross-wheels-all
-          # Point to python/ workspace where Cargo.toml for PyO3 bindings lives
-          workspaces: python -> target
-          cache-targets: false  # sccache handles compilation artifacts
-          # Save cache for all branches, not just main
-          save-if: ${{ github.event_name == 'push' || github.event_name == 'pull_request' }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
