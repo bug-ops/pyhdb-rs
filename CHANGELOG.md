@@ -47,6 +47,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **SQL Validation**: Extended write keyword detection (MERGE, UPSERT, CALL, EXEC, EXECUTE)
   - **Error Types**: Added `QueryTimeout`, `SchemaAccessDenied`, `Transport`, `InvalidIdentifier` error variants
 
+- **hdbconnect-mcp Phase 3.1**: DML operations support (Issue #67)
+  - **New Tools**: `insert_rows`, `update_rows`, `delete_rows` for database modifications
+  - **Security**: DML disabled by default, explicit `allow_dml = true` required
+  - **Configuration**: `DmlConfig` with granular operation control (INSERT/UPDATE/DELETE)
+  - **Validation**: SQL injection prevention via control character filtering
+  - **Error Handling**: 6 new error types (`DmlDisabled`, `DmlOperationNotAllowed`, etc.)
+  - **Testing**: 27 unit tests for sanitization and validation
+  - **Documentation**: Comprehensive security notes and usage examples
+
+- **hdbconnect-mcp Phase 3.2**: Stored procedure execution support (Issue #67)
+  - **New Tools**: `list_procedures`, `describe_procedure`, `call_procedure`
+  - **Security**: Procedures disabled by default, explicit `allow_procedures = true` required
+  - **Parameter Support**: IN/OUT/INOUT parameters with type conversion
+  - **Multi-Result Sets**: Support for procedures returning multiple result sets
+  - **Validation**: LIKE pattern validation, procedure name sanitization
+  - **Configuration**: `ProcedureConfig` with security documentation
+  - **Error Handling**: 6 new error types (`ProcedureDisabled`, `ProcedureNotFound`, etc.)
+  - **Testing**: 27 unit tests for security and validation
+
+- **hdbconnect-mcp Phase 3.3**: Pluggable cache abstraction layer (Issue #67)
+  - **Cache Feature**: Optional `cache` feature flag (disabled by default, zero overhead when disabled)
+  - **CacheProvider Trait**: Async trait with 9 operations (get, set, delete, exists, delete_by_prefix, metadata, clear, health_check, stats)
+  - **Built-in Providers**: `NoopCache` (disabled), `InMemoryCache` (TTL + LRU eviction), `TracedCache` (observability wrapper)
+  - **Type-Safe Keys**: `CacheKey` with namespace isolation (TableSchema, ProcedureList, QueryResult, etc.)
+  - **Security**: Value size limit (1MB default), config validation warnings, debug-level logging to prevent schema exposure
+  - **Configuration**: `CacheConfig` with TTL strategies, max entries, max value size
+  - **Performance**: 6.15M ops/sec throughput, <5ns trait overhead, zero regressions
+  - **Testing**: 91% coverage (303 tests), comprehensive benchmarks with Criterion
+  - **Documentation**: Complete API docs, performance characteristics, security notes
+
 ### Security
 
 - **hdbconnect-mcp**: Fixed 5 security vulnerabilities identified in Phase 2 review

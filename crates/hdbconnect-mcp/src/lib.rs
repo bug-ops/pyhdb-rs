@@ -1,5 +1,7 @@
 //! MCP server for SAP HANA database
 
+#[cfg(feature = "cache")]
+pub mod cache;
 pub mod config;
 mod constants;
 mod error;
@@ -12,6 +14,11 @@ pub mod transport;
 pub mod types;
 mod validation;
 
+#[cfg(feature = "cache")]
+pub use cache::{
+    CacheBackend, CacheConfig, CacheError, CacheKey, CacheNamespace, CacheProvider, CacheResult,
+    CacheStats, CacheTtlConfig, InMemoryCache, NoopCache, TracedCache, create_cache,
+};
 pub use config::{
     AllowedOperations, Config, ConfigBuilder, DmlConfig, DmlOperation, ProcedureConfig,
     TelemetryConfig, TransportConfig, TransportMode,
