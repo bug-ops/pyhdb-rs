@@ -109,7 +109,7 @@ jobs:
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          version: v0.10.3
+          version: v0.13.0
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test-wheels-ubuntu
@@ -150,7 +150,7 @@ jobs:
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          version: v0.10.3
+          version: v0.13.0
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test-wheels-${{ matrix.os }}
@@ -292,7 +292,7 @@ jobs:
       - name: Setup sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          version: v0.10.3
+          version: v0.13.0
       - uses: Swatinem/rust-cache@v2
         with:
           # Shared cache key across all cross targets to maximize sccache hits
