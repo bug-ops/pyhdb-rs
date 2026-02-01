@@ -1348,9 +1348,10 @@ class Cursor:
         procname: str,
         parameters: Sequence[Any] | None = None,
     ) -> Sequence[Any] | None:
-        """Call a stored database procedure.
+        """Call a stored database procedure with multiple result sets support.
 
-        DB-API 2.0 compliant stored procedure execution.
+        DB-API 2.0 compliant stored procedure execution. Supports stored procedures
+        that return multiple result sets - use nextset() to iterate through them.
 
         Args:
             procname: Procedure name (can include schema: "SCHEMA.PROC")
@@ -1358,7 +1359,7 @@ class Cursor:
 
         Returns:
             Input parameters unchanged (per DB-API 2.0 spec).
-            For output values, use fetchone() after callproc().
+            For output values, use fetchone()/fetchall() after callproc().
 
         Raises:
             ProgrammingError: If procedure name is invalid or empty
@@ -1366,8 +1367,17 @@ class Cursor:
 
         Example::
 
+            # Single result set procedure
             >>> cursor.callproc("GET_USER_INFO", [user_id])
             >>> result = cursor.fetchone()
+
+            # Multiple result sets procedure
+            >>> cursor.callproc("GET_SALES_REPORT", [2024, "EMEA"])
+            >>> sales_data = cursor.fetchall()  # First result set
+            >>> if cursor.nextset():
+            ...     forecast_data = cursor.fetchall()  # Second result set
+            >>> if cursor.nextset():
+            ...     trend_data = cursor.fetchall()  # Third result set
 
         Note:
             SAP HANA does not support OUT/INOUT parameter modification via
@@ -1377,16 +1387,38 @@ class Cursor:
         ...
 
     def nextset(self) -> bool:
-        """Skip to next result set.
+        """Skip to next result set from a stored procedure.
 
-        DB-API 2.0 optional extension.
+        DB-API 2.0 optional extension for multiple result sets. Advances the cursor
+        to the next result set returned by a stored procedure. Any unfetched rows
+        from the current result set are discarded.
 
         Returns:
-            False (multiple result sets not yet supported)
+            True if there is another result set available, False otherwise.
+            Returns False for queries executed via execute() (single result set).
+
+        Example::
+
+            # Procedure returning multiple result sets
+            >>> cursor.callproc("GET_QUARTERLY_REPORT", [2024, "Q1"])
+            >>> sales_data = cursor.fetchall()  # First result set
+            >>> print(f"Sales: {len(sales_data)} rows")
+            >>>
+            >>> if cursor.nextset():
+            ...     forecast_data = cursor.fetchall()  # Second result set
+            ...     print(f"Forecasts: {len(forecast_data)} rows")
+            >>>
+            >>> if cursor.nextset():
+            ...     trend_data = cursor.fetchall()  # Third result set
+            ...     print(f"Trends: {len(trend_data)} rows")
+            >>>
+            >>> assert not cursor.nextset()  # No more result sets
 
         Note:
-            This is a stub implementation. Full multiple result set
-            support is planned for a future release.
+            - Only works with stored procedures called via callproc()
+            - Regular queries via execute() always return single result set
+            - Calling nextset() discards unfetched rows from current result set
+            - Cursor.description reflects the current result set columns
         """
         ...
 
@@ -1424,16 +1456,23 @@ class Cursor:
     def fetch_arrow(self, config: ArrowConfig | None = None) -> RecordBatchReader:
         """Fetch remaining results as Arrow RecordBatchReader.
 
-        Consumes the result set for zero-copy Arrow transfer.
+        Consumes the result set for zero-copy Arrow transfer. After calling this
+        method, the cursor transitions to Idle state - any unfetched rows are
+        consumed by the RecordBatchReader.
 
         Args:
             config: Optional Arrow configuration (batch_size, etc.)
 
         Returns:
-            RecordBatchReader
+            RecordBatchReader for streaming Arrow data
 
         Raises:
             ProgrammingError: If no active result set
+
+        Note:
+            When called on a cursor with multiple result sets (from callproc),
+            this consumes the current result set and transitions to Idle.
+            Use nextset() before fetch_arrow() to navigate to the desired result set.
         """
         ...
 

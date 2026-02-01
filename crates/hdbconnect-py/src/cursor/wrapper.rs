@@ -20,10 +20,17 @@ use crate::types::{
 pub enum CursorInner {
     /// Idle - no active result set.
     Idle,
-    /// Active - has result set.
-    Active {
+    /// Single result set from `execute()`.
+    SingleResultSet {
         result_set: hdbconnect::ResultSet,
         description: Vec<ColumnDescription>,
+    },
+    /// Multiple return values from `callproc()`.
+    MultipleReturnValues {
+        return_values: Vec<hdbconnect::HdbReturnValue>,
+        current_index: usize,
+        current_result_set: Option<hdbconnect::ResultSet>,
+        current_description: Option<Vec<ColumnDescription>>,
     },
 }
 
@@ -53,6 +60,35 @@ impl PyCursor {
             inner: Mutex::new(CursorInner::Idle),
             rowcount: -1,
             arraysize: 1,
+        }
+    }
+
+    /// Activate the first `ResultSet` in the `return_values` vector if available.
+    #[allow(clippy::needless_range_loop)]
+    fn activate_first_resultset(&self) {
+        let mut guard = self.inner.lock();
+        if let CursorInner::MultipleReturnValues {
+            return_values,
+            current_index,
+            current_result_set,
+            current_description,
+        } = &mut *guard
+        {
+            for i in 0..return_values.len() {
+                if matches!(return_values[i], hdbconnect::HdbReturnValue::ResultSet(_)) {
+                    *current_index = i;
+                    let rv = std::mem::replace(
+                        &mut return_values[i],
+                        hdbconnect::HdbReturnValue::Success,
+                    );
+                    if let hdbconnect::HdbReturnValue::ResultSet(rs) = rv {
+                        let desc = build_description(&rs);
+                        *current_result_set = Some(rs);
+                        *current_description = Some(desc);
+                    }
+                    return;
+                }
+            }
         }
     }
 }
@@ -99,6 +135,26 @@ fn build_call_statement(procname: &str, parameters: Option<&Bound<'_, PyAny>>) -
     }
 }
 
+/// Build column descriptions from result set metadata.
+fn build_description(rs: &hdbconnect::ResultSet) -> Vec<ColumnDescription> {
+    rs.metadata()
+        .iter()
+        .map(|f| {
+            let precision = f.precision();
+            let scale = f.scale();
+            ColumnDescription {
+                name: f.columnname().to_string(),
+                type_code: f.type_id() as i16,
+                display_size: None,
+                internal_size: None,
+                precision: if precision > 0 { Some(precision) } else { None },
+                scale: if scale > 0 { Some(scale) } else { None },
+                nullable: f.is_nullable(),
+            }
+        })
+        .collect()
+}
+
 #[pymethods]
 impl PyCursor {
     /// Column descriptions from the last query.
@@ -106,7 +162,11 @@ impl PyCursor {
     fn description<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyList>>> {
         let guard = self.inner.lock();
         match &*guard {
-            CursorInner::Active { description, .. } => {
+            CursorInner::SingleResultSet { description, .. }
+            | CursorInner::MultipleReturnValues {
+                current_description: Some(description),
+                ..
+            } => {
                 let desc_list: Vec<_> = description
                     .iter()
                     .map(|col| {
@@ -123,7 +183,11 @@ impl PyCursor {
                     .collect();
                 Ok(Some(PyList::new(py, desc_list)?))
             }
-            CursorInner::Idle => Ok(None),
+            CursorInner::Idle
+            | CursorInner::MultipleReturnValues {
+                current_description: None,
+                ..
+            } => Ok(None),
         }
     }
 
@@ -149,27 +213,11 @@ impl PyCursor {
                 };
 
                 // Build description from metadata
-                let description: Vec<ColumnDescription> = rs
-                    .metadata()
-                    .iter()
-                    .map(|f| {
-                        let precision = f.precision();
-                        let scale = f.scale();
-                        ColumnDescription {
-                            name: f.columnname().to_string(),
-                            type_code: f.type_id() as i16,
-                            display_size: None,
-                            internal_size: None,
-                            precision: if precision > 0 { Some(precision) } else { None },
-                            scale: if scale > 0 { Some(scale) } else { None },
-                            nullable: f.is_nullable(),
-                        }
-                    })
-                    .collect();
+                let description = build_description(&rs);
 
                 drop(conn_guard);
 
-                *self.inner.lock() = CursorInner::Active {
+                *self.inner.lock() = CursorInner::SingleResultSet {
                     result_set: rs,
                     description,
                 };
@@ -229,7 +277,7 @@ impl PyCursor {
 
     /// Call a stored database procedure.
     ///
-    /// DB-API 2.0 compliant stored procedure execution.
+    /// DB-API 2.0 compliant stored procedure execution with multiple result sets support.
     ///
     /// Args:
     ///     procname: Procedure name (schema.procedure or procedure)
@@ -242,7 +290,13 @@ impl PyCursor {
     ///     ```python
     ///     # Procedure: CREATE PROCEDURE GET_USER(IN user_id INT)
     ///     result = cursor.callproc("GET_USER", [123])
-    ///     row = cursor.fetchone()  # Get output from result set
+    ///     row = cursor.fetchone()  # Get output from first result set
+    ///
+    ///     # For procedures returning multiple result sets:
+    ///     cursor.callproc("MULTI_RESULT_PROC")
+    ///     first_results = cursor.fetchall()
+    ///     if cursor.nextset():
+    ///         second_results = cursor.fetchall()
     ///     ```
     #[pyo3(signature = (procname, parameters=None))]
     fn callproc<'py>(
@@ -252,41 +306,137 @@ impl PyCursor {
         parameters: Option<&Bound<'py, PyAny>>,
     ) -> PyResult<Option<Bound<'py, PyAny>>> {
         validate_procedure_name(procname)?;
-
         let call_sql = build_call_statement(procname, parameters)?;
-        self.execute(&call_sql, parameters)?;
 
-        // DB-API 2.0: return input parameters unchanged
-        Ok(parameters.map(|p| p.clone().into_any().unbind().into_bound(py)))
+        let mut conn_guard = self.connection.lock();
+        match &mut *conn_guard {
+            ConnectionInner::Connected(conn) => {
+                // Execute CALL statement and collect all return values
+                let response = match parameters {
+                    Some(params) => {
+                        let serializable_params = convert_to_serializable(params)?;
+                        let mut stmt = conn.prepare(&call_sql).map_err(PyHdbError::from)?;
+                        stmt.execute(&serializable_params)
+                            .map_err(PyHdbError::from)?
+                    }
+                    None => conn.statement(&call_sql).map_err(PyHdbError::from)?,
+                };
+
+                // Collect all return values from HdbResponse
+                let return_values: Vec<hdbconnect::HdbReturnValue> = response.into_iter().collect();
+                drop(conn_guard);
+
+                // Initialize cursor state with collected return values
+                *self.inner.lock() = CursorInner::MultipleReturnValues {
+                    return_values,
+                    current_index: 0,
+                    current_result_set: None,
+                    current_description: None,
+                };
+
+                // Activate first result set if available
+                self.activate_first_resultset();
+                self.rowcount = -1;
+
+                // DB-API 2.0: return input parameters unchanged
+                Ok(parameters.map(|p| p.clone().into_any().unbind().into_bound(py)))
+            }
+            ConnectionInner::Disconnected => {
+                Err(PyHdbError::operational("connection is closed").into())
+            }
+        }
     }
 
-    /// Skip to next result set.
+    /// Skip to next result set from a stored procedure.
     ///
-    /// DB-API 2.0 optional extension. Currently returns False
-    /// as multiple result sets are not yet supported.
+    /// DB-API 2.0 optional extension for multiple result sets.
     ///
     /// Returns:
-    ///     False (always, multiple result sets not implemented)
-    // PyO3 #[pymethods] cannot be const fn; clippy suggestion not applicable.
-    #[allow(clippy::unused_self, clippy::missing_const_for_fn)]
+    ///     True if there is another result set, False otherwise
+    ///
+    /// Example:
+    ///     ```python
+    ///     cursor.callproc("MULTI_RESULT_PROC")
+    ///     first_results = cursor.fetchall()
+    ///
+    ///     if cursor.nextset():
+    ///         second_results = cursor.fetchall()
+    ///
+    ///     if cursor.nextset():
+    ///         third_results = cursor.fetchall()
+    ///     ```
+    #[allow(clippy::needless_range_loop)]
     fn nextset(&self) -> bool {
-        // MVP: stub implementation - multiple result sets deferred to Phase 4
-        false
+        let mut guard = self.inner.lock();
+
+        match &mut *guard {
+            CursorInner::Idle | CursorInner::SingleResultSet { .. } => false,
+            CursorInner::MultipleReturnValues {
+                return_values,
+                current_index,
+                current_result_set,
+                current_description,
+            } => {
+                // Drop current result set (discards remaining rows)
+                *current_result_set = None;
+                *current_description = None;
+
+                // Scan from current_index + 1 for next ResultSet
+                let start_scan = *current_index + 1;
+                for i in start_scan..return_values.len() {
+                    if matches!(return_values[i], hdbconnect::HdbReturnValue::ResultSet(_)) {
+                        *current_index = i;
+
+                        // Extract the ResultSet - take ownership
+                        let rv = std::mem::replace(
+                            &mut return_values[i],
+                            hdbconnect::HdbReturnValue::Success,
+                        );
+
+                        if let hdbconnect::HdbReturnValue::ResultSet(rs) = rv {
+                            let desc = build_description(&rs);
+                            *current_result_set = Some(rs);
+                            *current_description = Some(desc);
+                            return true;
+                        }
+                    }
+                }
+
+                // No more result sets found - transition to Idle
+                *guard = CursorInner::Idle;
+                false
+            }
+        }
     }
 
     /// Fetch one row from the result set.
+    #[allow(clippy::significant_drop_tightening)]
     fn fetchone<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyTuple>>> {
         let mut guard = self.inner.lock();
-        match &mut *guard {
-            CursorInner::Active { result_set, .. } => match result_set.next() {
+        let result_set = match &mut *guard {
+            CursorInner::SingleResultSet { result_set, .. }
+            | CursorInner::MultipleReturnValues {
+                current_result_set: Some(result_set),
+                ..
+            } => Some(result_set),
+            CursorInner::Idle
+            | CursorInner::MultipleReturnValues {
+                current_result_set: None,
+                ..
+            } => None,
+        };
+
+        if let Some(rs) = result_set {
+            match rs.next() {
                 Some(Ok(row)) => {
                     let values = row_to_python(py, &row)?;
                     Ok(Some(PyTuple::new(py, values)?))
                 }
                 Some(Err(e)) => Err(PyHdbError::from(e).into()),
                 None => Ok(None),
-            },
-            CursorInner::Idle => Ok(None),
+            }
+        } else {
+            Ok(None)
         }
     }
 
@@ -298,9 +448,18 @@ impl PyCursor {
         let mut rows = Vec::with_capacity(size);
 
         let mut guard = self.inner.lock();
-        if let CursorInner::Active { result_set, .. } = &mut *guard {
+        let result_set = match &mut *guard {
+            CursorInner::SingleResultSet { result_set, .. }
+            | CursorInner::MultipleReturnValues {
+                current_result_set: Some(result_set),
+                ..
+            } => Some(result_set),
+            _ => None,
+        };
+
+        if let Some(rs) = result_set {
             for _ in 0..size {
-                match result_set.next() {
+                match rs.next() {
                     Some(Ok(row)) => {
                         let values = row_to_python(py, &row)?;
                         rows.push(PyTuple::new(py, values)?);
@@ -320,8 +479,17 @@ impl PyCursor {
         let mut rows = Vec::new();
 
         let mut guard = self.inner.lock();
-        if let CursorInner::Active { result_set, .. } = &mut *guard {
-            for row_result in result_set.by_ref() {
+        let result_set = match &mut *guard {
+            CursorInner::SingleResultSet { result_set, .. }
+            | CursorInner::MultipleReturnValues {
+                current_result_set: Some(result_set),
+                ..
+            } => Some(result_set),
+            _ => None,
+        };
+
+        if let Some(rs) = result_set {
+            for row_result in rs.by_ref() {
                 match row_result {
                     Ok(row) => {
                         let values = row_to_python(py, &row)?;
@@ -375,8 +543,16 @@ impl PyCursor {
         let result_set = {
             let mut guard = self.inner.lock();
             match std::mem::replace(&mut *guard, CursorInner::Idle) {
-                CursorInner::Active { result_set, .. } => result_set,
-                CursorInner::Idle => {
+                CursorInner::SingleResultSet { result_set, .. }
+                | CursorInner::MultipleReturnValues {
+                    current_result_set: Some(result_set),
+                    ..
+                } => result_set,
+                CursorInner::Idle
+                | CursorInner::MultipleReturnValues {
+                    current_result_set: None,
+                    ..
+                } => {
                     return Err(PyHdbError::programming("no active result set").into());
                 }
             }

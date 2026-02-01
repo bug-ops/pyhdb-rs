@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Cursor.nextset()**: Full multiple result sets support for stored procedures (#58)
+  - `nextset()` returns `True` when next result set available, `False` otherwise
+  - Works with `callproc()` for procedures returning multiple result sets
+  - Supports forward-only navigation through result sets
+  - Type stubs updated with comprehensive documentation and examples
+
 - **hdbconnect-mcp Phase 2**: Production-ready MCP server with HTTP transport, security hardening, and observability
   - **Configuration Module** (`src/config/`): Layered configuration with precedence (env > file > CLI > defaults)
     - TOML config file support with auto-discovery (`./hdbconnect-mcp.toml`, `~/.config/`, `/etc/`)

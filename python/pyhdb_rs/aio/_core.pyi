@@ -376,11 +376,14 @@ class AsyncCursor:
         """Skip to next result set.
 
         Returns:
-            False (stub implementation)
+            False (always - stub implementation for async cursor)
 
         Note:
-            This is a stub implementation. Full multiple result set
-            support is planned for a future release.
+            This is a stub implementation. Async cursor does not support
+            multiple result sets in the current release. Use the sync Cursor
+            for procedures returning multiple result sets.
+
+            Full async multiple result set support is planned for a future release.
         """
         ...
 
