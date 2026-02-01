@@ -1,9 +1,10 @@
 use std::net::IpAddr;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::path::PathBuf;
+use std::str::FromStr;
 
 use clap::Parser;
-use hdbconnect_mcp::config::{self, TransportMode};
+use hdbconnect_mcp::config::{self, AllowedOperations, TransportMode};
 use hdbconnect_mcp::observability::{init_observability, shutdown_observability};
 use hdbconnect_mcp::security::SchemaFilter;
 use hdbconnect_mcp::transport::run_transport;
@@ -14,6 +15,7 @@ use url::Url;
 #[command(name = "hdbconnect-mcp")]
 #[command(about = "MCP server for SAP HANA database", long_about = None)]
 #[command(version)]
+#[allow(clippy::struct_excessive_bools)]
 struct Args {
     /// HANA connection URL (hdbsql://user:password@host:port)
     #[arg(short, long, env = "HANA_URL")]
@@ -66,6 +68,27 @@ struct Args {
     /// Enable JSON logging output
     #[arg(long)]
     json_logs: bool,
+
+    // DML configuration
+    /// Enable DML operations (INSERT, UPDATE, DELETE)
+    #[arg(long)]
+    allow_dml: bool,
+
+    /// Skip DML confirmation prompt
+    #[arg(long)]
+    no_dml_confirm: bool,
+
+    /// Maximum affected rows for DML operations
+    #[arg(long, default_value = "1000")]
+    dml_max_rows: u32,
+
+    /// Allow UPDATE/DELETE without WHERE clause
+    #[arg(long)]
+    no_where_clause: bool,
+
+    /// Allowed DML operations (comma-separated: insert,update,delete)
+    #[arg(long)]
+    dml_ops: Option<String>,
 }
 
 #[tokio::main]
@@ -118,6 +141,26 @@ async fn main() -> anyhow::Result<()> {
         builder = builder.log_level("debug".to_string());
     }
 
+    // DML configuration from CLI
+    if args.allow_dml {
+        builder = builder.allow_dml(true);
+    }
+
+    if args.no_dml_confirm {
+        builder = builder.require_dml_confirmation(false);
+    }
+
+    builder = builder.max_affected_rows(NonZeroU32::new(args.dml_max_rows));
+
+    if args.no_where_clause {
+        builder = builder.require_where_clause(false);
+    }
+
+    if let Some(ref ops_str) = args.dml_ops {
+        let ops = AllowedOperations::from_str(ops_str).unwrap_or_default();
+        builder = builder.allowed_operations(ops);
+    }
+
     // Build configuration
     let config = builder.build()?;
 
@@ -136,6 +179,18 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Read-only mode: {}", config.read_only);
     tracing::info!("Row limit: {:?}", config.row_limit);
     tracing::info!("Query timeout: {:?}", config.query_timeout);
+    tracing::info!("DML enabled: {}", config.dml.allow_dml);
+    if config.dml.allow_dml {
+        tracing::info!(
+            "DML confirmation required: {}",
+            config.dml.require_confirmation
+        );
+        tracing::info!("DML max affected rows: {:?}", config.dml.max_affected_rows);
+        tracing::info!(
+            "DML WHERE clause required: {}",
+            config.dml.require_where_clause
+        );
+    }
 
     // Setup shutdown signal
     let shutdown = async {

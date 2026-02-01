@@ -3,10 +3,12 @@
 //! Supports configuration loading with precedence: env > file > CLI > defaults
 
 mod builder;
+mod dml;
 mod env;
 mod file;
 
 pub use builder::{Config, ConfigBuilder, TelemetryConfig, TransportConfig, TransportMode};
+pub use dml::{AllowedOperations, DmlConfig, DmlOperation};
 
 use crate::Result;
 

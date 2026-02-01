@@ -1,6 +1,7 @@
 //! SQL validation utilities
 
 use crate::Error;
+use crate::config::DmlOperation;
 
 /// Keywords that indicate write operations
 const WRITE_KEYWORDS: &[&str] = &[
@@ -10,6 +11,14 @@ const WRITE_KEYWORDS: &[&str] = &[
 
 /// Maximum length for SQL identifiers (HANA limit is 127)
 const MAX_IDENTIFIER_LENGTH: usize = 127;
+
+/// Dangerous keywords not allowed in DML statements.
+///
+/// NOTE: Pattern matching in `validate_dml_sql` uses runtime string formatting.
+/// For MVP, this is acceptable given the small keyword set (6 items).
+/// Post-MVP optimization: consider `lazy_static` or `once_cell` for pre-computed
+/// regex patterns if profiling shows this as a bottleneck in high-throughput scenarios.
+const DANGEROUS_KEYWORDS: &[&str] = &["DROP", "TRUNCATE", "ALTER", "CREATE", "GRANT", "REVOKE"];
 
 /// Validate SQL identifier (schema/table name) to prevent injection
 pub fn is_valid_identifier(name: &str) -> bool {
@@ -69,8 +78,79 @@ pub fn validate_read_only_sql(sql: &str) -> Result<(), Error> {
     Ok(())
 }
 
+/// Validate that UPDATE/DELETE statement contains WHERE clause
+pub fn validate_where_clause(sql: &str, operation: DmlOperation) -> Result<(), Error> {
+    let cleaned = strip_sql_comments(sql);
+    let upper = cleaned.to_uppercase();
+
+    // Check for WHERE keyword after UPDATE/DELETE
+    if !upper.contains(" WHERE ") {
+        return Err(Error::DmlWhereClauseRequired(operation));
+    }
+
+    Ok(())
+}
+
+/// Validate DML statement for security issues
+pub fn validate_dml_sql(sql: &str) -> Result<DmlOperation, Error> {
+    let cleaned = strip_sql_comments(sql);
+    let trimmed = cleaned.trim();
+
+    // Empty check
+    if trimmed.is_empty() {
+        return Err(Error::Config("Empty SQL statement".into()));
+    }
+
+    // Parse operation
+    let operation = DmlOperation::from_sql(trimmed).ok_or(Error::DmlNotAStatement)?;
+
+    // Check for multiple statements (;)
+    let semicolon_count = trimmed.matches(';').count();
+    if semicolon_count > 1 || (semicolon_count == 1 && !trimmed.ends_with(';')) {
+        return Err(Error::Config("Multiple statements not allowed".into()));
+    }
+
+    // Check for dangerous patterns
+    let upper = trimmed.to_uppercase();
+    for keyword in DANGEROUS_KEYWORDS {
+        // Check for keyword as a separate word with various delimiters
+        let patterns = [
+            format!(" {keyword} "),
+            format!(" {keyword}("),
+            format!("\t{keyword} "),
+            format!("\t{keyword}("),
+            format!("\n{keyword} "),
+            format!("\n{keyword}("),
+            format!("({keyword} "),
+            format!("({keyword}("),
+        ];
+
+        for pattern in &patterns {
+            if upper.contains(pattern) {
+                return Err(Error::Config(format!(
+                    "Dangerous keyword detected: {keyword}"
+                )));
+            }
+        }
+
+        // Check if starts with dangerous keyword
+        if upper.starts_with(keyword)
+            && upper
+                .chars()
+                .nth(keyword.len())
+                .is_some_and(|c| c.is_whitespace() || c == '(')
+        {
+            return Err(Error::Config(format!(
+                "Dangerous keyword detected: {keyword}"
+            )));
+        }
+    }
+
+    Ok(operation)
+}
+
 /// Strip SQL comments (both -- and /* */ style)
-fn strip_sql_comments(sql: &str) -> String {
+pub fn strip_sql_comments(sql: &str) -> String {
     let mut result = String::with_capacity(sql.len());
     let mut chars = sql.chars().peekable();
     let mut in_single_quote = false;
@@ -396,5 +476,129 @@ mod tests {
     fn test_empty_sql_allowed() {
         assert!(validate_read_only_sql("").is_ok());
         assert!(validate_read_only_sql("   ").is_ok());
+    }
+
+    // DML validation tests
+    #[test]
+    fn test_validate_dml_sql_insert() {
+        let result = validate_dml_sql("INSERT INTO users (name) VALUES ('test')");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), DmlOperation::Insert);
+    }
+
+    #[test]
+    fn test_validate_dml_sql_update() {
+        let result = validate_dml_sql("UPDATE users SET name = 'new' WHERE id = 1");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), DmlOperation::Update);
+    }
+
+    #[test]
+    fn test_validate_dml_sql_delete() {
+        let result = validate_dml_sql("DELETE FROM users WHERE id = 1");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), DmlOperation::Delete);
+    }
+
+    #[test]
+    fn test_validate_dml_sql_empty() {
+        let result = validate_dml_sql("");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().is_config());
+    }
+
+    #[test]
+    fn test_validate_dml_sql_select_rejected() {
+        let result = validate_dml_sql("SELECT * FROM users");
+        assert!(result.is_err());
+        matches!(result.unwrap_err(), Error::DmlNotAStatement);
+    }
+
+    #[test]
+    fn test_validate_dml_sql_drop_rejected() {
+        let result = validate_dml_sql("DROP TABLE users");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_dml_sql_truncate_rejected() {
+        let result = validate_dml_sql("TRUNCATE TABLE users");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_dml_sql_multiple_statements_rejected() {
+        let result = validate_dml_sql("INSERT INTO t VALUES (1); DELETE FROM t");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().is_config());
+    }
+
+    #[test]
+    fn test_validate_dml_sql_dangerous_in_subquery() {
+        let result = validate_dml_sql("INSERT INTO t SELECT * FROM (DROP TABLE x)");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_dml_sql_single_trailing_semicolon_allowed() {
+        let result = validate_dml_sql("INSERT INTO users VALUES (1);");
+        assert!(result.is_ok());
+    }
+
+    // WHERE clause validation tests
+    #[test]
+    fn test_validate_where_clause_present() {
+        let result = validate_where_clause(
+            "UPDATE users SET name = 'x' WHERE id = 1",
+            DmlOperation::Update,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_where_clause_missing_update() {
+        let result = validate_where_clause("UPDATE users SET name = 'x'", DmlOperation::Update);
+        assert!(result.is_err());
+        matches!(result.unwrap_err(), Error::DmlWhereClauseRequired(_));
+    }
+
+    #[test]
+    fn test_validate_where_clause_missing_delete() {
+        let result = validate_where_clause("DELETE FROM users", DmlOperation::Delete);
+        assert!(result.is_err());
+        matches!(result.unwrap_err(), Error::DmlWhereClauseRequired(_));
+    }
+
+    #[test]
+    fn test_validate_where_clause_with_comment() {
+        let result = validate_where_clause(
+            "-- comment\nDELETE FROM users WHERE id = 1",
+            DmlOperation::Delete,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_where_clause_case_insensitive() {
+        let result = validate_where_clause("delete from users where id = 1", DmlOperation::Delete);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_strip_sql_comments_line_comment() {
+        let sql = "SELECT * -- comment\nFROM users";
+        let cleaned = strip_sql_comments(sql);
+        assert!(!cleaned.contains("comment"));
+        assert!(cleaned.contains("SELECT"));
+        assert!(cleaned.contains("FROM"));
+    }
+
+    #[test]
+    fn test_strip_sql_comments_block_comment() {
+        let sql = "SELECT /* comment */ * FROM users";
+        let cleaned = strip_sql_comments(sql);
+        assert!(!cleaned.contains("comment"));
+        assert!(cleaned.contains("SELECT"));
+        assert!(cleaned.contains("*"));
     }
 }

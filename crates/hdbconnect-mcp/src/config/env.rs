@@ -3,11 +3,13 @@
 use std::env;
 use std::net::IpAddr;
 use std::num::{NonZeroU32, NonZeroUsize};
+use std::str::FromStr;
 use std::time::Duration;
 
 use url::Url;
 
 use super::builder::{ConfigBuilder, TransportMode};
+use super::dml::AllowedOperations;
 use crate::Result;
 use crate::security::SchemaFilter;
 
@@ -29,6 +31,12 @@ mod vars {
     pub const OTEL_SERVICE_NAME: &str = "OTEL_SERVICE_NAME";
     pub const RUST_LOG: &str = "RUST_LOG";
     pub const MCP_JSON_LOGS: &str = "MCP_JSON_LOGS";
+    // DML configuration
+    pub const HANA_ALLOW_DML: &str = "HANA_ALLOW_DML";
+    pub const HANA_DML_CONFIRM: &str = "HANA_DML_CONFIRM";
+    pub const HANA_DML_MAX_ROWS: &str = "HANA_DML_MAX_ROWS";
+    pub const HANA_DML_REQUIRE_WHERE: &str = "HANA_DML_REQUIRE_WHERE";
+    pub const HANA_DML_OPERATIONS: &str = "HANA_DML_OPERATIONS";
 }
 
 /// Load configuration from environment variables
@@ -121,6 +129,31 @@ pub fn load_from_env(mut builder: ConfigBuilder) -> Result<ConfigBuilder> {
 
     if let Ok(val) = env::var(vars::MCP_JSON_LOGS) {
         builder = builder.json_logs(parse_bool(&val));
+    }
+
+    // DML configuration
+    if let Ok(val) = env::var(vars::HANA_ALLOW_DML) {
+        builder = builder.allow_dml(parse_bool(&val));
+    }
+
+    if let Ok(val) = env::var(vars::HANA_DML_CONFIRM) {
+        builder = builder.require_dml_confirmation(parse_bool(&val));
+    }
+
+    if let Ok(limit_str) = env::var(vars::HANA_DML_MAX_ROWS)
+        && let Ok(limit) = limit_str.parse::<u32>()
+    {
+        builder = builder.max_affected_rows(NonZeroU32::new(limit));
+    }
+
+    if let Ok(val) = env::var(vars::HANA_DML_REQUIRE_WHERE) {
+        builder = builder.require_where_clause(parse_bool(&val));
+    }
+
+    if let Ok(val) = env::var(vars::HANA_DML_OPERATIONS) {
+        // AllowedOperations::from_str is infallible
+        let ops = AllowedOperations::from_str(&val).unwrap_or_default();
+        builder = builder.allowed_operations(ops);
     }
 
     Ok(builder)
@@ -451,6 +484,84 @@ mod tests {
                 let builder = load_from_env(ConfigBuilder::new()).unwrap();
                 let result = builder.build();
                 assert!(result.is_err());
+            },
+        );
+    }
+
+    // DML configuration tests
+    #[test]
+    fn test_load_dml_allow() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("HANA_ALLOW_DML", "true"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert!(config.dml.allow_dml);
+            },
+        );
+    }
+
+    #[test]
+    fn test_load_dml_confirm() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("HANA_DML_CONFIRM", "false"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert!(!config.dml.require_confirmation);
+            },
+        );
+    }
+
+    #[test]
+    fn test_load_dml_max_rows() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("HANA_DML_MAX_ROWS", "500"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert_eq!(config.dml.max_affected_rows, NonZeroU32::new(500));
+            },
+        );
+    }
+
+    #[test]
+    fn test_load_dml_require_where() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("HANA_DML_REQUIRE_WHERE", "false"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert!(!config.dml.require_where_clause);
+            },
+        );
+    }
+
+    #[test]
+    fn test_load_dml_operations() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("HANA_DML_OPERATIONS", "insert,update"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert!(config.dml.allowed_operations.insert);
+                assert!(config.dml.allowed_operations.update);
+                assert!(!config.dml.allowed_operations.delete);
             },
         );
     }
