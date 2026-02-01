@@ -1,0 +1,32 @@
+[Unit]
+Description=MCP Server for SAP HANA
+Documentation=https://github.com/bug-ops/pyhdb-rs
+After=network.target
+
+[Service]
+Type=simple
+User=mcp
+Group=mcp
+
+# Environment file for secrets
+EnvironmentFile=-/etc/hdbconnect-mcp/env
+
+ExecStart=/usr/local/bin/hdbconnect-mcp
+Restart=on-failure
+RestartSec=5s
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ReadOnlyPaths=/
+ReadWritePaths=/var/log
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

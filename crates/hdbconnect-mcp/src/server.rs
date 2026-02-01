@@ -10,6 +10,7 @@ use rmcp::model::{ServerCapabilities, ServerInfo};
 use rmcp::service::{RequestContext, RoleServer};
 use rmcp::{ErrorData, ServerHandler as RmcpServerHandler, tool, tool_handler, tool_router};
 
+use crate::Config;
 use crate::constants::{
     DESCRIBE_TABLE_CURRENT_SCHEMA, DESCRIBE_TABLE_TEMPLATE, ELICIT_SCHEMA_DESCRIBE_TABLE,
     ELICIT_SCHEMA_LIST_TABLES, HEALTH_CHECK_QUERY, LIST_TABLES_CURRENT_SCHEMA,
@@ -17,17 +18,29 @@ use crate::constants::{
 };
 use crate::helpers::{get_connection, hdb_value_to_json};
 use crate::pool::Pool;
+use crate::security::QueryGuard;
 use crate::types::{
     ColumnInfo, DescribeTableParams, ExecuteSqlParams, ListTablesParams, PingResult, QueryResult,
     SchemaName, TableInfo, TableSchema, ToolResult,
 };
-use crate::validation::validate_read_only_sql;
-use crate::{Config, Error};
+use crate::validation::{validate_identifier, validate_read_only_sql};
 
 pub struct ServerHandler {
     pool: Arc<Pool>,
     config: Arc<Config>,
+    query_guard: QueryGuard,
     tool_router: ToolRouter<Self>,
+}
+
+impl Clone for ServerHandler {
+    fn clone(&self) -> Self {
+        Self {
+            pool: Arc::clone(&self.pool),
+            config: Arc::clone(&self.config),
+            query_guard: self.query_guard.clone(),
+            tool_router: Self::tool_router(),
+        }
+    }
 }
 
 impl fmt::Debug for ServerHandler {
@@ -35,6 +48,7 @@ impl fmt::Debug for ServerHandler {
         f.debug_struct("ServerHandler")
             .field("pool", &"<Pool>")
             .field("config", &self.config)
+            .field("query_guard", &self.query_guard)
             .field("tool_router", &"<ToolRouter>")
             .finish()
     }
@@ -42,9 +56,16 @@ impl fmt::Debug for ServerHandler {
 
 impl ServerHandler {
     pub fn new(pool: Pool, config: Config) -> Self {
+        let query_guard = QueryGuard::new(
+            config.query_timeout,
+            config.schema_filter.clone(),
+            config.row_limit,
+        );
+
         Self {
             pool: Arc::new(pool),
             config: Arc::new(config),
+            query_guard,
             tool_router: Self::tool_router(),
         }
     }
@@ -57,14 +78,18 @@ impl ServerHandler {
         let start = std::time::Instant::now();
         let conn = get_connection(&self.pool).await?;
 
-        conn.query(HEALTH_CHECK_QUERY)
-            .await
-            .map_err(|e| ErrorData::from(Error::Connection(e)))?;
+        let query_result = self
+            .query_guard
+            .execute(conn.query(HEALTH_CHECK_QUERY))
+            .await;
 
-        Ok(Json(PingResult {
-            status: STATUS_OK.to_string(),
-            latency_ms: start.elapsed().as_millis() as u64,
-        }))
+        match query_result {
+            Ok(_) => Ok(Json(PingResult {
+                status: STATUS_OK.to_string(),
+                latency_ms: start.elapsed().as_millis() as u64,
+            })),
+            Err(e) => Err(ErrorData::from(e)),
+        }
     }
 
     #[tool(description = "List all tables in the specified schema")]
@@ -84,6 +109,14 @@ impl ServerHandler {
             params.schema = Some(selection);
         }
 
+        // Validate schema access and identifier
+        if let Some(ref schema) = params.schema {
+            validate_identifier(&schema.name, "schema name").map_err(ErrorData::from)?;
+            self.query_guard
+                .validate_schema(&schema.name)
+                .map_err(ErrorData::from)?;
+        }
+
         let conn = get_connection(&self.pool).await?;
 
         let query = params.schema.as_ref().map_or_else(
@@ -91,15 +124,17 @@ impl ServerHandler {
             |schema_name| LIST_TABLES_TEMPLATE.replace("{SCHEMA}", &schema_name.name),
         );
 
-        let result_set = conn
-            .query(&query)
+        let result_set = self
+            .query_guard
+            .execute(conn.query(&query))
             .await
-            .map_err(|e| ErrorData::from(Error::Connection(e)))?;
+            .map_err(ErrorData::from)?;
 
-        let rows = result_set
-            .into_rows()
+        let rows = self
+            .query_guard
+            .execute(result_set.into_rows())
             .await
-            .map_err(|e| ErrorData::from(Error::Connection(e)))?;
+            .map_err(ErrorData::from)?;
 
         let tables: Vec<TableInfo> = rows
             .into_iter()
@@ -114,6 +149,11 @@ impl ServerHandler {
             })
             .collect();
 
+        tracing::debug!(
+            tool = "list_tables",
+            count = tables.len(),
+            "Query completed"
+        );
         Ok(Json(tables))
     }
 
@@ -123,6 +163,9 @@ impl ServerHandler {
         context: RequestContext<RoleServer>,
         Parameters(mut params): Parameters<DescribeTableParams>,
     ) -> ToolResult<TableSchema> {
+        // Validate table name identifier
+        validate_identifier(&params.table, "table name").map_err(ErrorData::from)?;
+
         // If schema not provided and client supports elicitation, ask user
         if params.schema.is_none()
             && context.peer.supports_elicitation()
@@ -132,6 +175,14 @@ impl ServerHandler {
                 .await
         {
             params.schema = Some(selection);
+        }
+
+        // Validate schema access and identifier
+        if let Some(ref schema) = params.schema {
+            validate_identifier(&schema.name, "schema name").map_err(ErrorData::from)?;
+            self.query_guard
+                .validate_schema(&schema.name)
+                .map_err(ErrorData::from)?;
         }
 
         let conn = get_connection(&self.pool).await?;
@@ -145,15 +196,17 @@ impl ServerHandler {
             },
         );
 
-        let result_set = conn
-            .query(&query)
+        let result_set = self
+            .query_guard
+            .execute(conn.query(&query))
             .await
-            .map_err(|e| ErrorData::from(Error::Connection(e)))?;
+            .map_err(ErrorData::from)?;
 
-        let rows = result_set
-            .into_rows()
+        let rows = self
+            .query_guard
+            .execute(result_set.into_rows())
             .await
-            .map_err(|e| ErrorData::from(Error::Connection(e)))?;
+            .map_err(ErrorData::from)?;
 
         let columns: Vec<ColumnInfo> = rows
             .into_iter()
@@ -175,6 +228,13 @@ impl ServerHandler {
             })
             .collect();
 
+        tracing::debug!(
+            tool = "describe_table",
+            table = %params.table,
+            columns = columns.len(),
+            "Query completed"
+        );
+
         Ok(Json(TableSchema {
             table_name: params.table.clone(),
             columns,
@@ -192,20 +252,22 @@ impl ServerHandler {
 
         let row_limit = params
             .limit
-            .or_else(|| self.config.row_limit().map(std::num::NonZeroU32::get));
+            .or_else(|| self.query_guard.row_limit().map(std::num::NonZeroU32::get));
 
         let conn = get_connection(&self.pool).await?;
 
-        let result_set = conn
-            .query(&params.sql)
+        let result_set = self
+            .query_guard
+            .execute(conn.query(&params.sql))
             .await
-            .map_err(|e| ErrorData::from(Error::Connection(e)))?;
+            .map_err(ErrorData::from)?;
 
         let metadata = result_set.metadata().clone();
-        let all_rows = result_set
-            .into_rows()
+        let all_rows = self
+            .query_guard
+            .execute(result_set.into_rows())
             .await
-            .map_err(|e| ErrorData::from(Error::Connection(e)))?;
+            .map_err(ErrorData::from)?;
 
         let columns: Vec<String> = metadata
             .iter()
@@ -228,6 +290,13 @@ impl ServerHandler {
             rows.push(row_data);
             count += 1;
         }
+
+        tracing::debug!(
+            tool = "execute_sql",
+            row_count = count,
+            columns = columns.len(),
+            "Query completed"
+        );
 
         Ok(Json(QueryResult {
             columns,
