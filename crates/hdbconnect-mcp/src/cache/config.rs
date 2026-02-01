@@ -30,7 +30,14 @@ impl FromStr for CacheBackend {
 pub struct CacheTtlConfig {
     /// Default TTL for unspecified cache entries
     pub default: Duration,
-    /// TTL for schema metadata
+    /// TTL for schema metadata (1 hour default).
+    ///
+    /// Schema changes (ALTER TABLE, DROP COLUMN, etc.) may not be reflected
+    /// until TTL expires. This trade-off is acceptable for most deployments
+    /// where DDL changes are infrequent.
+    ///
+    /// For environments with frequent schema changes, reduce this value or
+    /// disable the cache feature.
     pub schema: Duration,
     /// TTL for query results
     pub query: Duration,
@@ -46,7 +53,24 @@ impl Default for CacheTtlConfig {
     }
 }
 
-/// Cache configuration
+/// Cache configuration.
+///
+/// # Deployment Considerations
+///
+/// The cache is designed for **single-user MCP deployments** where all queries
+/// run under the same database user or service account. Cache keys do not
+/// include user context.
+///
+/// **Multi-User Limitation**: In multi-tenant deployments with per-user database
+/// permissions, cached results from one user may be served to another user,
+/// potentially bypassing row-level security. For such environments, either:
+/// - Disable the cache feature
+/// - Implement user-scoped cache keys at the application layer
+/// - Use only for metadata caching (table lists, schemas) which is typically
+///   not user-sensitive
+///
+/// For typical single-user MCP scenarios (personal AI assistant, service account),
+/// the cache is safe and provides significant performance benefits.
 #[derive(Debug, Clone, Copy)]
 pub struct CacheConfig {
     /// Whether caching is enabled

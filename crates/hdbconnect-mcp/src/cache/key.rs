@@ -89,17 +89,22 @@ impl CacheKey {
         }
     }
 
-    /// Create key for query result cache
+    /// Create key for query result cache.
+    ///
+    /// Uses SQL hash + length as discriminator to reduce collision probability.
+    /// The 64-bit hash combined with SQL length provides sufficient uniqueness
+    /// for typical workloads while keeping key size small.
     #[must_use]
     pub fn query_result(sql: &str, limit: Option<u32>) -> Self {
         let mut hasher = DefaultHasher::new();
         sql.hash(&mut hasher);
         let hash = hasher.finish();
+        let sql_len = sql.len();
 
         Self {
             namespace: CacheNamespace::QueryResult,
             schema: None,
-            identifier: format!("{hash:016x}"),
+            identifier: format!("{hash:016x}:{sql_len}"),
             variant: limit.map(|l| l.to_string()),
         }
     }
@@ -204,16 +209,37 @@ mod tests {
 
     #[test]
     fn test_query_result_key() {
-        let key = CacheKey::query_result("SELECT * FROM users", Some(100));
-        assert!(key.to_key_string().starts_with("query:"));
-        assert!(key.to_key_string().ends_with(":100"));
+        let sql = "SELECT * FROM users";
+        let key = CacheKey::query_result(sql, Some(100));
+        let key_str = key.to_key_string();
+
+        // Format: query:{hash}:{sql_len}:{limit}
+        assert!(key_str.starts_with("query:"));
+        assert!(key_str.ends_with(":100"));
+
+        // Verify SQL length is included
+        let sql_len = sql.len();
+        assert!(
+            key_str.contains(&format!(":{sql_len}:")),
+            "Expected key to contain :{sql_len}:, got: {key_str}"
+        );
     }
 
     #[test]
     fn test_query_result_key_no_limit() {
-        let key = CacheKey::query_result("SELECT * FROM users", None);
-        assert!(key.to_key_string().starts_with("query:"));
-        assert!(!key.to_key_string().ends_with(":"));
+        let sql = "SELECT * FROM users";
+        let key = CacheKey::query_result(sql, None);
+        let key_str = key.to_key_string();
+
+        // Format: query:{hash}:{sql_len}
+        assert!(key_str.starts_with("query:"));
+
+        // SQL length should be at end (no limit variant)
+        let sql_len = sql.len();
+        assert!(
+            key_str.ends_with(&format!(":{sql_len}")),
+            "Expected key to end with :{sql_len}, got: {key_str}"
+        );
     }
 
     #[test]
@@ -228,6 +254,21 @@ mod tests {
         let key1 = CacheKey::query_result("SELECT * FROM users", None);
         let key2 = CacheKey::query_result("SELECT * FROM orders", None);
         assert_ne!(key1.to_key_string(), key2.to_key_string());
+    }
+
+    #[test]
+    fn test_query_result_same_hash_different_length() {
+        // Even if two strings happened to produce the same hash,
+        // different lengths would create different keys
+        let key1 = CacheKey::query_result("abc", None);
+        let key2 = CacheKey::query_result("abcdef", None);
+
+        // Keys differ due to SQL length being part of identifier
+        assert_ne!(key1.to_key_string(), key2.to_key_string());
+
+        // Verify both contain their respective lengths
+        assert!(key1.to_key_string().ends_with(":3"));
+        assert!(key2.to_key_string().ends_with(":6"));
     }
 
     #[test]
