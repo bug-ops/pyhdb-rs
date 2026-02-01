@@ -10,6 +10,8 @@ use url::Url;
 use super::dml::{AllowedOperations, DmlConfig};
 use super::procedure::ProcedureConfig;
 use crate::Error;
+#[cfg(feature = "cache")]
+use crate::cache::{CacheBackend, CacheConfig, CacheTtlConfig};
 use crate::security::SchemaFilter;
 
 /// Server configuration
@@ -25,6 +27,8 @@ pub struct Config {
     pub telemetry: TelemetryConfig,
     pub dml: DmlConfig,
     pub procedure: ProcedureConfig,
+    #[cfg(feature = "cache")]
+    pub cache: CacheConfig,
 }
 
 impl Config {
@@ -61,6 +65,12 @@ impl Config {
     #[must_use]
     pub const fn procedure(&self) -> &ProcedureConfig {
         &self.procedure
+    }
+
+    #[cfg(feature = "cache")]
+    #[must_use]
+    pub const fn cache(&self) -> &CacheConfig {
+        &self.cache
     }
 }
 
@@ -123,10 +133,11 @@ pub struct ConfigBuilder {
     telemetry: TelemetryConfig,
     dml: DmlConfig,
     procedure: ProcedureConfig,
+    #[cfg(feature = "cache")]
+    cache: CacheConfig,
 }
 
 impl ConfigBuilder {
-    // Cannot use NonZeroUsize::new() in const context without unwrap, so we use MIN
     const DEFAULT_POOL_SIZE: NonZeroUsize = NonZeroUsize::MIN.saturating_add(3); // 4
 
     #[must_use]
@@ -151,6 +162,8 @@ impl ConfigBuilder {
             },
             dml: DmlConfig::new(),
             procedure: ProcedureConfig::new(),
+            #[cfg(feature = "cache")]
+            cache: CacheConfig::new(),
         }
     }
 
@@ -299,6 +312,72 @@ impl ConfigBuilder {
         self
     }
 
+    // Cache configuration methods (only available with cache feature)
+
+    /// Enable caching (disabled by default)
+    #[cfg(feature = "cache")]
+    #[must_use]
+    pub const fn cache_enabled(mut self, enabled: bool) -> Self {
+        self.cache.enabled = enabled;
+        self
+    }
+
+    /// Set cache backend type
+    #[cfg(feature = "cache")]
+    #[must_use]
+    pub const fn cache_backend(mut self, backend: CacheBackend) -> Self {
+        self.cache.backend = backend;
+        self
+    }
+
+    /// Set cache TTL configuration
+    #[cfg(feature = "cache")]
+    #[must_use]
+    pub const fn cache_ttl(mut self, ttl: CacheTtlConfig) -> Self {
+        self.cache.ttl = ttl;
+        self
+    }
+
+    /// Set default cache TTL
+    #[cfg(feature = "cache")]
+    #[must_use]
+    pub const fn cache_default_ttl(mut self, ttl: Duration) -> Self {
+        self.cache.ttl.default = ttl;
+        self
+    }
+
+    /// Set schema metadata cache TTL
+    #[cfg(feature = "cache")]
+    #[must_use]
+    pub const fn cache_schema_ttl(mut self, ttl: Duration) -> Self {
+        self.cache.ttl.schema = ttl;
+        self
+    }
+
+    /// Set query results cache TTL
+    #[cfg(feature = "cache")]
+    #[must_use]
+    pub const fn cache_query_ttl(mut self, ttl: Duration) -> Self {
+        self.cache.ttl.query = ttl;
+        self
+    }
+
+    /// Set maximum cache entries
+    #[cfg(feature = "cache")]
+    #[must_use]
+    pub const fn cache_max_entries(mut self, max: Option<usize>) -> Self {
+        self.cache.max_entries = max;
+        self
+    }
+
+    /// Set maximum value size for cache entries (default: 1MB)
+    #[cfg(feature = "cache")]
+    #[must_use]
+    pub const fn cache_max_value_size(mut self, max: usize) -> Self {
+        self.cache.max_value_size = max;
+        self
+    }
+
     /// Build the configuration
     pub fn build(self) -> crate::Result<Config> {
         let connection_url = self
@@ -353,6 +432,8 @@ impl ConfigBuilder {
             },
             dml,
             procedure,
+            #[cfg(feature = "cache")]
+            cache: self.cache,
         })
     }
 }
@@ -366,6 +447,8 @@ impl Default for ConfigBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "cache")]
+    use crate::cache::DEFAULT_MAX_VALUE_SIZE;
 
     #[test]
     fn test_builder_defaults() {
@@ -377,6 +460,15 @@ mod tests {
         assert!(builder.dml.require_where_clause);
         assert!(!builder.procedure.allow_procedures);
         assert!(builder.procedure.require_confirmation);
+    }
+
+    #[cfg(feature = "cache")]
+    #[test]
+    fn test_builder_cache_defaults() {
+        let builder = ConfigBuilder::new();
+        assert!(!builder.cache.enabled);
+        assert_eq!(builder.cache.backend, CacheBackend::Noop);
+        assert_eq!(builder.cache.max_value_size, DEFAULT_MAX_VALUE_SIZE);
     }
 
     #[test]
@@ -492,5 +584,58 @@ mod tests {
             config.procedure.max_rows_per_result_set,
             NonZeroU32::new(1000)
         );
+    }
+
+    #[cfg(feature = "cache")]
+    #[test]
+    fn test_builder_cache_config() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .cache_enabled(true)
+            .cache_backend(CacheBackend::Memory)
+            .cache_default_ttl(Duration::from_secs(600))
+            .cache_schema_ttl(Duration::from_secs(7200))
+            .cache_query_ttl(Duration::from_secs(120))
+            .cache_max_entries(Some(5000))
+            .cache_max_value_size(2_000_000)
+            .build()
+            .unwrap();
+
+        assert!(config.cache.enabled);
+        assert_eq!(config.cache.backend, CacheBackend::Memory);
+        assert_eq!(config.cache.ttl.default, Duration::from_secs(600));
+        assert_eq!(config.cache.ttl.schema, Duration::from_secs(7200));
+        assert_eq!(config.cache.ttl.query, Duration::from_secs(120));
+        assert_eq!(config.cache.max_entries, Some(5000));
+        assert_eq!(config.cache.max_value_size, 2_000_000);
+    }
+
+    #[cfg(feature = "cache")]
+    #[test]
+    fn test_builder_cache_defaults_in_config() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new().connection_url(url).build().unwrap();
+
+        assert!(!config.cache.enabled);
+        assert_eq!(config.cache.backend, CacheBackend::Noop);
+        assert_eq!(config.cache.ttl.default, Duration::from_secs(300));
+        assert_eq!(config.cache.ttl.schema, Duration::from_secs(3600));
+        assert_eq!(config.cache.ttl.query, Duration::from_secs(60));
+        assert_eq!(config.cache.max_entries, Some(10000));
+        assert_eq!(config.cache.max_value_size, DEFAULT_MAX_VALUE_SIZE);
+    }
+
+    #[cfg(feature = "cache")]
+    #[test]
+    fn test_config_cache_accessor() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .cache_enabled(true)
+            .build()
+            .unwrap();
+
+        assert!(config.cache().enabled);
     }
 }

@@ -4,8 +4,7 @@ use opentelemetry::KeyValue;
 use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::Resource;
-use opentelemetry_sdk::runtime::Tokio;
-use opentelemetry_sdk::trace::TracerProvider as SdkTracerProvider;
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
@@ -31,10 +30,10 @@ pub fn init_telemetry(config: &TelemetryConfig) -> Result<()> {
 
     // Build subscriber with optional OTLP layer
     if let Some(ref endpoint) = config.otlp_endpoint {
-        let resource = Resource::new(vec![
-            KeyValue::new("service.name", config.service_name.clone()),
-            KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-        ]);
+        let resource = Resource::builder()
+            .with_service_name(config.service_name.clone())
+            .with_attribute(KeyValue::new("service.version", env!("CARGO_PKG_VERSION")))
+            .build();
 
         let exporter = opentelemetry_otlp::SpanExporter::builder()
             .with_tonic()
@@ -44,7 +43,7 @@ pub fn init_telemetry(config: &TelemetryConfig) -> Result<()> {
 
         let provider = SdkTracerProvider::builder()
             .with_resource(resource)
-            .with_batch_exporter(exporter, Tokio)
+            .with_batch_exporter(exporter)
             .build();
 
         let tracer = provider.tracer(config.service_name.clone());

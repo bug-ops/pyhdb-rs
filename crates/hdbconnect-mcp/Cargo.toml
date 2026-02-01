@@ -19,11 +19,17 @@ path = "src/lib.rs"
 name = "hdbconnect-mcp"
 path = "src/main.rs"
 
+[[bench]]
+name = "cache_benchmarks"
+harness = false
+required-features = ["cache"]
+
 [lints]
 workspace = true
 
 [features]
 default = []
+cache = ["dep:parking_lot"]
 http = [
     "rmcp/server-side-http",
     "rmcp/transport-streamable-http-server",
@@ -41,6 +47,7 @@ telemetry = [
 
 [dependencies]
 anyhow = { workspace = true }
+async-trait = { workspace = true }
 axum = { workspace = true, optional = true }
 clap = { workspace = true, features = ["derive", "env"] }
 deadpool = { workspace = true, features = ["managed", "rt_tokio_1"] }
@@ -50,6 +57,7 @@ hdbconnect_async = { workspace = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, features = ["grpc-tonic"], optional = true }
 opentelemetry_sdk = { workspace = true, features = ["rt-tokio"], optional = true }
+parking_lot = { workspace = true, optional = true }
 rmcp = { workspace = true, features = ["server", "macros", "transport-io", "elicitation", "schemars"] }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -66,5 +74,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter", "json"] }
 url = { workspace = true }
 
 [dev-dependencies]
+criterion = { workspace = true, features = ["async_tokio"] }
+parking_lot = { workspace = true }
 tempfile = { workspace = true }
 tokio-test = { workspace = true }

@@ -11,6 +11,8 @@ use url::Url;
 use super::builder::{ConfigBuilder, TransportMode};
 use super::dml::AllowedOperations;
 use crate::Result;
+#[cfg(feature = "cache")]
+use crate::cache::CacheBackend;
 use crate::security::SchemaFilter;
 
 /// Environment variable names
@@ -42,16 +44,40 @@ mod vars {
     pub const HANA_PROCEDURE_CONFIRM: &str = "HANA_PROCEDURE_CONFIRM";
     pub const HANA_PROCEDURE_MAX_RESULT_SETS: &str = "HANA_PROCEDURE_MAX_RESULT_SETS";
     pub const HANA_PROCEDURE_MAX_ROWS: &str = "HANA_PROCEDURE_MAX_ROWS";
+    // Cache configuration
+    #[cfg(feature = "cache")]
+    pub const MCP_CACHE_ENABLED: &str = "MCP_CACHE_ENABLED";
+    #[cfg(feature = "cache")]
+    pub const MCP_CACHE_BACKEND: &str = "MCP_CACHE_BACKEND";
+    #[cfg(feature = "cache")]
+    pub const MCP_CACHE_DEFAULT_TTL_SECS: &str = "MCP_CACHE_DEFAULT_TTL_SECS";
+    #[cfg(feature = "cache")]
+    pub const MCP_CACHE_MAX_ENTRIES: &str = "MCP_CACHE_MAX_ENTRIES";
+    #[cfg(feature = "cache")]
+    pub const MCP_CACHE_MAX_VALUE_SIZE: &str = "MCP_CACHE_MAX_VALUE_SIZE";
+    #[cfg(feature = "cache")]
+    pub const MCP_CACHE_SCHEMA_TTL_SECS: &str = "MCP_CACHE_SCHEMA_TTL_SECS";
+    #[cfg(feature = "cache")]
+    pub const MCP_CACHE_QUERY_TTL_SECS: &str = "MCP_CACHE_QUERY_TTL_SECS";
 }
 
 /// Load configuration from environment variables
-pub fn load_from_env(mut builder: ConfigBuilder) -> Result<ConfigBuilder> {
-    // Connection URL
+pub fn load_from_env(builder: ConfigBuilder) -> Result<ConfigBuilder> {
+    let builder = load_connection_config(builder)?;
+    let builder = load_transport_config(builder);
+    let builder = load_telemetry_config(builder);
+    let builder = load_dml_config(builder);
+    let builder = load_procedure_config(builder);
+    #[cfg(feature = "cache")]
+    let builder = load_cache_config(builder);
+    Ok(builder)
+}
+
+fn load_connection_config(mut builder: ConfigBuilder) -> Result<ConfigBuilder> {
     if let Ok(url_str) = env::var(vars::HANA_URL) {
         let mut url = Url::parse(&url_str)
             .map_err(|e| crate::Error::Config(format!("Invalid {}: {}", vars::HANA_URL, e)))?;
 
-        // Optionally override user/password from separate env vars
         if let Ok(user) = env::var(vars::HANA_USER) {
             url.set_username(&user)
                 .map_err(|()| crate::Error::Config("Failed to set username in URL".into()))?;
@@ -64,7 +90,6 @@ pub fn load_from_env(mut builder: ConfigBuilder) -> Result<ConfigBuilder> {
         builder = builder.connection_url(url);
     }
 
-    // Pool size
     if let Ok(size_str) = env::var(vars::HANA_POOL_SIZE)
         && let Ok(size) = size_str.parse::<usize>()
         && let Some(nz) = NonZeroUsize::new(size)
@@ -72,26 +97,22 @@ pub fn load_from_env(mut builder: ConfigBuilder) -> Result<ConfigBuilder> {
         builder = builder.pool_size(nz);
     }
 
-    // Read-only mode
     if let Ok(val) = env::var(vars::MCP_READ_ONLY) {
         builder = builder.read_only(parse_bool(&val));
     }
 
-    // Row limit
     if let Ok(limit_str) = env::var(vars::MCP_ROW_LIMIT)
         && let Ok(limit) = limit_str.parse::<u32>()
     {
         builder = builder.row_limit(NonZeroU32::new(limit));
     }
 
-    // Query timeout
     if let Ok(timeout_str) = env::var(vars::MCP_QUERY_TIMEOUT_SECS)
         && let Ok(secs) = timeout_str.parse::<u64>()
     {
         builder = builder.query_timeout(Duration::from_secs(secs));
     }
 
-    // Schema filter
     if let Ok(mode) = env::var(vars::MCP_SCHEMA_FILTER_MODE) {
         let schemas: Vec<String> = env::var(vars::MCP_SCHEMA_FILTER_SCHEMAS)
             .map(|s| s.split(',').map(|s| s.trim().to_uppercase()).collect())
@@ -101,7 +122,10 @@ pub fn load_from_env(mut builder: ConfigBuilder) -> Result<ConfigBuilder> {
         builder = builder.schema_filter(filter);
     }
 
-    // Transport
+    Ok(builder)
+}
+
+fn load_transport_config(mut builder: ConfigBuilder) -> ConfigBuilder {
     if let Ok(transport) = env::var(vars::MCP_TRANSPORT) {
         let mode: TransportMode = transport.parse().unwrap_or_default();
         builder = builder.transport_mode(mode);
@@ -119,7 +143,10 @@ pub fn load_from_env(mut builder: ConfigBuilder) -> Result<ConfigBuilder> {
         builder = builder.http_port(port);
     }
 
-    // Telemetry
+    builder
+}
+
+fn load_telemetry_config(mut builder: ConfigBuilder) -> ConfigBuilder {
     if let Ok(endpoint) = env::var(vars::OTEL_EXPORTER_OTLP_ENDPOINT) {
         builder = builder.otlp_endpoint(Some(endpoint));
     }
@@ -136,7 +163,10 @@ pub fn load_from_env(mut builder: ConfigBuilder) -> Result<ConfigBuilder> {
         builder = builder.json_logs(parse_bool(&val));
     }
 
-    // DML configuration
+    builder
+}
+
+fn load_dml_config(mut builder: ConfigBuilder) -> ConfigBuilder {
     if let Ok(val) = env::var(vars::HANA_ALLOW_DML) {
         builder = builder.allow_dml(parse_bool(&val));
     }
@@ -156,12 +186,14 @@ pub fn load_from_env(mut builder: ConfigBuilder) -> Result<ConfigBuilder> {
     }
 
     if let Ok(val) = env::var(vars::HANA_DML_OPERATIONS) {
-        // AllowedOperations::from_str is infallible
         let ops = AllowedOperations::from_str(&val).unwrap_or_default();
         builder = builder.allowed_operations(ops);
     }
 
-    // Procedure configuration
+    builder
+}
+
+fn load_procedure_config(mut builder: ConfigBuilder) -> ConfigBuilder {
     if let Ok(val) = env::var(vars::HANA_ALLOW_PROCEDURES) {
         builder = builder.allow_procedures(parse_bool(&val));
     }
@@ -182,7 +214,81 @@ pub fn load_from_env(mut builder: ConfigBuilder) -> Result<ConfigBuilder> {
         builder = builder.max_rows_per_result_set(NonZeroU32::new(limit));
     }
 
-    Ok(builder)
+    builder
+}
+
+#[cfg(feature = "cache")]
+fn load_cache_config(mut builder: ConfigBuilder) -> ConfigBuilder {
+    if let Ok(val) = env::var(vars::MCP_CACHE_ENABLED) {
+        builder = builder.cache_enabled(parse_bool(&val));
+    }
+
+    if let Ok(val) = env::var(vars::MCP_CACHE_BACKEND) {
+        let backend = CacheBackend::from_str(&val).unwrap_or_default();
+        builder = builder.cache_backend(backend);
+    }
+
+    if let Ok(secs_str) = env::var(vars::MCP_CACHE_DEFAULT_TTL_SECS)
+        && let Ok(secs) = secs_str.parse::<u64>()
+    {
+        if secs == 0 {
+            tracing::warn!(
+                "{}=0 disables TTL expiration, cache entries will never expire",
+                vars::MCP_CACHE_DEFAULT_TTL_SECS
+            );
+        }
+        builder = builder.cache_default_ttl(Duration::from_secs(secs));
+    }
+
+    if let Ok(max_str) = env::var(vars::MCP_CACHE_MAX_ENTRIES)
+        && let Ok(max) = max_str.parse::<usize>()
+    {
+        if max == 0 {
+            tracing::warn!(
+                "{}=0 prevents any entries from being cached",
+                vars::MCP_CACHE_MAX_ENTRIES
+            );
+        }
+        builder = builder.cache_max_entries(Some(max));
+    }
+
+    if let Ok(max_str) = env::var(vars::MCP_CACHE_MAX_VALUE_SIZE)
+        && let Ok(max) = max_str.parse::<usize>()
+    {
+        if max == 0 {
+            tracing::warn!(
+                "{}=0 prevents any values from being cached",
+                vars::MCP_CACHE_MAX_VALUE_SIZE
+            );
+        }
+        builder = builder.cache_max_value_size(max);
+    }
+
+    if let Ok(secs_str) = env::var(vars::MCP_CACHE_SCHEMA_TTL_SECS)
+        && let Ok(secs) = secs_str.parse::<u64>()
+    {
+        if secs == 0 {
+            tracing::warn!(
+                "{}=0 disables TTL for schema cache entries",
+                vars::MCP_CACHE_SCHEMA_TTL_SECS
+            );
+        }
+        builder = builder.cache_schema_ttl(Duration::from_secs(secs));
+    }
+
+    if let Ok(secs_str) = env::var(vars::MCP_CACHE_QUERY_TTL_SECS)
+        && let Ok(secs) = secs_str.parse::<u64>()
+    {
+        if secs == 0 {
+            tracing::warn!(
+                "{}=0 disables TTL for query result cache entries",
+                vars::MCP_CACHE_QUERY_TTL_SECS
+            );
+        }
+        builder = builder.cache_query_ttl(Duration::from_secs(secs));
+    }
+
+    builder
 }
 
 fn parse_bool(s: &str) -> bool {
@@ -652,6 +758,119 @@ mod tests {
                     config.procedure.max_rows_per_result_set,
                     NonZeroU32::new(500)
                 );
+            },
+        );
+    }
+
+    // Cache configuration tests (only with cache feature)
+    #[cfg(feature = "cache")]
+    #[test]
+    fn test_load_cache_enabled() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("MCP_CACHE_ENABLED", "true"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert!(config.cache.enabled);
+            },
+        );
+    }
+
+    #[cfg(feature = "cache")]
+    #[test]
+    fn test_load_cache_backend() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("MCP_CACHE_BACKEND", "memory"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert_eq!(config.cache.backend, CacheBackend::Memory);
+            },
+        );
+    }
+
+    #[cfg(feature = "cache")]
+    #[test]
+    fn test_load_cache_default_ttl() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("MCP_CACHE_DEFAULT_TTL_SECS", "600"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert_eq!(config.cache.ttl.default, Duration::from_secs(600));
+            },
+        );
+    }
+
+    #[cfg(feature = "cache")]
+    #[test]
+    fn test_load_cache_max_entries() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("MCP_CACHE_MAX_ENTRIES", "5000"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert_eq!(config.cache.max_entries, Some(5000));
+            },
+        );
+    }
+
+    #[cfg(feature = "cache")]
+    #[test]
+    fn test_load_cache_max_value_size() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("MCP_CACHE_MAX_VALUE_SIZE", "2000000"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert_eq!(config.cache.max_value_size, 2_000_000);
+            },
+        );
+    }
+
+    #[cfg(feature = "cache")]
+    #[test]
+    fn test_load_cache_schema_ttl() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("MCP_CACHE_SCHEMA_TTL_SECS", "7200"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert_eq!(config.cache.ttl.schema, Duration::from_secs(7200));
+            },
+        );
+    }
+
+    #[cfg(feature = "cache")]
+    #[test]
+    fn test_load_cache_query_ttl() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("MCP_CACHE_QUERY_TTL_SECS", "120"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert_eq!(config.cache.ttl.query, Duration::from_secs(120));
             },
         );
     }
