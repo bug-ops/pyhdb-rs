@@ -18,7 +18,7 @@ pub enum AuthMode {
 }
 
 /// JWT/OIDC configuration
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct JwtConfig {
     /// OIDC issuer URL (used for discovery and `iss` validation)
     pub issuer: Url,
@@ -34,6 +34,21 @@ pub struct JwtConfig {
     pub jwks_cache_ttl: Duration,
     /// JWKS refresh interval for background refresh
     pub jwks_refresh_interval: Duration,
+}
+
+// Custom Debug impl that redacts hs_secret for security
+impl std::fmt::Debug for JwtConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Completely omit hs_secret from debug output to prevent data flow analysis false positives
+        f.debug_struct("JwtConfig")
+            .field("issuer", &self.issuer)
+            .field("audience", &self.audience)
+            .field("jwks_uri", &self.jwks_uri)
+            .field("clock_skew", &self.clock_skew)
+            .field("jwks_cache_ttl", &self.jwks_cache_ttl)
+            .field("jwks_refresh_interval", &self.jwks_refresh_interval)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Default for JwtConfig {

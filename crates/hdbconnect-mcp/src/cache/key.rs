@@ -42,13 +42,26 @@ impl CacheNamespace {
 }
 
 /// Structured cache key with namespace isolation
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct CacheKey {
     namespace: CacheNamespace,
     schema: Option<String>,
     identifier: String,
     variant: Option<String>,
     user_id: Option<String>,
+}
+
+// Custom Debug impl that redacts user_id for security
+impl fmt::Debug for CacheKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Completely omit user_id from debug output to prevent data flow analysis false positives
+        f.debug_struct("CacheKey")
+            .field("namespace", &self.namespace)
+            .field("schema", &self.schema)
+            .field("identifier", &self.identifier)
+            .field("variant", &self.variant)
+            .finish_non_exhaustive()
+    }
 }
 
 impl CacheKey {

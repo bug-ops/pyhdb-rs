@@ -127,8 +127,9 @@ async fn validate_jwt_token(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let claims = validator.validate(token).await.map_err(|e| {
-        tracing::warn!(error = %e, "JWT validation failed");
+    let claims = validator.validate(token).await.map_err(|_e| {
+        // Do not log error details to avoid leaking token information
+        tracing::warn!("JWT validation failed");
         StatusCode::UNAUTHORIZED
     })?;
 
