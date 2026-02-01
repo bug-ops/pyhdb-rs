@@ -13,8 +13,8 @@ pub mod types;
 mod validation;
 
 pub use config::{
-    AllowedOperations, Config, ConfigBuilder, DmlConfig, DmlOperation, TelemetryConfig,
-    TransportConfig, TransportMode,
+    AllowedOperations, Config, ConfigBuilder, DmlConfig, DmlOperation, ProcedureConfig,
+    TelemetryConfig, TransportConfig, TransportMode,
 };
 pub use error::{Error, Result};
 pub use pool::{Pool, PooledConnection, create_pool};

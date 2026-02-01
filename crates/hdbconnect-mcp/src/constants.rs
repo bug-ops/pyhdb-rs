@@ -40,3 +40,67 @@ pub const ELICIT_DML_CONFIRMATION: &str = "You are about to execute a DML operat
 
 /// Placeholder for SQL in DML confirmation message
 pub const DML_SQL_PLACEHOLDER: &str = "<sql>";
+
+// Procedure-related constants
+
+/// SQL query to list procedures in current schema
+pub const LIST_PROCEDURES_CURRENT_SCHEMA: &str = r"
+SELECT PROCEDURE_NAME, SCHEMA_NAME, PROCEDURE_TYPE, IS_READ_ONLY
+FROM SYS.PROCEDURES
+WHERE SCHEMA_NAME = CURRENT_SCHEMA
+ORDER BY PROCEDURE_NAME
+";
+
+/// SQL query template to list procedures in specific schema
+pub const LIST_PROCEDURES_TEMPLATE: &str = r"
+SELECT PROCEDURE_NAME, SCHEMA_NAME, PROCEDURE_TYPE, IS_READ_ONLY
+FROM SYS.PROCEDURES
+WHERE SCHEMA_NAME = '{SCHEMA}'
+ORDER BY PROCEDURE_NAME
+";
+
+/// SQL query template to list procedures with name pattern
+pub const LIST_PROCEDURES_PATTERN_TEMPLATE: &str = r"
+SELECT PROCEDURE_NAME, SCHEMA_NAME, PROCEDURE_TYPE, IS_READ_ONLY
+FROM SYS.PROCEDURES
+WHERE SCHEMA_NAME = '{SCHEMA}'
+  AND PROCEDURE_NAME LIKE '{PATTERN}'
+ORDER BY PROCEDURE_NAME
+";
+
+/// SQL query template for procedure parameters (current schema)
+pub const DESCRIBE_PROCEDURE_CURRENT_SCHEMA: &str = r"
+SELECT PARAMETER_NAME, POSITION, DATA_TYPE_NAME, PARAMETER_TYPE, LENGTH, PRECISION, SCALE, HAS_DEFAULT
+FROM SYS.PROCEDURE_PARAMETERS
+WHERE SCHEMA_NAME = CURRENT_SCHEMA AND PROCEDURE_NAME = '{PROCEDURE}'
+ORDER BY POSITION
+";
+
+/// SQL query template for procedure parameters (specific schema)
+pub const DESCRIBE_PROCEDURE_TEMPLATE: &str = r"
+SELECT PARAMETER_NAME, POSITION, DATA_TYPE_NAME, PARAMETER_TYPE, LENGTH, PRECISION, SCALE, HAS_DEFAULT
+FROM SYS.PROCEDURE_PARAMETERS
+WHERE SCHEMA_NAME = '{SCHEMA}' AND PROCEDURE_NAME = '{PROCEDURE}'
+ORDER BY POSITION
+";
+
+/// Elicitation message for schema selection in `list_procedures`
+pub const ELICIT_SCHEMA_LIST_PROCEDURES: &str =
+    "Which schema do you want to list procedures from? (Leave empty for current schema)";
+
+/// Elicitation message template for procedure execution confirmation
+pub const ELICIT_PROCEDURE_CONFIRMATION: &str = r"You are about to execute a stored procedure.
+
+Procedure: <procedure>
+Parameters: <parameters>
+
+This operation may modify data or have side effects. Type 'yes' to confirm or 'no' to cancel.";
+
+/// Placeholder for procedure name in confirmation message
+pub const PROCEDURE_NAME_PLACEHOLDER: &str = "<procedure>";
+
+/// Placeholder for parameters in confirmation message
+pub const PROCEDURE_PARAMS_PLACEHOLDER: &str = "<parameters>";
+
+/// Procedure status: success
+pub const PROCEDURE_STATUS_SUCCESS: &str = "success";

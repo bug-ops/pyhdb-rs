@@ -1,6 +1,7 @@
 //! MCP server implementation
 
 use std::fmt;
+use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use hdbconnect_async::HdbValue;
@@ -11,21 +12,27 @@ use rmcp::service::{RequestContext, RoleServer};
 use rmcp::{ErrorData, ServerHandler as RmcpServerHandler, tool, tool_handler, tool_router};
 
 use crate::constants::{
-    DESCRIBE_TABLE_CURRENT_SCHEMA, DESCRIBE_TABLE_TEMPLATE, DML_SQL_PLACEHOLDER,
-    DML_STATUS_SUCCESS, ELICIT_DML_CONFIRMATION, ELICIT_SCHEMA_DESCRIBE_TABLE,
-    ELICIT_SCHEMA_LIST_TABLES, HEALTH_CHECK_QUERY, LIST_TABLES_CURRENT_SCHEMA,
-    LIST_TABLES_TEMPLATE, SQL_TRUE, STATUS_OK,
+    DESCRIBE_PROCEDURE_CURRENT_SCHEMA, DESCRIBE_PROCEDURE_TEMPLATE, DESCRIBE_TABLE_CURRENT_SCHEMA,
+    DESCRIBE_TABLE_TEMPLATE, DML_SQL_PLACEHOLDER, DML_STATUS_SUCCESS, ELICIT_DML_CONFIRMATION,
+    ELICIT_PROCEDURE_CONFIRMATION, ELICIT_SCHEMA_DESCRIBE_TABLE, ELICIT_SCHEMA_LIST_PROCEDURES,
+    ELICIT_SCHEMA_LIST_TABLES, HEALTH_CHECK_QUERY, LIST_PROCEDURES_CURRENT_SCHEMA,
+    LIST_PROCEDURES_PATTERN_TEMPLATE, LIST_PROCEDURES_TEMPLATE, LIST_TABLES_CURRENT_SCHEMA,
+    LIST_TABLES_TEMPLATE, PROCEDURE_NAME_PLACEHOLDER, PROCEDURE_PARAMS_PLACEHOLDER,
+    PROCEDURE_STATUS_SUCCESS, SQL_TRUE, STATUS_OK,
 };
 use crate::helpers::{get_connection, hdb_value_to_json};
 use crate::pool::Pool;
 use crate::security::QueryGuard;
 use crate::types::{
-    ColumnInfo, DescribeTableParams, DmlConfirmation, DmlResult, ExecuteDmlParams,
-    ExecuteSqlParams, ListTablesParams, PingResult, QueryResult, SchemaName, TableInfo,
-    TableSchema, ToolResult,
+    CallProcedureParams, ColumnInfo, DescribeProcedureParams, DescribeTableParams, DmlConfirmation,
+    DmlResult, ExecuteDmlParams, ExecuteSqlParams, ListProceduresParams, ListTablesParams,
+    OutputParameter, ParameterDirection, PingResult, ProcedureConfirmation, ProcedureInfo,
+    ProcedureParameter, ProcedureResult, ProcedureResultSet, ProcedureSchema, QueryResult,
+    SchemaName, TableInfo, TableSchema, ToolResult,
 };
 use crate::validation::{
-    is_valid_identifier, validate_dml_sql, validate_identifier, validate_read_only_sql,
+    is_valid_identifier, parse_qualified_name, validate_dml_sql, validate_identifier,
+    validate_like_pattern, validate_procedure_name, validate_read_only_sql,
     validate_where_clause,
 };
 use crate::{Config, Error};
@@ -257,7 +264,7 @@ impl ServerHandler {
 
         let row_limit = params
             .limit
-            .or_else(|| self.query_guard.row_limit().map(std::num::NonZeroU32::get));
+            .or_else(|| self.query_guard.row_limit().map(NonZeroU32::get));
 
         let conn = get_connection(&self.pool).await?;
 
@@ -386,7 +393,14 @@ impl ServerHandler {
                 Ok(rows) => rows,
                 Err(e) => {
                     // Rollback on error and re-enable auto-commit
-                    let _ = conn.rollback().await;
+                    if let Err(rollback_err) = conn.rollback().await {
+                        tracing::warn!(
+                            tool = "execute_dml",
+                            operation = %operation,
+                            error = %rollback_err,
+                            "Failed to rollback after DML error (in error recovery path)"
+                        );
+                    }
                     conn.set_auto_commit(true).await;
                     return Err(ErrorData::from(e));
                 }
@@ -478,6 +492,481 @@ impl ServerHandler {
             }))
         }
     }
+
+    // Procedure tools
+
+    #[tool(description = "List stored procedures in a schema")]
+    async fn list_procedures(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(mut params): Parameters<ListProceduresParams>,
+    ) -> ToolResult<Vec<ProcedureInfo>> {
+        let proc_config = self.config.procedure();
+
+        // Check procedures are enabled
+        if !proc_config.allow_procedures {
+            return Err(ErrorData::from(Error::ProcedureDisabled));
+        }
+
+        // Schema elicitation if not provided
+        if params.schema.is_none()
+            && context.peer.supports_elicitation()
+            && let Ok(Some(selection)) = context
+                .peer
+                .elicit::<SchemaName>(ELICIT_SCHEMA_LIST_PROCEDURES.to_string())
+                .await
+        {
+            params.schema = Some(selection);
+        }
+
+        // Validate schema access
+        if let Some(ref schema) = params.schema {
+            validate_identifier(&schema.name, "schema name").map_err(ErrorData::from)?;
+            self.query_guard
+                .validate_schema(&schema.name)
+                .map_err(ErrorData::from)?;
+        }
+
+        // Validate name_pattern to prevent SQL injection
+        if let Some(ref pattern) = params.name_pattern {
+            validate_like_pattern(pattern).map_err(ErrorData::from)?;
+        }
+
+        let conn = get_connection(&self.pool).await?;
+
+        // Build query based on parameters
+        let query = match (&params.schema, &params.name_pattern) {
+            (Some(schema), Some(pattern)) => LIST_PROCEDURES_PATTERN_TEMPLATE
+                .replace("{SCHEMA}", &schema.name)
+                .replace("{PATTERN}", pattern),
+            (Some(schema), None) => LIST_PROCEDURES_TEMPLATE.replace("{SCHEMA}", &schema.name),
+            (None, _) => LIST_PROCEDURES_CURRENT_SCHEMA.to_string(),
+        };
+
+        let result_set = self
+            .query_guard
+            .execute(conn.query(&query))
+            .await
+            .map_err(ErrorData::from)?;
+
+        let rows = self
+            .query_guard
+            .execute(result_set.into_rows())
+            .await
+            .map_err(ErrorData::from)?;
+
+        let procedures: Vec<ProcedureInfo> = rows
+            .into_iter()
+            .filter_map(|mut row| {
+                if let (
+                    Some(HdbValue::STRING(name)),
+                    Some(HdbValue::STRING(schema)),
+                    Some(HdbValue::STRING(proc_type)),
+                    Some(HdbValue::STRING(read_only)),
+                ) = (
+                    row.next_value(),
+                    row.next_value(),
+                    row.next_value(),
+                    row.next_value(),
+                ) {
+                    Some(ProcedureInfo {
+                        name,
+                        schema,
+                        procedure_type: proc_type,
+                        is_read_only: read_only == SQL_TRUE,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        tracing::debug!(
+            tool = "list_procedures",
+            count = procedures.len(),
+            "Query completed"
+        );
+
+        Ok(Json(procedures))
+    }
+
+    #[tool(description = "Get parameter definitions for a stored procedure")]
+    async fn describe_procedure(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(mut params): Parameters<DescribeProcedureParams>,
+    ) -> ToolResult<ProcedureSchema> {
+        let proc_config = self.config.procedure();
+
+        // Check procedures are enabled
+        if !proc_config.allow_procedures {
+            return Err(ErrorData::from(Error::ProcedureDisabled));
+        }
+
+        // Validate procedure name
+        validate_procedure_name(&params.procedure).map_err(ErrorData::from)?;
+
+        // Parse qualified name
+        let (schema_from_name, proc_name) =
+            parse_qualified_name(&params.procedure, params.schema.as_ref());
+
+        // Use schema from name if not explicitly provided
+        if params.schema.is_none() && schema_from_name.is_some() {
+            params.schema = schema_from_name.clone().map(|s| SchemaName { name: s });
+        }
+
+        // Schema elicitation if still not provided
+        if params.schema.is_none()
+            && context.peer.supports_elicitation()
+            && let Ok(Some(selection)) = context
+                .peer
+                .elicit::<SchemaName>(ELICIT_SCHEMA_LIST_PROCEDURES.to_string())
+                .await
+        {
+            params.schema = Some(selection);
+        }
+
+        // Validate schema access
+        if let Some(ref schema) = params.schema {
+            validate_identifier(&schema.name, "schema name").map_err(ErrorData::from)?;
+            self.query_guard
+                .validate_schema(&schema.name)
+                .map_err(ErrorData::from)?;
+        }
+
+        let conn = get_connection(&self.pool).await?;
+
+        // Build query
+        let query = params.schema.as_ref().map_or_else(
+            || DESCRIBE_PROCEDURE_CURRENT_SCHEMA.replace("{PROCEDURE}", &proc_name),
+            |schema| {
+                DESCRIBE_PROCEDURE_TEMPLATE
+                    .replace("{SCHEMA}", &schema.name)
+                    .replace("{PROCEDURE}", &proc_name)
+            },
+        );
+
+        let result_set = self
+            .query_guard
+            .execute(conn.query(&query))
+            .await
+            .map_err(ErrorData::from)?;
+
+        let rows = self
+            .query_guard
+            .execute(result_set.into_rows())
+            .await
+            .map_err(ErrorData::from)?;
+
+        let parameters: Vec<ProcedureParameter> = rows
+            .into_iter()
+            .filter_map(|mut row| {
+                let Some(HdbValue::STRING(name)) = row.next_value() else {
+                    return None;
+                };
+                let position = match row.next_value() {
+                    Some(HdbValue::INT(i)) => i as u32,
+                    Some(HdbValue::BIGINT(i)) => i as u32,
+                    _ => return None,
+                };
+                let Some(HdbValue::STRING(data_type)) = row.next_value() else {
+                    return None;
+                };
+                let Some(HdbValue::STRING(direction_str)) = row.next_value() else {
+                    return None;
+                };
+                let length = match row.next_value() {
+                    Some(HdbValue::INT(i)) if i > 0 => Some(i as u32),
+                    Some(HdbValue::BIGINT(i)) if i > 0 => Some(i as u32),
+                    _ => None,
+                };
+                let precision = match row.next_value() {
+                    Some(HdbValue::INT(i)) if i > 0 => Some(i as u32),
+                    Some(HdbValue::BIGINT(i)) if i > 0 => Some(i as u32),
+                    _ => None,
+                };
+                let scale = match row.next_value() {
+                    Some(HdbValue::INT(i)) if i > 0 => Some(i as u32),
+                    Some(HdbValue::BIGINT(i)) if i > 0 => Some(i as u32),
+                    _ => None,
+                };
+                let has_default = match row.next_value() {
+                    Some(HdbValue::STRING(s)) => s == SQL_TRUE,
+                    Some(HdbValue::BOOLEAN(b)) => b,
+                    _ => false,
+                };
+
+                let direction = ParameterDirection::from_hana_str(&direction_str)?;
+
+                Some(ProcedureParameter {
+                    name,
+                    position,
+                    data_type,
+                    direction,
+                    length,
+                    precision,
+                    scale,
+                    has_default,
+                })
+            })
+            .collect();
+
+        // Zero-parameter procedures are valid - procedure exists if no DB error occurred.
+
+        let schema_name = params
+            .schema
+            .as_ref()
+            .map_or_else(String::new, |s| s.name.clone());
+
+        tracing::debug!(
+            tool = "describe_procedure",
+            procedure = %proc_name,
+            parameters = parameters.len(),
+            "Query completed"
+        );
+
+        Ok(Json(ProcedureSchema {
+            name: proc_name,
+            schema: schema_name,
+            parameters,
+            result_set_count: None,
+        }))
+    }
+
+    #[tool(description = "Execute a stored procedure with parameter binding")]
+    async fn call_procedure(
+        &self,
+        context: RequestContext<RoleServer>,
+        Parameters(params): Parameters<CallProcedureParams>,
+    ) -> ToolResult<ProcedureResult> {
+        let proc_config = self.config.procedure();
+
+        // 1. Check procedures are enabled
+        if !proc_config.allow_procedures {
+            return Err(ErrorData::from(Error::ProcedureDisabled));
+        }
+
+        // 2. Validate procedure name
+        validate_procedure_name(&params.procedure).map_err(ErrorData::from)?;
+
+        // 3. Parse qualified name
+        let (schema_name, proc_name) =
+            parse_qualified_name(&params.procedure, params.schema.as_ref());
+
+        // 4. Validate schema access
+        if let Some(ref schema) = schema_name {
+            self.query_guard
+                .validate_schema(schema)
+                .map_err(ErrorData::from)?;
+        }
+
+        // 5. Request confirmation (unless force)
+        if proc_config.require_confirmation && !params.force && context.peer.supports_elicitation()
+        {
+            let params_json = params.parameters.as_ref().map_or_else(
+                || "{}".to_string(),
+                |p| serde_json::to_string(p).unwrap_or_else(|_| "{}".to_string()),
+            );
+
+            let confirmation_msg = ELICIT_PROCEDURE_CONFIRMATION
+                .replace(PROCEDURE_NAME_PLACEHOLDER, &params.procedure)
+                .replace(PROCEDURE_PARAMS_PLACEHOLDER, &params_json);
+
+            let confirmation_result = context
+                .peer
+                .elicit::<ProcedureConfirmation>(confirmation_msg)
+                .await;
+
+            match confirmation_result {
+                Ok(Some(confirmation)) if confirmation.is_confirmed() => {}
+                _ => return Err(ErrorData::from(Error::ProcedureCancelled)),
+            }
+        }
+
+        // 6. Build CALL statement with literal parameter values
+        let qualified_name = schema_name.as_ref().map_or_else(
+            || format!("\"{proc_name}\""),
+            |s| format!("\"{s}\".\"{proc_name}\""),
+        );
+
+        let call_sql = params.parameters.as_ref().map_or_else(
+            || format!("CALL {qualified_name}()"),
+            |param_map| {
+                if param_map.is_empty() {
+                    format!("CALL {qualified_name}()")
+                } else {
+                    let param_values: Vec<String> =
+                        param_map.values().map(json_value_to_sql_literal).collect();
+                    format!("CALL {qualified_name}({})", param_values.join(", "))
+                }
+            },
+        );
+
+        // 7. Execute with transaction control
+        let conn = get_connection(&self.pool).await?;
+
+        if params.explicit_transaction {
+            conn.set_auto_commit(false).await;
+        }
+
+        // 8. Execute procedure
+        let response = self
+            .query_guard
+            .execute(conn.statement(&call_sql))
+            .await
+            .map_err(ErrorData::from)?;
+
+        // 9. Process response - collect all return values
+        let max_sets = proc_config
+            .max_result_sets
+            .map_or(u32::MAX, NonZeroU32::get) as usize;
+        let max_rows = proc_config
+            .max_rows_per_result_set
+            .map_or(u32::MAX, NonZeroU32::get) as usize;
+
+        let mut result_sets = Vec::new();
+        let mut output_parameters = Vec::new();
+        let mut affected_rows: Option<u64> = None;
+        let mut result_set_index = 0;
+
+        for return_value in response {
+            match return_value {
+                hdbconnect_async::HdbReturnValue::ResultSet(rs) => {
+                    if result_set_index >= max_sets {
+                        if params.explicit_transaction {
+                            if let Err(e) = conn.rollback().await {
+                                tracing::warn!(
+                                    tool = "call_procedure",
+                                    procedure = %params.procedure,
+                                    error = %e,
+                                    "Failed to rollback after result set limit exceeded (in error path)"
+                                );
+                            }
+                            conn.set_auto_commit(true).await;
+                        }
+                        return Err(ErrorData::from(Error::ProcedureResultSetLimitExceeded {
+                            actual: result_set_index + 1,
+                            limit: max_sets as u32,
+                        }));
+                    }
+
+                    let metadata = rs.metadata().clone();
+                    let columns: Vec<String> = metadata
+                        .iter()
+                        .map(|col| col.columnname().to_string())
+                        .collect();
+
+                    let all_rows = self
+                        .query_guard
+                        .execute(rs.into_rows())
+                        .await
+                        .map_err(ErrorData::from)?;
+
+                    let mut rows = Vec::new();
+                    let mut truncated = false;
+
+                    for (idx, row) in all_rows.into_iter().enumerate() {
+                        if idx >= max_rows {
+                            truncated = true;
+                            break;
+                        }
+                        let row_data: Vec<serde_json::Value> =
+                            row.into_iter().map(|v| hdb_value_to_json(&v)).collect();
+                        rows.push(row_data);
+                    }
+
+                    let row_count = rows.len();
+                    result_sets.push(ProcedureResultSet {
+                        index: result_set_index,
+                        columns,
+                        rows,
+                        row_count,
+                        truncated,
+                    });
+
+                    result_set_index += 1;
+                }
+                hdbconnect_async::HdbReturnValue::OutputParameters(op) => {
+                    // Output parameters return null values because hdbconnect's OutputParameters
+                    // API does not expose a method to extract values by index. Future enhancement
+                    // could use descriptor info + raw protocol access if needed.
+                    for (idx, opar) in op.descriptors().iter().enumerate() {
+                        let name = opar
+                            .name()
+                            .map_or_else(|| format!("OUT_{idx}"), ToString::to_string);
+                        output_parameters.push(OutputParameter {
+                            name,
+                            value: serde_json::Value::Null,
+                            data_type: opar.type_id().to_string(),
+                        });
+                    }
+                }
+                hdbconnect_async::HdbReturnValue::AffectedRows(counts) => {
+                    let total: usize = counts.iter().sum();
+                    affected_rows = Some(total as u64);
+                }
+                hdbconnect_async::HdbReturnValue::Success => {}
+            }
+        }
+
+        // 10. Commit if explicit transaction
+        if params.explicit_transaction {
+            conn.commit().await.map_err(|e| {
+                tracing::error!(
+                    tool = "call_procedure",
+                    procedure = %params.procedure,
+                    error = %e,
+                    "Failed to commit procedure execution"
+                );
+                ErrorData::from(Error::Connection(e))
+            })?;
+            conn.set_auto_commit(true).await;
+        }
+
+        tracing::info!(
+            tool = "call_procedure",
+            procedure = %params.procedure,
+            result_sets = result_sets.len(),
+            output_params = output_parameters.len(),
+            affected_rows = ?affected_rows,
+            "Procedure executed"
+        );
+
+        Ok(Json(ProcedureResult {
+            procedure: params.procedure,
+            status: PROCEDURE_STATUS_SUCCESS.to_string(),
+            result_sets,
+            output_parameters,
+            affected_rows,
+            message: None,
+        }))
+    }
+}
+
+/// Sanitize string for SQL literal embedding.
+/// Removes control characters and null bytes to prevent injection attacks.
+fn sanitize_string_for_sql(s: &str) -> String {
+    s.chars()
+        .filter(|c| !c.is_control() && *c != '\0')
+        .collect::<String>()
+        .replace('\'', "''")
+}
+
+/// Convert JSON value to SQL literal for parameter embedding.
+/// Strings are sanitized to remove control characters and properly escape quotes.
+fn json_value_to_sql_literal(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => "NULL".to_string(),
+        serde_json::Value::Bool(b) => if *b { "TRUE" } else { "FALSE" }.to_string(),
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::String(s) => {
+            format!("'{}'", sanitize_string_for_sql(s))
+        }
+        serde_json::Value::Array(_) | serde_json::Value::Object(_) => {
+            let json_str = value.to_string();
+            format!("'{}'", sanitize_string_for_sql(&json_str))
+        }
+    }
 }
 
 #[tool_handler]
@@ -491,5 +980,159 @@ impl RmcpServerHandler for ServerHandler {
             capabilities: ServerCapabilities::builder().enable_tools().build(),
             ..Default::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_json_to_sql_null() {
+        let value = serde_json::Value::Null;
+        assert_eq!(json_value_to_sql_literal(&value), "NULL");
+    }
+
+    #[test]
+    fn test_json_to_sql_bool_true() {
+        let value = serde_json::Value::Bool(true);
+        assert_eq!(json_value_to_sql_literal(&value), "TRUE");
+    }
+
+    #[test]
+    fn test_json_to_sql_bool_false() {
+        let value = serde_json::Value::Bool(false);
+        assert_eq!(json_value_to_sql_literal(&value), "FALSE");
+    }
+
+    #[test]
+    fn test_json_to_sql_integer() {
+        let value = serde_json::json!(42);
+        assert_eq!(json_value_to_sql_literal(&value), "42");
+    }
+
+    #[test]
+    fn test_json_to_sql_negative_integer() {
+        let value = serde_json::json!(-123);
+        assert_eq!(json_value_to_sql_literal(&value), "-123");
+    }
+
+    #[test]
+    fn test_json_to_sql_float() {
+        let value = serde_json::json!(3.14);
+        assert_eq!(json_value_to_sql_literal(&value), "3.14");
+    }
+
+    #[test]
+    fn test_json_to_sql_simple_string() {
+        let value = serde_json::json!("hello world");
+        assert_eq!(json_value_to_sql_literal(&value), "'hello world'");
+    }
+
+    #[test]
+    fn test_json_to_sql_string_with_single_quotes() {
+        let value = serde_json::json!("it's a test");
+        assert_eq!(json_value_to_sql_literal(&value), "'it''s a test'");
+    }
+
+    #[test]
+    fn test_json_to_sql_string_with_multiple_quotes() {
+        let value = serde_json::json!("O'Brien's 'quoted' text");
+        assert_eq!(json_value_to_sql_literal(&value), "'O''Brien''s ''quoted'' text'");
+    }
+
+    #[test]
+    fn test_json_to_sql_empty_string() {
+        let value = serde_json::json!("");
+        assert_eq!(json_value_to_sql_literal(&value), "''");
+    }
+
+    #[test]
+    fn test_json_to_sql_string_with_control_chars() {
+        let value = serde_json::json!("line1\nline2\ttab\rcarriage");
+        assert_eq!(json_value_to_sql_literal(&value), "'line1line2tabcarriage'");
+    }
+
+    #[test]
+    fn test_json_to_sql_string_with_null_byte() {
+        let value = serde_json::Value::String("hello\0world".to_string());
+        assert_eq!(json_value_to_sql_literal(&value), "'helloworld'");
+    }
+
+    #[test]
+    fn test_json_to_sql_string_only_control_chars() {
+        let value = serde_json::Value::String("\n\r\t\0".to_string());
+        assert_eq!(json_value_to_sql_literal(&value), "''");
+    }
+
+    #[test]
+    fn test_json_to_sql_unicode_string() {
+        let value = serde_json::json!("日本語テスト");
+        assert_eq!(json_value_to_sql_literal(&value), "'日本語テスト'");
+    }
+
+    #[test]
+    fn test_json_to_sql_unicode_with_quotes() {
+        let value = serde_json::json!("It's 日本語");
+        assert_eq!(json_value_to_sql_literal(&value), "'It''s 日本語'");
+    }
+
+    #[test]
+    fn test_json_to_sql_array() {
+        let value = serde_json::json!([1, 2, 3]);
+        assert_eq!(json_value_to_sql_literal(&value), "'[1,2,3]'");
+    }
+
+    #[test]
+    fn test_json_to_sql_array_with_strings() {
+        let value = serde_json::json!(["a", "b'c"]);
+        assert_eq!(json_value_to_sql_literal(&value), "'[\"a\",\"b''c\"]'");
+    }
+
+    #[test]
+    fn test_json_to_sql_object() {
+        let value = serde_json::json!({"key": "value"});
+        assert_eq!(json_value_to_sql_literal(&value), "'{\"key\":\"value\"}'");
+    }
+
+    #[test]
+    fn test_json_to_sql_nested_object() {
+        let value = serde_json::json!({"outer": {"inner": "val'ue"}});
+        assert_eq!(json_value_to_sql_literal(&value), "'{\"outer\":{\"inner\":\"val''ue\"}}'");
+    }
+
+    #[test]
+    fn test_sanitize_string_normal() {
+        assert_eq!(sanitize_string_for_sql("hello"), "hello");
+    }
+
+    #[test]
+    fn test_sanitize_string_with_quotes() {
+        assert_eq!(sanitize_string_for_sql("it's"), "it''s");
+    }
+
+    #[test]
+    fn test_sanitize_string_with_newline() {
+        assert_eq!(sanitize_string_for_sql("a\nb"), "ab");
+    }
+
+    #[test]
+    fn test_sanitize_string_with_tab() {
+        assert_eq!(sanitize_string_for_sql("a\tb"), "ab");
+    }
+
+    #[test]
+    fn test_sanitize_string_with_carriage_return() {
+        assert_eq!(sanitize_string_for_sql("a\rb"), "ab");
+    }
+
+    #[test]
+    fn test_sanitize_string_with_null_byte() {
+        assert_eq!(sanitize_string_for_sql("a\0b"), "ab");
+    }
+
+    #[test]
+    fn test_sanitize_string_mixed() {
+        assert_eq!(sanitize_string_for_sql("a\n'b\0c'd"), "a''bc''d");
     }
 }

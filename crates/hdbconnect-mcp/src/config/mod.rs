@@ -6,9 +6,11 @@ mod builder;
 mod dml;
 mod env;
 mod file;
+mod procedure;
 
 pub use builder::{Config, ConfigBuilder, TelemetryConfig, TransportConfig, TransportMode};
 pub use dml::{AllowedOperations, DmlConfig, DmlOperation};
+pub use procedure::ProcedureConfig;
 
 use crate::Result;
 

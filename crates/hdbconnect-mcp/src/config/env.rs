@@ -37,6 +37,11 @@ mod vars {
     pub const HANA_DML_MAX_ROWS: &str = "HANA_DML_MAX_ROWS";
     pub const HANA_DML_REQUIRE_WHERE: &str = "HANA_DML_REQUIRE_WHERE";
     pub const HANA_DML_OPERATIONS: &str = "HANA_DML_OPERATIONS";
+    // Procedure configuration
+    pub const HANA_ALLOW_PROCEDURES: &str = "HANA_ALLOW_PROCEDURES";
+    pub const HANA_PROCEDURE_CONFIRM: &str = "HANA_PROCEDURE_CONFIRM";
+    pub const HANA_PROCEDURE_MAX_RESULT_SETS: &str = "HANA_PROCEDURE_MAX_RESULT_SETS";
+    pub const HANA_PROCEDURE_MAX_ROWS: &str = "HANA_PROCEDURE_MAX_ROWS";
 }
 
 /// Load configuration from environment variables
@@ -154,6 +159,27 @@ pub fn load_from_env(mut builder: ConfigBuilder) -> Result<ConfigBuilder> {
         // AllowedOperations::from_str is infallible
         let ops = AllowedOperations::from_str(&val).unwrap_or_default();
         builder = builder.allowed_operations(ops);
+    }
+
+    // Procedure configuration
+    if let Ok(val) = env::var(vars::HANA_ALLOW_PROCEDURES) {
+        builder = builder.allow_procedures(parse_bool(&val));
+    }
+
+    if let Ok(val) = env::var(vars::HANA_PROCEDURE_CONFIRM) {
+        builder = builder.require_procedure_confirmation(parse_bool(&val));
+    }
+
+    if let Ok(limit_str) = env::var(vars::HANA_PROCEDURE_MAX_RESULT_SETS)
+        && let Ok(limit) = limit_str.parse::<u32>()
+    {
+        builder = builder.max_result_sets(NonZeroU32::new(limit));
+    }
+
+    if let Ok(limit_str) = env::var(vars::HANA_PROCEDURE_MAX_ROWS)
+        && let Ok(limit) = limit_str.parse::<u32>()
+    {
+        builder = builder.max_rows_per_result_set(NonZeroU32::new(limit));
     }
 
     Ok(builder)
@@ -562,6 +588,70 @@ mod tests {
                 assert!(config.dml.allowed_operations.insert);
                 assert!(config.dml.allowed_operations.update);
                 assert!(!config.dml.allowed_operations.delete);
+            },
+        );
+    }
+
+    // Procedure configuration tests
+    #[test]
+    fn test_load_procedure_allow() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("HANA_ALLOW_PROCEDURES", "true"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert!(config.procedure.allow_procedures);
+            },
+        );
+    }
+
+    #[test]
+    fn test_load_procedure_confirm() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("HANA_PROCEDURE_CONFIRM", "false"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert!(!config.procedure.require_confirmation);
+            },
+        );
+    }
+
+    #[test]
+    fn test_load_procedure_max_result_sets() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("HANA_PROCEDURE_MAX_RESULT_SETS", "5"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert_eq!(config.procedure.max_result_sets, NonZeroU32::new(5));
+            },
+        );
+    }
+
+    #[test]
+    fn test_load_procedure_max_rows() {
+        with_env_vars(
+            &[
+                ("HANA_URL", "hdbsql://user:pass@localhost:30015"),
+                ("HANA_PROCEDURE_MAX_ROWS", "500"),
+            ],
+            || {
+                let builder = load_from_env(ConfigBuilder::new()).unwrap();
+                let config = builder.build().unwrap();
+                assert_eq!(
+                    config.procedure.max_rows_per_result_set,
+                    NonZeroU32::new(500)
+                );
             },
         );
     }

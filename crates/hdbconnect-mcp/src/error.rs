@@ -49,6 +49,28 @@ pub enum Error {
 
     #[error("Not a valid DML statement. Use INSERT, UPDATE, or DELETE")]
     DmlNotAStatement,
+
+    // Procedure-specific errors
+    #[error("Stored procedure execution is disabled. Set allow_procedures=true in configuration")]
+    ProcedureDisabled,
+
+    #[error("Procedure not found: {schema}.{name}")]
+    ProcedureNotFound { schema: String, name: String },
+
+    #[error("Invalid procedure name: {0}")]
+    InvalidProcedureName(String),
+
+    #[error("Missing required parameter: {0}")]
+    ProcedureMissingParameter(String),
+
+    #[error("Procedure execution cancelled by user")]
+    ProcedureCancelled,
+
+    #[error("Procedure returned too many result sets ({actual}), limit is {limit}")]
+    ProcedureResultSetLimitExceeded { actual: usize, limit: u32 },
+
+    #[error("Procedure execution failed: {0}")]
+    ProcedureExecutionFailed(String),
 }
 
 impl Error {
@@ -103,6 +125,20 @@ impl Error {
                 | Self::DmlNotAStatement
         )
     }
+
+    #[must_use]
+    pub const fn is_procedure_error(&self) -> bool {
+        matches!(
+            self,
+            Self::ProcedureDisabled
+                | Self::ProcedureNotFound { .. }
+                | Self::InvalidProcedureName(_)
+                | Self::ProcedureMissingParameter(_)
+                | Self::ProcedureCancelled
+                | Self::ProcedureResultSetLimitExceeded { .. }
+                | Self::ProcedureExecutionFailed(_)
+        )
+    }
 }
 
 /// Convert our Error type to rmcp `ErrorData`
@@ -145,6 +181,30 @@ impl From<Error> for ErrorData {
                 "Not a valid DML statement. Use INSERT, UPDATE, or DELETE",
                 None,
             ),
+            // Procedure errors
+            Error::ProcedureDisabled => Self::invalid_params(
+                "Stored procedure execution is disabled. Set allow_procedures=true in configuration",
+                None,
+            ),
+            Error::ProcedureNotFound { schema, name } => {
+                Self::invalid_params(format!("Procedure not found: {schema}.{name}"), None)
+            }
+            Error::InvalidProcedureName(name) => {
+                Self::invalid_params(format!("Invalid procedure name: {name}"), None)
+            }
+            Error::ProcedureMissingParameter(name) => {
+                Self::invalid_params(format!("Missing required parameter: {name}"), None)
+            }
+            Error::ProcedureCancelled => {
+                Self::invalid_params("Procedure execution cancelled by user", None)
+            }
+            Error::ProcedureResultSetLimitExceeded { actual, limit } => Self::invalid_params(
+                format!("Procedure returned too many result sets ({actual}), limit is {limit}"),
+                None,
+            ),
+            Error::ProcedureExecutionFailed(msg) => {
+                Self::internal_error(format!("Procedure execution failed: {msg}"), None)
+            }
         }
     }
 }
@@ -340,5 +400,82 @@ mod tests {
         let data: ErrorData = err.into();
         assert!(data.message.contains("2000"));
         assert!(data.message.contains("500"));
+    }
+
+    // Procedure error tests
+    #[test]
+    fn test_procedure_disabled_error() {
+        let err = Error::ProcedureDisabled;
+        assert!(err.is_procedure_error());
+        assert!(err.to_string().contains("disabled"));
+    }
+
+    #[test]
+    fn test_procedure_not_found_error() {
+        let err = Error::ProcedureNotFound {
+            schema: "APP".to_string(),
+            name: "MISSING_PROC".to_string(),
+        };
+        assert!(err.is_procedure_error());
+        assert!(err.to_string().contains("APP"));
+        assert!(err.to_string().contains("MISSING_PROC"));
+    }
+
+    #[test]
+    fn test_invalid_procedure_name_error() {
+        let err = Error::InvalidProcedureName("bad;name".to_string());
+        assert!(err.is_procedure_error());
+        assert!(err.to_string().contains("bad;name"));
+    }
+
+    #[test]
+    fn test_procedure_missing_parameter_error() {
+        let err = Error::ProcedureMissingParameter("USER_ID".to_string());
+        assert!(err.is_procedure_error());
+        assert!(err.to_string().contains("USER_ID"));
+    }
+
+    #[test]
+    fn test_procedure_cancelled_error() {
+        let err = Error::ProcedureCancelled;
+        assert!(err.is_procedure_error());
+        assert!(err.to_string().contains("cancelled"));
+    }
+
+    #[test]
+    fn test_procedure_result_set_limit_exceeded_error() {
+        let err = Error::ProcedureResultSetLimitExceeded {
+            actual: 15,
+            limit: 10,
+        };
+        assert!(err.is_procedure_error());
+        assert!(err.to_string().contains("15"));
+        assert!(err.to_string().contains("10"));
+    }
+
+    #[test]
+    fn test_procedure_execution_failed_error() {
+        let err = Error::ProcedureExecutionFailed("division by zero".to_string());
+        assert!(err.is_procedure_error());
+        assert!(err.to_string().contains("division by zero"));
+    }
+
+    #[test]
+    fn test_error_to_error_data_procedure_disabled() {
+        let err = Error::ProcedureDisabled;
+        let data: ErrorData = err.into();
+        assert!(data.message.contains("disabled"));
+        assert!(data.message.contains("allow_procedures"));
+    }
+
+    #[test]
+    fn test_error_to_error_data_procedure_not_found() {
+        let err = Error::ProcedureNotFound {
+            schema: "TEST".to_string(),
+            name: "MY_PROC".to_string(),
+        };
+        let data: ErrorData = err.into();
+        assert!(data.message.contains("TEST"));
+        assert!(data.message.contains("MY_PROC"));
     }
 }
