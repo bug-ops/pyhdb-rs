@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **hdbconnect-mcp Phase 2**: Production-ready MCP server with HTTP transport, security hardening, and observability
+  - **Configuration Module** (`src/config/`): Layered configuration with precedence (env > file > CLI > defaults)
+    - TOML config file support with auto-discovery (`./hdbconnect-mcp.toml`, `~/.config/`, `/etc/`)
+    - `ConfigBuilder` with fluent API for programmatic configuration
+    - Environment variables: `HANA_URL`, `MCP_*`, `OTEL_*`, `CORS_ALLOW_ORIGIN`
+  - **Security Module** (`src/security/`): Schema access control and query protection
+    - `SchemaFilter` enum with Whitelist/Blacklist/AllowAll modes
+    - `QueryGuard` with timeout wrapper and schema validation
+    - SQL identifier validation (prevents injection via schema/table names)
+    - Comment stripping (prevents read-only bypass via `--` or `/* */`)
+    - CTE-aware read-only validation (detects DML after `WITH` clauses)
+    - Case-insensitive schema matching
+  - **HTTP Transport** (`src/transport/http.rs`): Feature-gated HTTP/SSE transport (`http` feature)
+    - Axum HTTP server with rmcp `StreamableHttpService` integration
+    - Health endpoint at `/health`, MCP over SSE at `/mcp`
+    - Bearer token authentication via `MCP_HTTP_BEARER_TOKEN` env var
+    - Restrictive CORS (default: `http://localhost:3000`, configurable via `MCP_CORS_ORIGIN`)
+    - Security warnings for non-loopback binding without authentication
+    - CORS and timeout middleware via tower-http
+  - **Observability** (`src/observability/`): Feature-gated telemetry (`telemetry` feature)
+    - OpenTelemetry OTLP trace export
+    - JSON logging option
+    - Graceful fallback to basic logging when telemetry disabled
+  - **Deployment Artifacts**: Production-ready container and orchestration configs
+    - Multi-stage Dockerfile with distroless runtime
+    - Default bind to `127.0.0.1` (localhost) for security
+    - Security entrypoint warnings for `0.0.0.0` binding
+    - systemd service unit with hardening (`deploy/hdbconnect-mcp.service`)
+    - Kubernetes manifests: Deployment, Service, ConfigMap (`deploy/k8s/`)
+  - **SQL Validation**: Extended write keyword detection (MERGE, UPSERT, CALL, EXEC, EXECUTE)
+  - **Error Types**: Added `QueryTimeout`, `SchemaAccessDenied`, `Transport`, `InvalidIdentifier` error variants
+
+### Security
+
+- **hdbconnect-mcp**: Fixed 5 security vulnerabilities identified in Phase 2 review
+  - Fixed permissive CORS configuration (CVE-style: SEC-001)
+  - Added Bearer token authentication for HTTP transport (SEC-002)
+  - Fixed SQL injection via identifier validation (SEC-003)
+  - Fixed read-only bypass via CTE and comments (SEC-004)
+  - Fixed Docker image binding to all interfaces by default (SEC-005)
+
 - **Connection Statistics API - Full** (Issue #57 / Issue #54 Phase 4): Comprehensive connection performance monitoring
   - `Connection.statistics()` - Get performance statistics snapshot (`ConnectionStatistics` object)
   - `Connection.reset_statistics()` - Reset statistics counters to zero

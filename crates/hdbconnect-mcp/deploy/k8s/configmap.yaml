@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hdbconnect-mcp-config
+data:
+  MCP_READ_ONLY: "true"
+  MCP_ROW_LIMIT: "10000"
+  MCP_QUERY_TIMEOUT_SECS: "30"
+  MCP_SCHEMA_FILTER_MODE: "none"
+  RUST_LOG: "info"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hana-credentials
+type: Opaque
+stringData:
+  url: "hdbsql://user:password@hana-host:39017"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hdbconnect-mcp
