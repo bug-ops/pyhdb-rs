@@ -32,8 +32,7 @@ use crate::types::{
 };
 use crate::validation::{
     is_valid_identifier, parse_qualified_name, validate_dml_sql, validate_identifier,
-    validate_like_pattern, validate_procedure_name, validate_read_only_sql,
-    validate_where_clause,
+    validate_like_pattern, validate_procedure_name, validate_read_only_sql, validate_where_clause,
 };
 use crate::{Config, Error};
 
@@ -1038,7 +1037,10 @@ mod tests {
     #[test]
     fn test_json_to_sql_string_with_multiple_quotes() {
         let value = serde_json::json!("O'Brien's 'quoted' text");
-        assert_eq!(json_value_to_sql_literal(&value), "'O''Brien''s ''quoted'' text'");
+        assert_eq!(
+            json_value_to_sql_literal(&value),
+            "'O''Brien''s ''quoted'' text'"
+        );
     }
 
     #[test]
@@ -1098,7 +1100,10 @@ mod tests {
     #[test]
     fn test_json_to_sql_nested_object() {
         let value = serde_json::json!({"outer": {"inner": "val'ue"}});
-        assert_eq!(json_value_to_sql_literal(&value), "'{\"outer\":{\"inner\":\"val''ue\"}}'");
+        assert_eq!(
+            json_value_to_sql_literal(&value),
+            "'{\"outer\":{\"inner\":\"val''ue\"}}'"
+        );
     }
 
     #[test]
