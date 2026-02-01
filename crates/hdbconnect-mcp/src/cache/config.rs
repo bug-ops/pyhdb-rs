@@ -66,8 +66,7 @@ impl Default for CacheTtlConfig {
 /// potentially bypassing row-level security. For such environments, either:
 /// - Disable the cache feature
 /// - Implement user-scoped cache keys at the application layer
-/// - Use only for metadata caching (table lists, schemas) which is typically
-///   not user-sensitive
+/// - Use only for metadata caching (table lists, schemas) which is typically not user-sensitive
 ///
 /// For typical single-user MCP scenarios (personal AI assistant, service account),
 /// the cache is safe and provides significant performance benefits.
