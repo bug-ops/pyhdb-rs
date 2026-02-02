@@ -42,7 +42,7 @@ async-trait = "0.1"
 axum = "0.8.8"
 bigdecimal = "0.4"
 clap = "4.5"
-criterion = "0.8"
+criterion = { version = "4.3.0", package = "codspeed-criterion-compat" }
 deadpool = { version = "0.12", default-features = false }
 dhat = "0.3"
 futures = "0.3"
