@@ -12,26 +12,110 @@ permissions:
   id-token: write
 
 jobs:
-  codspeed:
-    name: Run benchmarks
+  # CPU simulation benchmarks (instruction counting)
+  simulation:
+    name: Benchmarks (simulation)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup rust toolchain, cache and cargo-codspeed binary
+      - name: Setup Rust toolchain
         uses: moonrepo/setup-rust@v1
         with:
           channel: stable
           cache-target: release
           bins: cargo-codspeed
 
-      - name: Build the benchmark target(s)
+      - name: Build benchmark targets
         run: |
           cargo codspeed build -p hdbconnect-arrow --features test-utils
           cargo codspeed build -p hdbconnect-mcp --features cache
 
-      - name: Run the benchmarks
+      - name: Run benchmarks
         uses: CodSpeedHQ/action@v4
         with:
           mode: simulation
           run: cargo codspeed run
+
+  # Memory profiling benchmarks (heap allocation tracking)
+  memory:
+    name: Benchmarks (memory)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: moonrepo/setup-rust@v1
+        with:
+          channel: stable
+          cache-target: release
+          bins: cargo-codspeed
+
+      - name: Build benchmark targets for memory
+        run: |
+          cargo codspeed build -p hdbconnect-arrow --features test-utils -m memory
+          cargo codspeed build -p hdbconnect-mcp --features cache -m memory
+
+      - name: Run benchmarks with memory profiling
+        uses: CodSpeedHQ/action@v4
+        with:
+          mode: memory
+          run: cargo codspeed run
+
+  # Walltime benchmarks (real execution time)
+  walltime:
+    name: Benchmarks (walltime)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: moonrepo/setup-rust@v1
+        with:
+          channel: stable
+          cache-target: release
+          bins: cargo-codspeed
+
+      - name: Build benchmark targets for walltime
+        run: |
+          cargo codspeed build -p hdbconnect-arrow --features test-utils -m walltime
+          cargo codspeed build -p hdbconnect-mcp --features cache -m walltime
+
+      - name: Run benchmarks with walltime measurement
+        uses: CodSpeedHQ/action@v4
+        with:
+          mode: walltime
+          run: cargo codspeed run
+
+  # Python benchmarks (simulation mode)
+  python:
+    name: Benchmarks (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Setup Rust toolchain
+        uses: moonrepo/setup-rust@v1
+        with:
+          channel: stable
+          cache-target: release
+
+      - name: Build and install wheel
+        run: |
+          pip install maturin
+          maturin build --release -m crates/hdbconnect-py/Cargo.toml
+          pip install target/wheels/*.whl
+
+      - name: Install benchmark dependencies
+        run: pip install pytest pytest-codspeed pyarrow polars pandas
+
+      - name: Run Python benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          mode: simulation
+          run: pytest tests/python/benchmarks/ --codspeed
