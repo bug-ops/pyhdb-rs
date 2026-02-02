@@ -20,10 +20,16 @@
 //!
 //! # Multi-User Cache Safety
 //!
-//! When authentication is enabled, user context MUST be included in cache keys
-//! to prevent cross-user data leakage. The `CacheKey::query_result()` method
-//! requires `user_id` parameter for multi-tenant deployments (breaking change
-//! from Phase 3.4).
+//! When authentication is enabled, user context is automatically included in
+//! cache keys via `extract_user_id()` to prevent cross-user data leakage.
+//! The `CacheKey::query_result()` method requires `user_id` parameter for
+//! multi-tenant deployments.
+//!
+//! # User Context Extraction
+//!
+//! Use `extract_user_id()` to get the authenticated user's identifier from
+//! MCP `RequestContext`. This extracts the `sub` claim from JWT tokens for
+//! per-user cache isolation.
 
 mod claims;
 mod config;
@@ -35,6 +41,7 @@ mod middleware;
 mod oidc;
 mod rbac;
 mod tenant;
+mod user_context;
 
 pub use claims::{AuthenticatedUser, CustomClaims, JwtClaims, OneOrMany, StandardClaims};
 pub use config::{
@@ -48,3 +55,5 @@ pub use middleware::{AuthState, jwt_auth_middleware};
 pub use oidc::{CachedOidcClient, IdTokenClaims, OidcClient, OidcConfig, TenantClaims};
 pub use rbac::{Permission, RbacEnforcer};
 pub use tenant::{TenantResolver, effective_schema_filter};
+#[cfg(feature = "cache")]
+pub use user_context::extract_user_id;

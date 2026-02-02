@@ -12,24 +12,32 @@
 //!
 //! Wrap any cache with [`TracedCache`] to add tracing spans and logging.
 //!
+//! # Per-User Cache Isolation
+//!
+//! When the `auth` feature is enabled, query result caches include user context
+//! in cache keys. This ensures:
+//!
+//! - **User A cannot read User B's cached query results**
+//! - **Cache poisoning by malicious user affects only their own cache entries**
+//! - **Non-HTTP transports (stdio) use `_system` user for backward compatibility**
+//!
+//! The `execute_sql` tool automatically extracts `user_id` from MCP `RequestContext`
+//! via `auth::extract_user_id()`. For schema metadata (table lists, column definitions),
+//! user context is not included since this data is typically the same for all users.
+//!
 //! # Deployment Considerations
 //!
-//! The cache is designed for **single-user MCP deployments** where all queries
-//! run under the same database user or service account.
+//! ## Multi-User HTTP Deployment
 //!
-//! ## Multi-User Limitation
+//! With `auth` + `http` + `cache` features enabled, each authenticated user
+//! gets isolated cache entries. Same SQL query from different users produces
+//! different cache keys due to `user_id` being hashed into the key.
 //!
-//! Cache keys do not include user context. In multi-tenant deployments with
-//! per-user database permissions (row-level security), cached results from
-//! one user may be served to another, potentially bypassing authorization.
+//! ## Single-User Deployment (stdio)
 //!
-//! For multi-user environments, consider:
-//! - Disabling the cache feature entirely
-//! - Using cache only for non-sensitive metadata (table lists, column definitions)
-//! - Implementing user-scoped cache keys at the application layer
-//!
-//! For typical single-user MCP scenarios (personal AI assistant, service account),
-//! the cache is safe and recommended for performance.
+//! For stdio transport or when auth is disabled, all queries use `_system`
+//! as `user_id`. This is safe for single-user MCP scenarios (personal AI assistant,
+//! service account) and recommended for performance.
 //!
 //! ## Schema Staleness
 //!
