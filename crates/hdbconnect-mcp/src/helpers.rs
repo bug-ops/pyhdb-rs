@@ -110,6 +110,78 @@ where
     Ok(value)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hdb_value_to_json_null() {
+        let result = hdb_value_to_json(&HdbValue::NULL);
+        assert!(result.is_null());
+    }
+
+    #[test]
+    fn test_hdb_value_to_json_tinyint() {
+        let result = hdb_value_to_json(&HdbValue::TINYINT(42));
+        assert_eq!(result.as_u64(), Some(42));
+    }
+
+    #[test]
+    fn test_hdb_value_to_json_smallint() {
+        let result = hdb_value_to_json(&HdbValue::SMALLINT(1234));
+        assert_eq!(result.as_i64(), Some(1234));
+    }
+
+    #[test]
+    fn test_hdb_value_to_json_int() {
+        let result = hdb_value_to_json(&HdbValue::INT(123456));
+        assert_eq!(result.as_i64(), Some(123456));
+    }
+
+    #[test]
+    fn test_hdb_value_to_json_bigint() {
+        let result = hdb_value_to_json(&HdbValue::BIGINT(9_876_543_210));
+        assert_eq!(result.as_i64(), Some(9_876_543_210));
+    }
+
+    #[test]
+    fn test_hdb_value_to_json_real() {
+        let result = hdb_value_to_json(&HdbValue::REAL(3.14));
+        assert!(result.is_number());
+    }
+
+    #[test]
+    fn test_hdb_value_to_json_double() {
+        let result = hdb_value_to_json(&HdbValue::DOUBLE(2.71828));
+        assert_eq!(result.as_f64(), Some(2.71828));
+    }
+
+    #[test]
+    fn test_hdb_value_to_json_string() {
+        let result = hdb_value_to_json(&HdbValue::STRING("hello world".to_string()));
+        assert_eq!(result.as_str(), Some("hello world"));
+    }
+
+    #[test]
+    fn test_hdb_value_to_json_boolean_true() {
+        let result = hdb_value_to_json(&HdbValue::BOOLEAN(true));
+        assert_eq!(result.as_bool(), Some(true));
+    }
+
+    #[test]
+    fn test_hdb_value_to_json_boolean_false() {
+        let result = hdb_value_to_json(&HdbValue::BOOLEAN(false));
+        assert_eq!(result.as_bool(), Some(false));
+    }
+
+    #[test]
+    fn test_hdb_value_to_json_binary_fallback() {
+        let result = hdb_value_to_json(&HdbValue::BINARY(vec![1, 2, 3]));
+        assert!(result.is_string());
+        assert!(result.as_str().unwrap().contains("BINARY"));
+    }
+}
+
 #[cfg(all(test, feature = "cache"))]
 mod cache_tests {
     use std::sync::Arc;

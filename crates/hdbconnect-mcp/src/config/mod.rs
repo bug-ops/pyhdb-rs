@@ -47,13 +47,45 @@ pub fn load_config_from_path(path: &std::path::Path) -> Result<ConfigBuilder> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
+
     use super::*;
 
     #[test]
     fn test_load_config_no_file() {
-        // Should not fail even if no config file exists
         let result = load_config();
-        // Will fail on build() because URL is required, but load_config itself should succeed
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_load_config_from_path_valid() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.toml");
+
+        let mut file = std::fs::File::create(&config_path).unwrap();
+        writeln!(file, r#"url = "hdbsql://user:pass@localhost:30015""#).unwrap();
+        writeln!(file, r#"pool_size = 5"#).unwrap();
+
+        let result = load_config_from_path(&config_path);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_load_config_from_path_not_found() {
+        let path = std::path::Path::new("/nonexistent/config.toml");
+        let result = load_config_from_path(path);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_load_config_from_path_invalid_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.toml");
+
+        let mut file = std::fs::File::create(&config_path).unwrap();
+        writeln!(file, "not valid toml [[[").unwrap();
+
+        let result = load_config_from_path(&config_path);
+        assert!(result.is_err());
     }
 }

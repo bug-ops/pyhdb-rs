@@ -446,6 +446,8 @@ impl Default for ConfigBuilder {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
     #[cfg(feature = "cache")]
     use crate::cache::DEFAULT_MAX_VALUE_SIZE;
@@ -637,5 +639,237 @@ mod tests {
             .unwrap();
 
         assert!(config.cache().enabled);
+    }
+
+    #[test]
+    fn test_config_read_only_accessor() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .read_only(false)
+            .build()
+            .unwrap();
+
+        assert!(!config.read_only());
+    }
+
+    #[test]
+    fn test_config_row_limit_accessor() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .row_limit(NonZeroU32::new(500))
+            .build()
+            .unwrap();
+
+        assert_eq!(config.row_limit(), NonZeroU32::new(500));
+    }
+
+    #[test]
+    fn test_config_query_timeout_accessor() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .query_timeout(Duration::from_secs(60))
+            .build()
+            .unwrap();
+
+        assert_eq!(config.query_timeout(), Duration::from_secs(60));
+    }
+
+    #[test]
+    fn test_config_schema_filter_accessor() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let allowed: HashSet<String> = ["APP", "PUBLIC"].iter().map(|s| (*s).to_string()).collect();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .schema_filter(SchemaFilter::Whitelist(allowed))
+            .build()
+            .unwrap();
+
+        assert!(matches!(config.schema_filter(), SchemaFilter::Whitelist(_)));
+    }
+
+    #[test]
+    fn test_config_dml_accessor() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .allow_dml(true)
+            .build()
+            .unwrap();
+
+        assert!(config.dml().allow_dml);
+    }
+
+    #[test]
+    fn test_config_procedure_accessor() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .allow_procedures(true)
+            .build()
+            .unwrap();
+
+        assert!(config.procedure().allow_procedures);
+    }
+
+    #[test]
+    fn test_config_builder_static_method() {
+        let builder = Config::builder();
+        assert!(builder.read_only);
+    }
+
+    #[test]
+    fn test_transport_config_default() {
+        let transport = TransportConfig::default();
+        assert_eq!(transport.mode, TransportMode::Stdio);
+        assert_eq!(transport.http_port, 8080);
+    }
+
+    #[test]
+    fn test_transport_mode_default() {
+        let mode = TransportMode::default();
+        assert_eq!(mode, TransportMode::Stdio);
+    }
+
+    #[test]
+    fn test_builder_pool_size() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .pool_size(NonZeroUsize::new(8).unwrap())
+            .build()
+            .unwrap();
+
+        assert_eq!(config.pool_size.get(), 8);
+    }
+
+    #[test]
+    fn test_builder_transport_mode() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .transport_mode(TransportMode::Http)
+            .build()
+            .unwrap();
+
+        assert_eq!(config.transport.mode, TransportMode::Http);
+    }
+
+    #[test]
+    fn test_builder_http_host_and_port() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .http_host(IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)))
+            .http_port(9000)
+            .build()
+            .unwrap();
+
+        assert_eq!(
+            config.transport.http_host,
+            IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0))
+        );
+        assert_eq!(config.transport.http_port, 9000);
+    }
+
+    #[test]
+    fn test_builder_telemetry_config() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .otlp_endpoint(Some("http://localhost:4317".to_string()))
+            .service_name("test-service".to_string())
+            .log_level("debug".to_string())
+            .json_logs(true)
+            .build()
+            .unwrap();
+
+        assert_eq!(
+            config.telemetry.otlp_endpoint,
+            Some("http://localhost:4317".to_string())
+        );
+        assert_eq!(config.telemetry.service_name, "test-service");
+        assert_eq!(config.telemetry.log_level, "debug");
+        assert!(config.telemetry.json_logs);
+    }
+
+    #[test]
+    fn test_builder_telemetry_defaults() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new().connection_url(url).build().unwrap();
+
+        assert!(config.telemetry.otlp_endpoint.is_none());
+        assert_eq!(config.telemetry.service_name, "hdbconnect-mcp");
+        assert_eq!(config.telemetry.log_level, "info");
+        assert!(!config.telemetry.json_logs);
+    }
+
+    #[test]
+    fn test_telemetry_config_default() {
+        let telemetry = TelemetryConfig::default();
+        assert!(telemetry.otlp_endpoint.is_none());
+        assert!(telemetry.service_name.is_empty());
+        assert!(telemetry.log_level.is_empty());
+        assert!(!telemetry.json_logs);
+    }
+
+    #[test]
+    fn test_config_builder_default() {
+        let builder1 = ConfigBuilder::new();
+        let builder2 = ConfigBuilder::default();
+
+        assert_eq!(builder1.read_only, builder2.read_only);
+        assert_eq!(builder1.query_timeout, builder2.query_timeout);
+    }
+
+    #[test]
+    fn test_config_debug() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let config = ConfigBuilder::new().connection_url(url).build().unwrap();
+        let debug_str = format!("{config:?}");
+        assert!(debug_str.contains("Config"));
+    }
+
+    #[test]
+    fn test_transport_config_debug() {
+        let transport = TransportConfig::default();
+        let debug_str = format!("{transport:?}");
+        assert!(debug_str.contains("TransportConfig"));
+    }
+
+    #[test]
+    fn test_transport_mode_debug() {
+        let mode = TransportMode::Http;
+        let debug_str = format!("{mode:?}");
+        assert!(debug_str.contains("Http"));
+    }
+
+    #[test]
+    fn test_builder_debug() {
+        let builder = ConfigBuilder::new();
+        let debug_str = format!("{builder:?}");
+        assert!(debug_str.contains("ConfigBuilder"));
+    }
+
+    #[cfg(feature = "cache")]
+    #[test]
+    fn test_builder_cache_ttl() {
+        let url = Url::parse("hdbsql://user:pass@localhost:30015").unwrap();
+        let ttl = CacheTtlConfig {
+            default: Duration::from_secs(100),
+            schema: Duration::from_secs(200),
+            query: Duration::from_secs(300),
+        };
+        let config = ConfigBuilder::new()
+            .connection_url(url)
+            .cache_ttl(ttl)
+            .build()
+            .unwrap();
+
+        assert_eq!(config.cache.ttl.default, Duration::from_secs(100));
+        assert_eq!(config.cache.ttl.schema, Duration::from_secs(200));
+        assert_eq!(config.cache.ttl.query, Duration::from_secs(300));
     }
 }

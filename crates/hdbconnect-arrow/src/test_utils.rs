@@ -310,6 +310,127 @@ mod tests {
     }
 
     #[test]
+    fn test_schema_builder_all_int_types() {
+        let schema = SchemaBuilder::new()
+            .int32("a")
+            .nullable_int32("b")
+            .int64("c")
+            .nullable_int64("d")
+            .build();
+
+        assert_eq!(schema.fields().len(), 4);
+        assert!(!schema.field(0).is_nullable());
+        assert!(schema.field(1).is_nullable());
+        assert!(!schema.field(2).is_nullable());
+        assert!(schema.field(3).is_nullable());
+    }
+
+    #[test]
+    fn test_schema_builder_all_float_types() {
+        let schema = SchemaBuilder::new()
+            .float64("a")
+            .nullable_float64("b")
+            .build();
+
+        assert_eq!(schema.fields().len(), 2);
+        assert!(!schema.field(0).is_nullable());
+        assert!(schema.field(1).is_nullable());
+    }
+
+    #[test]
+    fn test_schema_builder_all_string_types() {
+        let schema = SchemaBuilder::new().utf8("a").nullable_utf8("b").build();
+
+        assert_eq!(schema.fields().len(), 2);
+        assert!(!schema.field(0).is_nullable());
+        assert!(schema.field(1).is_nullable());
+    }
+
+    #[test]
+    fn test_schema_builder_all_boolean_types() {
+        let schema = SchemaBuilder::new()
+            .boolean("a")
+            .nullable_boolean("b")
+            .build();
+
+        assert_eq!(schema.fields().len(), 2);
+        assert!(!schema.field(0).is_nullable());
+        assert!(schema.field(1).is_nullable());
+    }
+
+    #[test]
+    fn test_schema_builder_all_decimal_types() {
+        let schema = SchemaBuilder::new()
+            .decimal128("a", 18, 2)
+            .nullable_decimal128("b", 10, 4)
+            .build();
+
+        assert_eq!(schema.fields().len(), 2);
+        assert!(!schema.field(0).is_nullable());
+        assert!(schema.field(1).is_nullable());
+        assert_eq!(schema.field(0).data_type(), &DataType::Decimal128(18, 2));
+        assert_eq!(schema.field(1).data_type(), &DataType::Decimal128(10, 4));
+    }
+
+    #[test]
+    fn test_schema_builder_all_date_types() {
+        let schema = SchemaBuilder::new()
+            .date32("a")
+            .nullable_date32("b")
+            .build();
+
+        assert_eq!(schema.fields().len(), 2);
+        assert!(!schema.field(0).is_nullable());
+        assert!(schema.field(1).is_nullable());
+    }
+
+    #[test]
+    fn test_schema_builder_all_timestamp_types() {
+        let schema = SchemaBuilder::new()
+            .timestamp_ns("a")
+            .nullable_timestamp_ns("b")
+            .build();
+
+        assert_eq!(schema.fields().len(), 2);
+        assert!(!schema.field(0).is_nullable());
+        assert!(schema.field(1).is_nullable());
+    }
+
+    #[test]
+    fn test_schema_builder_all_binary_types() {
+        let schema = SchemaBuilder::new()
+            .binary("a")
+            .nullable_binary("b")
+            .build();
+
+        assert_eq!(schema.fields().len(), 2);
+        assert!(!schema.field(0).is_nullable());
+        assert!(schema.field(1).is_nullable());
+    }
+
+    #[test]
+    fn test_schema_builder_custom_field() {
+        let schema = SchemaBuilder::new()
+            .field("custom", DataType::LargeUtf8, true)
+            .build();
+
+        assert_eq!(schema.fields().len(), 1);
+        assert_eq!(schema.field(0).data_type(), &DataType::LargeUtf8);
+    }
+
+    #[test]
+    fn test_schema_builder_empty() {
+        let schema = SchemaBuilder::new().build();
+        assert_eq!(schema.fields().len(), 0);
+    }
+
+    #[test]
+    fn test_schema_builder_build_ref() {
+        let schema = SchemaBuilder::new().int32("id").build_ref();
+        assert_eq!(schema.fields().len(), 1);
+    }
+
+    #[test]
     fn test_simple_test_schema() {
         let schema = simple_test_schema();
         assert_eq!(schema.fields().len(), 4);
@@ -320,6 +441,20 @@ mod tests {
         let rows = simple_test_rows(5);
         assert_eq!(rows.len(), 5);
         assert_eq!(rows[0].len(), 4);
+    }
+
+    #[test]
+    fn test_simple_test_rows_empty() {
+        let rows = simple_test_rows(0);
+        assert_eq!(rows.len(), 0);
+    }
+
+    #[test]
+    fn test_simple_test_rows_values() {
+        let rows = simple_test_rows(3);
+        assert!(matches!(rows[0].get(0), HdbValue::INT(0)));
+        assert!(matches!(rows[1].get(0), HdbValue::INT(1)));
+        assert!(matches!(rows[2].get(0), HdbValue::INT(2)));
     }
 
     #[test]
@@ -339,6 +474,37 @@ mod tests {
     }
 
     #[test]
+    fn test_test_data_builder_add_row() {
+        let schema = SchemaBuilder::new().int32("id").build_ref();
+        let row = MockRowBuilder::new().int(42).build();
+
+        let builder = TestDataBuilder::new(schema).add_row(row);
+
+        assert_eq!(builder.rows().len(), 1);
+    }
+
+    #[test]
+    fn test_test_data_builder_add_rows() {
+        let schema = SchemaBuilder::new().int32("id").build_ref();
+        let rows = vec![
+            MockRowBuilder::new().int(1).build(),
+            MockRowBuilder::new().int(2).build(),
+        ];
+
+        let builder = TestDataBuilder::new(schema).add_rows(rows);
+
+        assert_eq!(builder.rows().len(), 2);
+    }
+
+    #[test]
+    fn test_test_data_builder_schema() {
+        let schema = SchemaBuilder::new().int32("id").build_ref();
+        let builder = TestDataBuilder::new(Arc::clone(&schema));
+
+        assert!(Arc::ptr_eq(&builder.schema(), &schema));
+    }
+
+    #[test]
     fn test_null_row() {
         let row = null_row(5);
         assert_eq!(row.len(), 5);
@@ -348,14 +514,68 @@ mod tests {
     }
 
     #[test]
+    fn test_null_row_empty() {
+        let row = null_row(0);
+        assert_eq!(row.len(), 0);
+    }
+
+    #[test]
     fn test_mixed_type_row() {
         let row = mixed_type_row();
         assert_eq!(row.len(), 9);
     }
 
     #[test]
+    fn test_mixed_type_row_values() {
+        let row = mixed_type_row();
+        assert!(matches!(row.get(0), HdbValue::TINYINT(1)));
+        assert!(matches!(row.get(1), HdbValue::SMALLINT(2)));
+        assert!(matches!(row.get(2), HdbValue::INT(3)));
+        assert!(matches!(row.get(3), HdbValue::BIGINT(4)));
+        assert!(matches!(row.get(6), HdbValue::STRING(_)));
+        assert!(matches!(row.get(7), HdbValue::BOOLEAN(true)));
+        assert!(matches!(row.get(8), HdbValue::NULL));
+    }
+
+    #[test]
     fn test_assert_hdb_value_eq() {
         assert_hdb_value_eq(&HdbValue::INT(42), &HdbValue::INT(42));
         assert_hdb_value_eq(&HdbValue::NULL, &HdbValue::NULL);
+    }
+
+    #[test]
+    fn test_assert_hdb_value_eq_bigint() {
+        assert_hdb_value_eq(&HdbValue::BIGINT(123456789), &HdbValue::BIGINT(123456789));
+    }
+
+    #[test]
+    fn test_assert_hdb_value_eq_double() {
+        assert_hdb_value_eq(&HdbValue::DOUBLE(3.14), &HdbValue::DOUBLE(3.14));
+    }
+
+    #[test]
+    fn test_assert_hdb_value_eq_string() {
+        assert_hdb_value_eq(
+            &HdbValue::STRING("test".to_string()),
+            &HdbValue::STRING("test".to_string()),
+        );
+    }
+
+    #[test]
+    fn test_assert_hdb_value_eq_boolean() {
+        assert_hdb_value_eq(&HdbValue::BOOLEAN(true), &HdbValue::BOOLEAN(true));
+        assert_hdb_value_eq(&HdbValue::BOOLEAN(false), &HdbValue::BOOLEAN(false));
+    }
+
+    #[test]
+    #[should_panic(expected = "HdbValue type mismatch")]
+    fn test_assert_hdb_value_eq_type_mismatch() {
+        assert_hdb_value_eq(&HdbValue::INT(42), &HdbValue::STRING("42".to_string()));
+    }
+
+    #[test]
+    #[should_panic(expected = "float mismatch")]
+    fn test_assert_hdb_value_eq_float_mismatch() {
+        assert_hdb_value_eq(&HdbValue::DOUBLE(3.14), &HdbValue::DOUBLE(3.15));
     }
 }
