@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Python bindings for SAP HANA via hdbconnect"
+publish = false  # Published to PyPI, not crates.io
 readme = "README.md"
 keywords = ["sap", "hana", "python", "database", "pyo3"]
 categories = ["database", "api-bindings"]
