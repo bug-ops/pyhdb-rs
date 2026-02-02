@@ -51,16 +51,15 @@ jobs:
           cache-target: release
           bins: cargo-codspeed
 
-      - name: Build benchmark targets
+      - name: Build benchmark targets for memory
         run: |
-          cargo codspeed build -p hdbconnect-arrow --features test-utils
-          cargo codspeed build -p hdbconnect-mcp --features cache
+          cargo codspeed build -p hdbconnect-arrow --features test-utils -m memory
+          cargo codspeed build -p hdbconnect-mcp --features cache -m memory
 
       - name: Run benchmarks with memory profiling
         uses: CodSpeedHQ/action@v4
         with:
-          mode: instrumentation
-          instruments: memory
+          mode: memory
           run: cargo codspeed run
 
   # Walltime benchmarks (real execution time)
@@ -77,10 +76,10 @@ jobs:
           cache-target: release
           bins: cargo-codspeed
 
-      - name: Build benchmark targets
+      - name: Build benchmark targets for walltime
         run: |
-          cargo codspeed build -p hdbconnect-arrow --features test-utils
-          cargo codspeed build -p hdbconnect-mcp --features cache
+          cargo codspeed build -p hdbconnect-arrow --features test-utils -m walltime
+          cargo codspeed build -p hdbconnect-mcp --features cache -m walltime
 
       - name: Run benchmarks with walltime measurement
         uses: CodSpeedHQ/action@v4
