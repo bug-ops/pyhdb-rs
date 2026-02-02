@@ -33,4 +33,5 @@ jobs:
       - name: Run the benchmarks
         uses: CodSpeedHQ/action@v4
         with:
+          mode: simulation
           run: cargo codspeed run
