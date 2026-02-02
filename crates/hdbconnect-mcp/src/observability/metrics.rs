@@ -188,4 +188,85 @@ mod tests {
         let output = render_metrics();
         assert!(output.is_empty());
     }
+
+    #[test]
+    fn test_record_request_does_not_panic() {
+        record_request("test_method");
+        record_request("tools/call");
+    }
+
+    #[test]
+    fn test_record_query_does_not_panic() {
+        record_query("execute_query", Duration::from_millis(100), 42, false);
+        record_query("execute_query", Duration::from_secs(1), 1000, true);
+    }
+
+    #[test]
+    fn test_record_query_error_does_not_panic() {
+        record_query_error("execute_query", "timeout");
+        record_query_error("execute_dml", "connection_lost");
+    }
+
+    #[test]
+    fn test_record_cache_hit_does_not_panic() {
+        record_cache_hit("schema");
+        record_cache_hit("query");
+    }
+
+    #[test]
+    fn test_record_cache_miss_does_not_panic() {
+        record_cache_miss("schema");
+        record_cache_miss("query");
+    }
+
+    #[test]
+    fn test_record_cache_eviction_does_not_panic() {
+        record_cache_eviction("schema");
+        record_cache_eviction("query");
+    }
+
+    #[test]
+    fn test_set_cache_size_does_not_panic() {
+        set_cache_size("schema", 100);
+        set_cache_size("query", 0);
+        set_cache_size("total", u64::MAX);
+    }
+
+    #[test]
+    fn test_set_pool_stats_does_not_panic() {
+        set_pool_stats(10, 5, 2);
+        set_pool_stats(0, 0, 0);
+        set_pool_stats(100, 100, 0);
+    }
+
+    #[test]
+    fn test_record_pool_wait_time_does_not_panic() {
+        record_pool_wait_time(Duration::from_millis(50));
+        record_pool_wait_time(Duration::from_secs(5));
+        record_pool_wait_time(Duration::ZERO);
+    }
+
+    #[test]
+    fn test_record_pool_error_does_not_panic() {
+        record_pool_error("timeout");
+        record_pool_error("connection_refused");
+    }
+
+    #[test]
+    fn test_metric_constants() {
+        assert!(!METRIC_UPTIME.is_empty());
+        assert!(!METRIC_INFO.is_empty());
+        assert!(!METRIC_REQUESTS.is_empty());
+        assert!(!METRIC_QUERY_DURATION.is_empty());
+        assert!(!METRIC_QUERY_TOTAL.is_empty());
+        assert!(!METRIC_QUERY_ERRORS.is_empty());
+        assert!(!METRIC_QUERY_ROWS.is_empty());
+        assert!(!METRIC_CACHE_HITS.is_empty());
+        assert!(!METRIC_CACHE_MISSES.is_empty());
+        assert!(!METRIC_CACHE_EVICTIONS.is_empty());
+        assert!(!METRIC_CACHE_SIZE.is_empty());
+        assert!(!METRIC_POOL_SIZE.is_empty());
+        assert!(!METRIC_POOL_WAIT_TIME.is_empty());
+        assert!(!METRIC_POOL_ERRORS.is_empty());
+    }
 }
