@@ -182,19 +182,40 @@ Enable in-memory caching for schema metadata and query results.
 hdbconnect-mcp = { version = "0.3", features = ["cache"] }
 ```
 
-## Cache Deployment Notes
+#### Cache Deployment Notes
 
-The cache feature is designed for **single-user MCP deployments** where all queries run under the same database user or service account.
-
-> [!WARNING]
-> **Multi-User Limitation**: Cache keys do not include user context. In multi-tenant deployments with per-user database permissions (row-level security), disable the cache feature or implement user-scoped cache keys to prevent authorization bypass.
-
-For single-user scenarios (typical MCP usage with personal AI assistant or service account), cache is safe and recommended for performance:
+**Performance benefits:**
 - Schema metadata cached for 1 hour (configurable)
-- Query results cached for 60 seconds
+- Query results cached for 60 seconds (configurable)
 - Cache hit latency: 3-6 microseconds vs database round-trip
 
-**Schema staleness**: DDL changes (ALTER TABLE, DROP COLUMN) may not be reflected until TTL expires. For environments with frequent schema changes, reduce TTL or disable caching.
+**Multi-tenant safety:**
+When combined with `auth` feature, cache implements per-user isolation:
+- Different users get different cache keys (includes `user_id` hash)
+- User A cannot read User B's cached query results
+- Cache poisoning attacks affect only attacker's own cache entries
+
+**Single-user deployments:**
+For stdio transport or when auth is disabled, all queries use `_system` user. This is safe and recommended for personal AI assistants or service accounts.
+
+**Schema staleness:**
+DDL changes (ALTER TABLE, DROP COLUMN) may not be reflected until TTL expires. For environments with frequent schema changes, reduce TTL or disable caching.
+
+### `auth`
+
+Enable OIDC/JWT authentication and multi-tenant support.
+
+```toml
+[dependencies]
+hdbconnect-mcp = { version = "0.3", features = ["auth", "http", "cache"] }
+```
+
+**Security features:**
+- JWT validation with RS256/ES256/HS256 algorithms
+- OIDC discovery support
+- Multi-tenant schema isolation via JWT claims
+- Per-user cache isolation when combined with `cache` feature
+- Role-based access control (RBAC) foundations
 
 ## Architecture
 

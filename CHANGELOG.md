@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-02-02
+
 ### Added
 
 - **Cursor.nextset()**: Full multiple result sets support for stored procedures (#58)
@@ -137,6 +139,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Documentation**: Updated cache module docs to explain per-user isolation guarantees
   - **Testing**: 396 tests passing (+4 edge case tests), 92.99% coverage on user_context.rs
   - **Validation**: Security audit PASS, performance validation PASS (zero-cost abstraction), code review APPROVED
+
+### Changed
+
+- **hdbconnect-mcp Phase 3.7**: Documentation updates for Phase 3 completion (Issue #67)
+  - **README Updates**: Removed outdated multi-user cache limitation warnings
+    - Added per-user cache isolation documentation (Phase 3.6 feature)
+    - Added `auth` feature section with security capabilities
+    - Updated cache deployment notes with multi-tenant safety guarantees
+  - **Project Status**: All Phase 3 enterprise features completed
+    - Phase 3.1: DML operations (PR #72)
+    - Phase 3.2: Stored procedures (PR #73)
+    - Phase 3.3: Cache abstraction (PR #75)
+    - Phase 3.4: Cache integration (PR #76)
+    - Phase 3.5: OIDC/JWT authentication (PR #77)
+    - Phase 3.6: Per-user cache isolation (PR #78)
+    - Phase 3.7: Documentation cleanup (current)
 
 ### Security
 

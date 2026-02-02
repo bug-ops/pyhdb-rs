@@ -851,6 +851,45 @@ For Rust integration examples (DataFusion, DuckDB, Parquet export), see [`hdbcon
 
 </details>
 
+## MCP Server for AI Agents
+
+**hdbconnect-mcp** provides AI assistants (Claude Desktop, Cline, VS Code) with secure, programmatic access to SAP HANA databases through the Model Context Protocol.
+
+### Features
+
+- **Read-only mode by default** — Blocks DML/DDL operations
+- **Enterprise authentication** — OIDC/JWT support with multi-tenant isolation
+- **Intelligent caching** — Schema metadata and query results with per-user isolation
+- **HTTP/SSE transport** — Remote access with Bearer token authentication
+- **Connection pooling** — Efficient resource management
+
+### Installation
+
+```bash
+cargo install hdbconnect-mcp
+```
+
+### Quick Start
+
+Add to Claude Desktop config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "hana": {
+      "command": "hdbconnect-mcp",
+      "args": [
+        "--url", "hdbsql://user:password@host:39017",
+        "--read-only", "true",
+        "--row-limit", "10000"
+      ]
+    }
+  }
+}
+```
+
+See [hdbconnect-mcp documentation](crates/hdbconnect-mcp/README.md) for HTTP transport, authentication, and deployment guides.
+
 ## MSRV policy
 
 > [!NOTE]
