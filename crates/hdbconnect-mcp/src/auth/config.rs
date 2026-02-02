@@ -311,8 +311,7 @@ mod tests {
     #[test]
     fn test_jwt_config_debug_redacts_secret() {
         let issuer = Url::parse("https://auth.example.com").unwrap();
-        let config = JwtConfig::new(issuer)
-            .with_hs_secret("super_secret_key".to_string());
+        let config = JwtConfig::new(issuer).with_hs_secret("super_secret_key".to_string());
 
         let debug_str = format!("{:?}", config);
         assert!(!debug_str.contains("super_secret_key"));
