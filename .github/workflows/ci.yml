@@ -186,7 +186,7 @@ jobs:
           cache-dependency-glob: python/uv.lock
           cache-suffix: ubuntu-latest-${{ matrix.python-version }}
       - name: Download wheel
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: test-wheel-ubuntu-latest
           path: python/dist
@@ -234,7 +234,7 @@ jobs:
           cache-dependency-glob: python/uv.lock
           cache-suffix: ${{ matrix.os }}-${{ matrix.python-version }}
       - name: Download wheel
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: test-wheel-${{ matrix.os }}
           path: python/dist
@@ -314,13 +314,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download test wheels (native x86_64)
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: test-wheel-*
           path: dist
           merge-multiple: true
       - name: Download cross wheels
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           pattern: wheels-cross-*
           path: dist
