@@ -4,6 +4,7 @@ High-performance Python driver for SAP HANA with native Arrow support.
 
 [![CI](https://github.com/bug-ops/pyhdb-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/bug-ops/pyhdb-rs/actions/workflows/ci.yml)
 [![Security](https://github.com/bug-ops/pyhdb-rs/actions/workflows/security.yml/badge.svg)](https://github.com/bug-ops/pyhdb-rs/actions/workflows/security.yml)
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json?org=bug-ops&repo=pyhdb-rs&utm_source=badge)](https://codspeed.io/bug-ops/pyhdb-rs?utm_source=badge)
 [![codecov](https://codecov.io/gh/bug-ops/pyhdb-rs/graph/badge.svg?token=75RR61N6FI)](https://codecov.io/gh/bug-ops/pyhdb-rs)
 [![Crates.io](https://img.shields.io/crates/v/hdbconnect-arrow.svg)](https://crates.io/crates/hdbconnect-arrow)
 [![docs.rs](https://img.shields.io/docsrs/hdbconnect-arrow)](https://docs.rs/hdbconnect-arrow)
@@ -62,7 +63,7 @@ git clone https://github.com/bug-ops/pyhdb-rs.git
 cd pyhdb-rs/python
 
 uv venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+source .venv/bin/activate  # On Windows: .venv\\Scripts\\activate
 
 uv pip install maturin
 maturin develop --release
@@ -341,7 +342,7 @@ conn = (ConnectionBuilder()
     .build())
 ```
 
-#### 4. System Root Certificates
+####4. System Root Certificates
 
 Use Mozilla's root certificates (bundled):
 
