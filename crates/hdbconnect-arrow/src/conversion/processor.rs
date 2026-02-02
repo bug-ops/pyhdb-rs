@@ -933,6 +933,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "test-utils")]
     fn test_processor_homogeneous_decimal128() {
         use crate::traits::row::MockRowBuilder;
 
@@ -1122,6 +1123,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "test-utils")]
     fn test_processor_homogeneous_decimal128_with_nulls() {
         use crate::traits::row::MockRowBuilder;
 
