@@ -50,6 +50,7 @@ hdbconnect = "0.32"
 hdbconnect_async = "0.32"
 hdbconnect-arrow = { path = "crates/hdbconnect-arrow", version = "0.3.3" }
 jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
+arc-swap = "1.7"
 lru = "0.16"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.18"

@@ -6,11 +6,11 @@ use std::sync::Arc;
 
 use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Json};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Router, middleware};
 use rmcp::transport::streamable_http_server::session::local::LocalSessionManager;
 use rmcp::transport::streamable_http_server::{StreamableHttpServerConfig, StreamableHttpService};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 use tower_http::cors::CorsLayer;
 use tower_http::timeout::TimeoutLayer;
@@ -25,6 +25,22 @@ use crate::{Error, Result};
 struct HealthResponse {
     status: &'static str,
     version: &'static str,
+}
+
+/// Admin reload request
+#[derive(Debug, Deserialize)]
+struct ReloadRequest {
+    /// Force reload even if config unchanged
+    #[serde(default)]
+    force: bool,
+}
+
+/// Admin reload response
+#[derive(Debug, Serialize)]
+struct ReloadResponse {
+    success: bool,
+    message: String,
+    changed: Vec<String>,
 }
 
 /// HTTP server configuration
@@ -90,6 +106,9 @@ pub async fn run_http(
     {
         app = app.route("/metrics", get(metrics_handler));
     }
+
+    // Admin endpoints (require authentication via middleware)
+    app = app.route("/admin/reload", post(admin_reload_handler));
 
     let app = app
         .nest_service("/mcp", mcp_service)
@@ -199,6 +218,36 @@ async fn metrics_handler() -> impl IntoResponse {
         )],
         crate::observability::render_metrics(),
     )
+}
+
+async fn admin_reload_handler(Json(payload): Json<ReloadRequest>) -> impl IntoResponse {
+    use crate::config::{ReloadResult, ReloadTrigger};
+
+    tracing::info!(
+        trigger = %ReloadTrigger::HttpEndpoint { remote_addr: None },
+        force = payload.force,
+        "Configuration reload requested"
+    );
+
+    // For now, just acknowledge the request
+    // Full implementation would reload config from file/env and update RuntimeConfigHolder
+    let result = ReloadResult::success(vec![]);
+
+    let response = ReloadResponse {
+        success: result.success,
+        message: if result.success {
+            "Configuration reload acknowledged".to_string()
+        } else {
+            result.error.unwrap_or_default()
+        },
+        changed: result.changed,
+    };
+
+    if result.success {
+        (StatusCode::OK, Json(response))
+    } else {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(response))
+    }
 }
 
 #[cfg(test)]

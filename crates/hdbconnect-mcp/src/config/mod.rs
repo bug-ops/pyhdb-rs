@@ -7,10 +7,12 @@ mod dml;
 mod env;
 mod file;
 mod procedure;
+mod runtime;
 
 pub use builder::{Config, ConfigBuilder, TelemetryConfig, TransportConfig, TransportMode};
 pub use dml::{AllowedOperations, DmlConfig, DmlOperation};
 pub use procedure::ProcedureConfig;
+pub use runtime::{ReloadResult, ReloadTrigger, RuntimeConfig, RuntimeConfigHolder};
 
 use crate::Result;
 
