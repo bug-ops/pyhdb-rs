@@ -22,6 +22,8 @@ use rmcp::{ErrorData, ServerHandler as RmcpServerHandler, tool, tool_handler, to
 
 #[cfg(feature = "cache")]
 use crate::cache::{CacheKey, CacheProvider};
+#[cfg(feature = "cache")]
+use crate::constants::CACHE_SYSTEM_USER;
 use crate::constants::{
     DESCRIBE_PROCEDURE_CURRENT_SCHEMA, DESCRIBE_PROCEDURE_TEMPLATE, DESCRIBE_TABLE_CURRENT_SCHEMA,
     DESCRIBE_TABLE_TEMPLATE, DML_SQL_PLACEHOLDER, DML_STATUS_SUCCESS, ELICIT_DML_CONFIRMATION,
@@ -536,6 +538,7 @@ impl ServerHandler {
     #[tool(description = "Execute a SQL SELECT query")]
     async fn execute_sql(
         &self,
+        _context: RequestContext<RoleServer>,
         Parameters(params): Parameters<ExecuteSqlParams>,
     ) -> ToolResult<QueryResult> {
         if self.config.read_only() {
@@ -546,10 +549,13 @@ impl ServerHandler {
             .limit
             .or_else(|| self.query_guard.row_limit().map(NonZeroU32::get));
 
-        // Only cache if in read_only mode (SELECT queries only)
+        // Cache query results when read_only mode is enabled.
+        // TODO: For multi-tenant cache isolation, extract user from context when
+        // MCP protocol supports user context propagation from HTTP layer. Current
+        // implementation uses CACHE_SYSTEM_USER for all requests (single-tenant safe).
         #[cfg(feature = "cache")]
         if self.config.read_only() && self.config.cache().enabled {
-            let cache_key = CacheKey::query_result(&params.sql, row_limit);
+            let cache_key = CacheKey::query_result(&params.sql, row_limit, CACHE_SYSTEM_USER);
             let ttl = self.config.cache().ttl.query;
             let sql = params.sql.clone();
 

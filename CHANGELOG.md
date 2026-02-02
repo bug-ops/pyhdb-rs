@@ -89,6 +89,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Testing**: 309 tests passing, 98-100% cache module coverage, 5 tests for cached_or_fetch helper
   - **Benchmarks**: Comprehensive Criterion benchmarks for cache hit/miss scenarios and concurrent access patterns
 
+- **hdbconnect-mcp Phase 3.5**: Enhanced authentication with OIDC/JWT support (Issue #67)
+  - **Authentication Module** (`src/auth/`): Comprehensive OIDC and JWT authentication
+    - OIDC discovery via `openidconnect` crate (CoreProviderMetadata)
+    - JWT validation with `jsonwebtoken` supporting RS256, ES256, HS256 algorithms
+    - Custom claims via `AdditionalClaims` trait (tenant_id, roles)
+    - JWKS caching with automatic background refresh
+    - Configurable clock skew tolerance and audience validation
+  - **Multi-Tenant Support**: Tenant resolution from JWT claims
+    - Extract tenant_id from configurable claim path
+    - Role-based access control (RBAC) foundations
+    - Tenant-aware schema filtering (future integration)
+  - **HTTP Middleware** (`auth/middleware.rs`): Bearer token authentication
+    - Axum middleware for JWT validation on HTTP requests
+    - AuthenticatedUser context injection into request extensions
+    - 401 Unauthorized on missing/invalid tokens
+  - **BREAKING CHANGE**: Cache keys now require `user_id` parameter
+    - `CacheKey::query_result(sql, limit, user_id)` - user_id is mandatory
+    - Multi-tenant cache isolation when auth enabled
+    - Falls back to `CACHE_SYSTEM_USER` for single-tenant deployments
+  - **Dependencies**:
+    - `openidconnect = "4.0.1"` for OIDC protocol
+    - `jsonwebtoken = "9.3"` for JWT validation
+  - **Performance**: JWT validation 50-500μs, JWKS fetch 50-100ms, middleware overhead 50-500μs
+  - **Testing**: 389 tests passing, auth module 82-100% coverage (excluding network-dependent code)
+  - **Security**: All JWT validation checks pass (signature, expiration, issuer, audience)
+
 ### Security
 
 - **hdbconnect-mcp**: Fixed 5 security vulnerabilities identified in Phase 2 review

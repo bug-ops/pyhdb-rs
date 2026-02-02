@@ -104,3 +104,10 @@ pub const PROCEDURE_PARAMS_PLACEHOLDER: &str = "<parameters>";
 
 /// Procedure status: success
 pub const PROCEDURE_STATUS_SUCCESS: &str = "success";
+
+// Cache-related constants
+
+/// Default user identifier for single-tenant/anonymous cache keys.
+/// Used when authentication is disabled but cache is enabled.
+#[cfg(feature = "cache")]
+pub const CACHE_SYSTEM_USER: &str = "_system";

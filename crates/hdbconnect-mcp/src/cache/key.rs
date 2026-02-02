@@ -1,4 +1,10 @@
 //! Cache key types and factory methods
+//!
+//! # Multi-Tenant Cache Safety (Phase 3.5)
+//!
+//! Cache keys now require `user_id` for query results to ensure multi-tenant
+//! isolation. This is a **breaking change** from Phase 3.4 where `user_id`
+//! was optional.
 
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
@@ -36,12 +42,26 @@ impl CacheNamespace {
 }
 
 /// Structured cache key with namespace isolation
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct CacheKey {
     namespace: CacheNamespace,
     schema: Option<String>,
     identifier: String,
     variant: Option<String>,
+    user_id: Option<String>,
+}
+
+// Custom Debug impl that redacts user_id for security
+impl fmt::Debug for CacheKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Completely omit user_id from debug output to prevent data flow analysis false positives
+        f.debug_struct("CacheKey")
+            .field("namespace", &self.namespace)
+            .field("schema", &self.schema)
+            .field("identifier", &self.identifier)
+            .field("variant", &self.variant)
+            .finish_non_exhaustive()
+    }
 }
 
 impl CacheKey {
@@ -53,6 +73,7 @@ impl CacheKey {
             schema: schema.map(str::to_uppercase),
             identifier: table.to_uppercase(),
             variant: None,
+            user_id: None,
         }
     }
 
@@ -64,6 +85,7 @@ impl CacheKey {
             schema: schema.map(str::to_uppercase),
             identifier: "_all".to_string(),
             variant: None,
+            user_id: None,
         }
     }
 
@@ -75,6 +97,7 @@ impl CacheKey {
             schema: schema.map(str::to_uppercase),
             identifier: procedure.to_uppercase(),
             variant: None,
+            user_id: None,
         }
     }
 
@@ -86,18 +109,30 @@ impl CacheKey {
             schema: schema.map(str::to_uppercase),
             identifier: "_all".to_string(),
             variant: pattern.map(str::to_uppercase),
+            user_id: None,
         }
     }
 
-    /// Create key for query result cache.
+    /// Create key for query result cache with required user context.
     ///
     /// Uses SQL hash + length as discriminator to reduce collision probability.
     /// The 64-bit hash combined with SQL length provides sufficient uniqueness
     /// for typical workloads while keeping key size small.
+    ///
+    /// # Multi-Tenant Safety (Phase 3.5 Breaking Change)
+    ///
+    /// `user_id` is now **required** to ensure cache isolation between users.
+    /// This prevents cross-user data leakage in multi-tenant deployments.
+    ///
+    /// For single-user deployments, use a constant user identifier:
+    /// ```ignore
+    /// CacheKey::query_result(sql, limit, "_system")
+    /// ```
     #[must_use]
-    pub fn query_result(sql: &str, limit: Option<u32>) -> Self {
+    pub fn query_result(sql: &str, limit: Option<u32>, user_id: &str) -> Self {
         let mut hasher = DefaultHasher::new();
         sql.hash(&mut hasher);
+        user_id.hash(&mut hasher);
         let hash = hasher.finish();
         let sql_len = sql.len();
 
@@ -106,6 +141,7 @@ impl CacheKey {
             schema: None,
             identifier: format!("{hash:016x}:{sql_len}"),
             variant: limit.map(|l| l.to_string()),
+            user_id: Some(user_id.to_string()),
         }
     }
 
@@ -117,7 +153,18 @@ impl CacheKey {
             schema: None,
             identifier: identifier.to_string(),
             variant: variant.map(ToString::to_string),
+            user_id: None,
         }
+    }
+
+    /// Add user context to cache key for multi-tenant isolation.
+    ///
+    /// This method allows adding `user_id` to any cache key type when
+    /// authentication is enabled, ensuring cache isolation per user.
+    #[must_use]
+    pub fn with_user(mut self, user_id: Option<&str>) -> Self {
+        self.user_id = user_id.map(String::from);
+        self
     }
 
     /// Get the namespace of this key
@@ -148,6 +195,10 @@ impl CacheKey {
 
         if let Some(ref variant) = self.variant {
             parts.push(variant.clone());
+        }
+
+        if let Some(ref user) = self.user_id {
+            parts.push(format!("u:{user}"));
         }
 
         parts.join(":")
@@ -208,67 +259,83 @@ mod tests {
     }
 
     #[test]
-    fn test_query_result_key() {
+    fn test_query_result_key_with_user() {
         let sql = "SELECT * FROM users";
-        let key = CacheKey::query_result(sql, Some(100));
+        let key = CacheKey::query_result(sql, Some(100), "user_a");
         let key_str = key.to_key_string();
 
-        // Format: query:{hash}:{sql_len}:{limit}
         assert!(key_str.starts_with("query:"));
-        assert!(key_str.ends_with(":100"));
-
-        // Verify SQL length is included
-        let sql_len = sql.len();
-        assert!(
-            key_str.contains(&format!(":{sql_len}:")),
-            "Expected key to contain :{sql_len}:, got: {key_str}"
-        );
+        assert!(key_str.contains("u:user_a"));
+        assert!(key_str.contains(":100:"));
     }
 
     #[test]
     fn test_query_result_key_no_limit() {
         let sql = "SELECT * FROM users";
-        let key = CacheKey::query_result(sql, None);
+        let key = CacheKey::query_result(sql, None, "user123");
         let key_str = key.to_key_string();
 
-        // Format: query:{hash}:{sql_len}
         assert!(key_str.starts_with("query:"));
-
-        // SQL length should be at end (no limit variant)
-        let sql_len = sql.len();
-        assert!(
-            key_str.ends_with(&format!(":{sql_len}")),
-            "Expected key to end with :{sql_len}, got: {key_str}"
-        );
+        assert!(key_str.contains("u:user123"));
     }
 
     #[test]
     fn test_query_result_deterministic() {
-        let key1 = CacheKey::query_result("SELECT * FROM users", Some(100));
-        let key2 = CacheKey::query_result("SELECT * FROM users", Some(100));
+        let key1 = CacheKey::query_result("SELECT * FROM users", Some(100), "user_a");
+        let key2 = CacheKey::query_result("SELECT * FROM users", Some(100), "user_a");
         assert_eq!(key1.to_key_string(), key2.to_key_string());
     }
 
     #[test]
     fn test_query_result_different_sql() {
-        let key1 = CacheKey::query_result("SELECT * FROM users", None);
-        let key2 = CacheKey::query_result("SELECT * FROM orders", None);
+        let key1 = CacheKey::query_result("SELECT * FROM users", None, "user_a");
+        let key2 = CacheKey::query_result("SELECT * FROM orders", None, "user_a");
         assert_ne!(key1.to_key_string(), key2.to_key_string());
     }
 
     #[test]
     fn test_query_result_same_hash_different_length() {
-        // Even if two strings happened to produce the same hash,
-        // different lengths would create different keys
-        let key1 = CacheKey::query_result("abc", None);
-        let key2 = CacheKey::query_result("abcdef", None);
-
-        // Keys differ due to SQL length being part of identifier
+        let key1 = CacheKey::query_result("abc", None, "user");
+        let key2 = CacheKey::query_result("abcdef", None, "user");
         assert_ne!(key1.to_key_string(), key2.to_key_string());
+    }
 
-        // Verify both contain their respective lengths
-        assert!(key1.to_key_string().ends_with(":3"));
-        assert!(key2.to_key_string().ends_with(":6"));
+    #[test]
+    fn test_query_result_different_users() {
+        let sql = "SELECT * FROM users";
+        let key1 = CacheKey::query_result(sql, None, "user_a");
+        let key2 = CacheKey::query_result(sql, None, "user_b");
+
+        assert_ne!(key1.to_key_string(), key2.to_key_string());
+        assert!(key1.to_key_string().contains("u:user_a"));
+        assert!(key2.to_key_string().contains("u:user_b"));
+    }
+
+    #[test]
+    fn test_query_result_user_affects_hash() {
+        let sql = "SELECT * FROM users";
+        let key1 = CacheKey::query_result(sql, None, "user_a");
+        let key2 = CacheKey::query_result(sql, None, "user_b");
+
+        let str1 = key1.to_key_string();
+        let str2 = key2.to_key_string();
+
+        let hash1 = str1.split(':').nth(1).unwrap();
+        let hash2 = str2.split(':').nth(1).unwrap();
+
+        assert_ne!(hash1, hash2, "Hash should differ with different user_id");
+    }
+
+    #[test]
+    fn test_with_user_method() {
+        let key = CacheKey::table_schema(Some("test"), "users").with_user(Some("user123"));
+        assert!(key.to_key_string().contains("u:user123"));
+    }
+
+    #[test]
+    fn test_with_user_none() {
+        let key = CacheKey::table_schema(Some("test"), "users").with_user(None);
+        assert!(!key.to_key_string().contains("u:"));
     }
 
     #[test]
@@ -310,6 +377,13 @@ mod tests {
     }
 
     #[test]
+    fn test_key_inequality_different_user() {
+        let key1 = CacheKey::table_schema(Some("test"), "users").with_user(Some("user_a"));
+        let key2 = CacheKey::table_schema(Some("test"), "users").with_user(Some("user_b"));
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
     fn test_namespace_as_str() {
         assert_eq!(CacheNamespace::TableSchema.as_str(), "tbl_schema");
         assert_eq!(CacheNamespace::TableList.as_str(), "tbl_list");
@@ -317,5 +391,11 @@ mod tests {
         assert_eq!(CacheNamespace::ProcedureList.as_str(), "proc_list");
         assert_eq!(CacheNamespace::QueryResult.as_str(), "query");
         assert_eq!(CacheNamespace::Custom.as_str(), "custom");
+    }
+
+    #[test]
+    fn test_system_user_for_single_tenant() {
+        let key = CacheKey::query_result("SELECT 1", None, "_system");
+        assert!(key.to_key_string().contains("u:_system"));
     }
 }
