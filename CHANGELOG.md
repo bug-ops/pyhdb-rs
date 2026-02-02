@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **CI/CD**: MCP server binary releases with trusted publishing
+  - Cross-platform binaries (Linux x86_64/aarch64, macOS x86_64/ARM64, Windows x86_64)
+  - Static musl builds for Linux (no glibc dependency)
+  - SHA256 checksums for all binary artifacts
+  - Automated crates.io publication via OIDC trusted publishing
+  - Binary stripping for reduced file size
+  - Cross-compilation support via `cross` tool for Linux ARM64
+  - Installation instructions auto-appended to GitHub Releases
+  - Version validation (tag must match Cargo.toml)
+
 ## [0.3.3] - 2026-02-02
 
 ### Added

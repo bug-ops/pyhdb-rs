@@ -96,6 +96,103 @@ jobs:
           path: python/dist/*.tar.gz
           retention-days: 3
 
+  build-mcp-binaries:
+    name: Build MCP server (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64 (glibc)
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+            use_cross: false
+          # Linux x86_64 (musl - static binary)
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            archive: tar.gz
+            use_cross: false
+          # Linux aarch64 (glibc)
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            archive: tar.gz
+            use_cross: true
+          # macOS x86_64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive: tar.gz
+            use_cross: false
+          # macOS ARM64 (M1/M2)
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: tar.gz
+            use_cross: false
+          # Windows x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
+            use_cross: false
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+      - name: Install cross (for cross-compilation)
+        if: matrix.use_cross
+        run: cargo binstall --no-confirm cross
+      - name: Install musl tools (Linux musl)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: mcp-${{ matrix.target }}
+          workspaces: crates/hdbconnect-mcp -> target
+      - name: Get binary name
+        id: binary
+        run: |
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            echo "name=hdbconnect-mcp.exe" >> $GITHUB_OUTPUT
+          else
+            echo "name=hdbconnect-mcp" >> $GITHUB_OUTPUT
+          fi
+        shell: bash
+      - name: Build binary (cross)
+        if: matrix.use_cross
+        run: cross build --package hdbconnect-mcp --release --target ${{ matrix.target }}
+      - name: Build binary (native)
+        if: "!matrix.use_cross"
+        run: cargo build --package hdbconnect-mcp --release --target ${{ matrix.target }}
+      - name: Strip binary (Linux/macOS, native only)
+        if: matrix.os != 'windows-latest' && !matrix.use_cross
+        run: strip target/${{ matrix.target }}/release/${{ steps.binary.outputs.name }}
+      - name: Create archive (Unix)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../hdbconnect-mcp-${{ matrix.target }}.tar.gz ${{ steps.binary.outputs.name }}
+          cd ../../..
+          shasum -a 256 hdbconnect-mcp-${{ matrix.target }}.tar.gz > hdbconnect-mcp-${{ matrix.target }}.tar.gz.sha256
+      - name: Create archive (Windows)
+        if: matrix.archive == 'zip'
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a ../../../hdbconnect-mcp-${{ matrix.target }}.zip ${{ steps.binary.outputs.name }}
+          cd ../../..
+          certUtil -hashfile hdbconnect-mcp-${{ matrix.target }}.zip SHA256 > hdbconnect-mcp-${{ matrix.target }}.zip.sha256
+        shell: cmd
+      - name: Upload archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: mcp-binary-${{ matrix.target }}
+          path: hdbconnect-mcp-${{ matrix.target }}.*
+          retention-days: 3
+
   publish-pypi:
     name: Publish to PyPI
     needs: [build-wheels, build-sdist]
@@ -128,23 +225,37 @@ jobs:
 
   publish-crates:
     name: Publish to crates.io
-    needs: [build-wheels]
+    needs: [build-wheels, build-mcp-binaries]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: release
     permissions:
-      id-token: write
+      id-token: write  # Required for OIDC trusted publishing to crates.io
       contents: read
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Authenticate with crates.io
+      - name: Verify version matches tag
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          CARGO_VERSION=$(grep '^version' Cargo.toml | grep -m1 'version' | sed 's/.*version = "\(.*\)".*/\1/')
+          if [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
+            echo "Tag version ($TAG_VERSION) does not match Cargo.toml version ($CARGO_VERSION)"
+            exit 1
+          fi
+      # OIDC trusted publishing - no manual token needed
+      # Requires trusted publisher configured on crates.io for each crate
+      # See .github/TRUSTED_PUBLISHING.md for setup instructions
+      - name: Authenticate with crates.io (OIDC)
         uses: rust-lang/crates-io-auth-action@v1
         id: auth
-      - name: Publish hdbconnect-arrow
-        run: cargo publish -p hdbconnect-arrow --no-verify
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Publish crates to crates.io
+        uses: katyo/publish-crates@v2
+        with:
+          registry-token: ${{ steps.auth.outputs.token }}
+          ignore-unpublished-changes: true
+          publish-delay: 15000  # 15s delay between publishes
 
   create-release:
     name: Create GitHub Release
@@ -163,3 +274,81 @@ jobs:
           files: |
             artifacts/**/*.whl
             artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+            artifacts/**/*.sha256
+
+  update-release-notes:
+    name: Update Release Notes
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Get version
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Update release with MCP installation instructions
+        uses: softprops/action-gh-release@v2
+        with:
+          append_body: true
+          body: |
+
+            ## MCP Server Installation
+
+            ### Binary Installation
+
+            Download the appropriate binary for your platform:
+
+            - **Linux x86_64 (glibc)**: `hdbconnect-mcp-x86_64-unknown-linux-gnu.tar.gz`
+            - **Linux x86_64 (musl, static)**: `hdbconnect-mcp-x86_64-unknown-linux-musl.tar.gz`
+            - **Linux aarch64**: `hdbconnect-mcp-aarch64-unknown-linux-gnu.tar.gz`
+            - **macOS x86_64**: `hdbconnect-mcp-x86_64-apple-darwin.tar.gz`
+            - **macOS ARM64**: `hdbconnect-mcp-aarch64-apple-darwin.tar.gz`
+            - **Windows x64**: `hdbconnect-mcp-x86_64-pc-windows-msvc.zip`
+
+            Extract and add to your PATH:
+
+            ```bash
+            # Linux/macOS
+            tar xzf hdbconnect-mcp-*.tar.gz
+            sudo mv hdbconnect-mcp /usr/local/bin/
+
+            # Verify installation
+            hdbconnect-mcp --version
+            ```
+
+            ### Cargo Installation
+
+            ```bash
+            cargo install hdbconnect-mcp
+            ```
+
+            ### Claude Desktop Integration
+
+            Add to `~/.claude/claude_desktop_config.json`:
+
+            ```json
+            {
+              "mcpServers": {
+                "hana": {
+                  "command": "hdbconnect-mcp",
+                  "args": [
+                    "--url", "hdbsql://user:password@host:39017",
+                    "--read-only", "true",
+                    "--row-limit", "10000"
+                  ]
+                }
+              }
+            }
+            ```
+
+            ## Python Package Installation
+
+            ```bash
+            pip install pyhdb_rs
+            ```
+
+            See [README](https://github.com/bug-ops/pyhdb-rs#readme) for detailed usage.
+
+            ## Checksums
+
+            SHA256 checksums are available for all binary artifacts (`.sha256` files).
