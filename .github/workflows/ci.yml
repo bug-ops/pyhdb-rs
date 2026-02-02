@@ -23,9 +23,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@nightly
+      - uses: moonrepo/setup-rust@v1
         with:
+          channel: nightly
           components: rustfmt
+          cache: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Check formatting
         run: cargo +nightly fmt --check
 
@@ -35,15 +39,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: moonrepo/setup-rust@v1
         with:
           components: clippy
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ubuntu-latest
-          cache-targets: false  # sccache handles compilation artifacts
+          cache-target: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - name: Clippy
         run: cargo clippy --workspace --all-features -- -D warnings
         env:
@@ -77,17 +79,16 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-      - uses: Swatinem/rust-cache@v2
+      - uses: moonrepo/setup-rust@v1
         with:
-          shared-key: ${{ matrix.os }}
-          cache-targets: false  # sccache handles compilation artifacts
+          bins: cargo-nextest
+          cache-target: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - uses: taiki-e/install-action@nextest
       - name: Run tests
         # Exclude hdbconnect-py: PyO3 abi3 crates can't link Python standalone.
         # hdbconnect-py is tested via Python tests (test-python job).
@@ -105,11 +106,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: v0.13.0
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -121,7 +117,6 @@ jobs:
           sccache: true
         env:
           SCCACHE_GHA_ENABLED: "true"
-          SCCACHE_GHA_VERSION: "1"
       - name: Upload wheel
         uses: actions/upload-artifact@v6
         with:
@@ -141,11 +136,6 @@ jobs:
         os: [macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: v0.13.0
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -157,7 +147,6 @@ jobs:
           sccache: true
         env:
           SCCACHE_GHA_ENABLED: "true"
-          SCCACHE_GHA_VERSION: "1"
       - name: Upload wheel
         uses: actions/upload-artifact@v6
         with:
@@ -276,13 +265,6 @@ jobs:
           # (advapi32-sys, username) support Windows ARM64
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: v0.13.0
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -296,9 +278,6 @@ jobs:
           sccache: true
         env:
           SCCACHE_GHA_ENABLED: "true"
-          SCCACHE_GHA_VERSION: "1"
-          # Increase cache size for cross-compilation (more targets = more artifacts)
-          SCCACHE_CACHE_SIZE: "2G"
       - name: Upload wheels
         uses: actions/upload-artifact@v6
         with:
@@ -339,17 +318,16 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-      - uses: Swatinem/rust-cache@v2
+      - uses: moonrepo/setup-rust@v1
         with:
-          shared-key: ubuntu-latest
-          cache-targets: false  # sccache handles compilation artifacts
+          bins: cargo-llvm-cov
+          cache-target: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate coverage
         # Exclude hdbconnect-py: PyO3 abi3 crates can't link Python standalone.
         run: cargo llvm-cov --workspace --all-features --exclude hdbconnect-py --lcov --output-path lcov.info
@@ -375,15 +353,13 @@ jobs:
         run: |
           MSRV=$(grep '^rust-version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
           echo "version=$MSRV" >> $GITHUB_OUTPUT
-      - uses: dtolnay/rust-toolchain@master
+      - uses: moonrepo/setup-rust@v1
         with:
-          toolchain: ${{ steps.msrv.outputs.version }}
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: ubuntu-latest
-          cache-targets: false  # sccache handles compilation artifacts
+          channel: ${{ steps.msrv.outputs.version }}
+          cache-target: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - name: Check MSRV
         run: cargo check --workspace
         env:
