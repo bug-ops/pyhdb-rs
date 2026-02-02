@@ -5,9 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.4] - 2026-02-02
 
 ### Added
+
+- **CodSpeed Integration**: Continuous performance benchmarking
+  - CPU simulation benchmarks (instruction counting for deterministic results)
+  - Memory profiling (heap allocation tracking)
+  - Walltime benchmarks (real execution time measurement)
+  - Python benchmarks via pytest-codspeed
+  - CodSpeed badge in README
 
 - **hdbconnect-mcp Phase 4.5**: Configuration reload infrastructure
   - `RuntimeConfig` type for hot-reloadable parameters (row_limit, query_timeout, log_level, cache TTL)
@@ -33,6 +40,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Cross-compilation support via `cross` tool for Linux ARM64
   - Installation instructions auto-appended to GitHub Releases
   - Version validation (tag must match Cargo.toml)
+
+### Changed
+
+- **CI**: Migrate to moonrepo/setup-rust for unified Rust toolchain management
+- **Tests**: Improved code coverage to ~87% with comprehensive unit tests for config, auth, helpers, security, and observability modules
+
+### Dependencies
+
+- Updated GitHub Actions dependencies (actions/checkout, actions/setup-python, actions/upload-artifact)
+- Added `pytest-codspeed` for Python benchmark integration
+- Replaced `criterion` with `codspeed-criterion-compat` for Rust benchmarks
 
 ## [0.3.3] - 2026-02-02
 
