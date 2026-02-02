@@ -26,10 +26,10 @@ jobs:
           bins: cargo-codspeed
 
       - name: Build the benchmark target(s)
-        run: cargo codspeed build
+        run: cargo codspeed build --workspace --exclude hdbconnect-py
 
       - name: Run the benchmarks
         uses: CodSpeedHQ/action@v4
         with:
           mode: simulation
-          run: cargo codspeed run
+          run: cargo codspeed run --workspace --exclude hdbconnect-py
