@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **hdbconnect-mcp Phase 4.5**: Configuration reload infrastructure
+  - `RuntimeConfig` type for hot-reloadable parameters (row_limit, query_timeout, log_level, cache TTL)
+  - `RuntimeConfigHolder` with lock-free reads via `arc-swap`
+  - `POST /admin/reload` HTTP endpoint (requires authentication)
+  - `ReloadTrigger` enum for audit logging (Signal, HttpEndpoint, Manual)
+  - Separation of static vs runtime config parameters
+
 - **hdbconnect-mcp Phase 4**: Prometheus metrics infrastructure (`metrics` feature)
   - Server metrics: uptime, version info, request counter
   - Query performance: duration histogram, query count, row count, error tracking

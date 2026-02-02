@@ -63,6 +63,7 @@ telemetry = [
 
 [dependencies]
 anyhow = { workspace = true }
+arc-swap = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true, optional = true }
 clap = { workspace = true, features = ["derive", "env"] }
