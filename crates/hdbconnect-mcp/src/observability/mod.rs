@@ -1,8 +1,17 @@
 //! Observability module for tracing, metrics, and logging
 
+#[cfg(feature = "metrics")]
+mod metrics;
+
 #[cfg(feature = "telemetry")]
 mod telemetry;
 
+#[cfg(feature = "metrics")]
+pub use metrics::{
+    init_metrics, record_cache_eviction, record_cache_hit, record_cache_miss, record_pool_error,
+    record_pool_wait_time, record_query, record_query_error, record_request, render_metrics,
+    set_cache_size, set_pool_stats,
+};
 #[cfg(feature = "telemetry")]
 pub use telemetry::init_telemetry;
 
@@ -11,6 +20,11 @@ use crate::config::TelemetryConfig;
 
 /// Initialize observability stack
 pub fn init_observability(config: &TelemetryConfig) -> Result<()> {
+    #[cfg(feature = "metrics")]
+    {
+        init_metrics()?;
+    }
+
     #[cfg(feature = "telemetry")]
     {
         init_telemetry(config)?;

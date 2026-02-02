@@ -83,8 +83,15 @@ pub async fn run_http(
     // Build CORS layer with configurable origin
     let cors = build_cors_layer(&http_config);
 
-    let app = Router::new()
-        .route("/health", get(health_handler))
+    #[allow(unused_mut)]
+    let mut app = Router::new().route("/health", get(health_handler));
+
+    #[cfg(feature = "metrics")]
+    {
+        app = app.route("/metrics", get(metrics_handler));
+    }
+
+    let app = app
         .nest_service("/mcp", mcp_service)
         .layer(middleware::from_fn_with_state(
             axum::extract::Extension(auth_config.clone()),
@@ -181,6 +188,17 @@ async fn health_handler() -> impl IntoResponse {
         status: "ok",
         version: env!("CARGO_PKG_VERSION"),
     })
+}
+
+#[cfg(feature = "metrics")]
+async fn metrics_handler() -> impl IntoResponse {
+    (
+        [(
+            header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )],
+        crate::observability::render_metrics(),
+    )
 }
 
 #[cfg(test)]

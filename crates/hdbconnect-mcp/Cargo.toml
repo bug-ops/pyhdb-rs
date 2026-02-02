@@ -50,6 +50,10 @@ http = [
     "dep:tokio-stream",
     "dep:tokio-util",
 ]
+metrics = [
+    "dep:metrics",
+    "dep:metrics-exporter-prometheus",
+]
 telemetry = [
     "dep:opentelemetry",
     "dep:opentelemetry-otlp",
@@ -67,6 +71,8 @@ futures = { workspace = true }
 hdbconnect = { workspace = true }
 hdbconnect_async = { workspace = true }
 jsonwebtoken = { workspace = true, optional = true }
+metrics = { workspace = true, optional = true }
+metrics-exporter-prometheus = { workspace = true, optional = true }
 openidconnect = { workspace = true, optional = true }
 opentelemetry = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, features = ["grpc-tonic"], optional = true }
