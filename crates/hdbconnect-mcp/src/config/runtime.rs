@@ -207,6 +207,39 @@ mod tests {
     }
 
     #[test]
+    fn test_runtime_config_holder_load_full() {
+        let config = create_test_runtime_config();
+        let holder = RuntimeConfigHolder::new(config);
+
+        let loaded = holder.load();
+        assert_eq!(loaded.log_level, "info");
+    }
+
+    #[test]
+    fn test_runtime_config_debug() {
+        let config = create_test_runtime_config();
+        let debug_str = format!("{config:?}");
+        assert!(debug_str.contains("RuntimeConfig"));
+        assert!(debug_str.contains("row_limit"));
+    }
+
+    #[test]
+    fn test_runtime_config_clone() {
+        let config = create_test_runtime_config();
+        let cloned = config.clone();
+        assert_eq!(cloned.query_timeout, config.query_timeout);
+        assert_eq!(cloned.log_level, config.log_level);
+    }
+
+    #[test]
+    fn test_runtime_config_holder_debug() {
+        let config = create_test_runtime_config();
+        let holder = RuntimeConfigHolder::new(config);
+        let debug_str = format!("{holder:?}");
+        assert!(debug_str.contains("RuntimeConfigHolder"));
+    }
+
+    #[test]
     fn test_reload_trigger_display() {
         assert_eq!(ReloadTrigger::Signal.to_string(), "SIGHUP");
         assert_eq!(ReloadTrigger::Manual.to_string(), "manual");
@@ -220,6 +253,34 @@ mod tests {
     }
 
     #[test]
+    fn test_reload_trigger_display_http_no_addr() {
+        assert_eq!(
+            ReloadTrigger::HttpEndpoint { remote_addr: None }.to_string(),
+            "HTTP /admin/reload"
+        );
+    }
+
+    #[test]
+    fn test_reload_trigger_debug() {
+        let trigger = ReloadTrigger::Signal;
+        let debug_str = format!("{trigger:?}");
+        assert!(debug_str.contains("Signal"));
+    }
+
+    #[test]
+    fn test_reload_trigger_clone() {
+        let trigger = ReloadTrigger::HttpEndpoint {
+            remote_addr: Some("127.0.0.1".to_string()),
+        };
+        let cloned = trigger.clone();
+        if let ReloadTrigger::HttpEndpoint { remote_addr } = cloned {
+            assert_eq!(remote_addr, Some("127.0.0.1".to_string()));
+        } else {
+            panic!("Expected HttpEndpoint");
+        }
+    }
+
+    #[test]
     fn test_reload_result_success() {
         let result = ReloadResult::success(vec!["row_limit".to_string()]);
         assert!(result.success);
@@ -228,10 +289,52 @@ mod tests {
     }
 
     #[test]
+    fn test_reload_result_success_empty() {
+        let result = ReloadResult::success(vec![]);
+        assert!(result.success);
+        assert!(result.error.is_none());
+        assert!(result.changed.is_empty());
+    }
+
+    #[test]
     fn test_reload_result_failure() {
         let result = ReloadResult::failure("Invalid config".to_string());
         assert!(!result.success);
         assert_eq!(result.error, Some("Invalid config".to_string()));
         assert!(result.changed.is_empty());
+    }
+
+    #[test]
+    fn test_reload_result_debug() {
+        let result = ReloadResult::success(vec!["test".to_string()]);
+        let debug_str = format!("{result:?}");
+        assert!(debug_str.contains("ReloadResult"));
+        assert!(debug_str.contains("success"));
+    }
+
+    #[test]
+    fn test_reload_result_clone() {
+        let result = ReloadResult::success(vec!["a".to_string(), "b".to_string()]);
+        let cloned = result.clone();
+        assert_eq!(cloned.success, result.success);
+        assert_eq!(cloned.changed.len(), 2);
+    }
+
+    #[test]
+    fn test_runtime_config_holder_row_limit_none() {
+        let config = RuntimeConfig {
+            row_limit: None,
+            query_timeout: Duration::from_secs(30),
+            log_level: "info".to_string(),
+            #[cfg(feature = "cache")]
+            cache_default_ttl: Duration::from_secs(300),
+            #[cfg(feature = "cache")]
+            cache_schema_ttl: Duration::from_secs(3600),
+            #[cfg(feature = "cache")]
+            cache_query_ttl: Duration::from_secs(60),
+        };
+        let holder = RuntimeConfigHolder::new(config);
+
+        assert!(holder.row_limit().is_none());
     }
 }

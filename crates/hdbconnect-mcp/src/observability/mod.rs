@@ -107,4 +107,49 @@ mod tests {
     fn test_shutdown_observability_no_panic() {
         shutdown_observability();
     }
+
+    #[test]
+    fn test_telemetry_config_with_json_logs_false() {
+        let config = TelemetryConfig {
+            otlp_endpoint: None,
+            service_name: "svc".to_string(),
+            log_level: "warn".to_string(),
+            json_logs: false,
+        };
+
+        assert!(!config.json_logs);
+        assert_eq!(config.log_level, "warn");
+    }
+
+    #[test]
+    fn test_telemetry_config_empty_log_level() {
+        let config = TelemetryConfig {
+            otlp_endpoint: None,
+            service_name: "svc".to_string(),
+            log_level: String::new(),
+            json_logs: false,
+        };
+
+        assert!(config.log_level.is_empty());
+    }
+
+    #[test]
+    fn test_telemetry_config_debug_trait() {
+        let config = TelemetryConfig::default();
+        let debug_str = format!("{config:?}");
+        assert!(debug_str.contains("TelemetryConfig"));
+    }
+
+    #[test]
+    fn test_telemetry_config_clone() {
+        let config = TelemetryConfig {
+            otlp_endpoint: Some("http://localhost:4317".to_string()),
+            service_name: "test".to_string(),
+            log_level: "info".to_string(),
+            json_logs: true,
+        };
+        let cloned = config.clone();
+        assert_eq!(cloned.otlp_endpoint, config.otlp_endpoint);
+        assert_eq!(cloned.service_name, config.service_name);
+    }
 }

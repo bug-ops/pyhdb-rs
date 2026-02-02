@@ -297,4 +297,109 @@ mod tests {
         let suffix = SchemaMappingStrategy::Suffix("DATA".to_string());
         assert!(matches!(suffix, SchemaMappingStrategy::Suffix(_)));
     }
+
+    #[test]
+    fn test_schema_mapping_lookup() {
+        let mut map = HashMap::new();
+        map.insert("tenant1".to_string(), "SCHEMA_1".to_string());
+        map.insert("tenant2".to_string(), "SCHEMA_2".to_string());
+
+        let lookup = SchemaMappingStrategy::Lookup(map);
+        assert!(matches!(lookup, SchemaMappingStrategy::Lookup(_)));
+    }
+
+    #[test]
+    fn test_jwt_config_debug_redacts_secret() {
+        let issuer = Url::parse("https://auth.example.com").unwrap();
+        let config = JwtConfig::new(issuer).with_hs_secret("super_secret_key".to_string());
+
+        let debug_str = format!("{:?}", config);
+        assert!(!debug_str.contains("super_secret_key"));
+        assert!(debug_str.contains("issuer"));
+    }
+
+    #[test]
+    fn test_jwt_config_default() {
+        let config = JwtConfig::default();
+        assert!(config.audience.is_empty());
+        assert!(config.jwks_uri.is_none());
+        assert!(config.hs_secret.is_none());
+        assert_eq!(config.clock_skew, Duration::from_secs(60));
+        assert_eq!(config.jwks_cache_ttl, Duration::from_secs(3600));
+        assert_eq!(config.jwks_refresh_interval, Duration::from_secs(300));
+    }
+
+    #[test]
+    fn test_auth_config_new_const() {
+        let config = AuthConfig::new();
+        assert!(!config.is_enabled());
+        assert!(!config.is_jwt_mode());
+        assert!(config.jwt_config().is_none());
+    }
+
+    #[test]
+    fn test_auth_config_jwt_config_returns_some() {
+        let issuer = Url::parse("https://auth.example.com").unwrap();
+        let jwt_config = JwtConfig::new(issuer.clone());
+        let config = AuthConfig {
+            mode: AuthMode::Jwt(Box::new(jwt_config)),
+            ..Default::default()
+        };
+
+        let returned = config.jwt_config();
+        assert!(returned.is_some());
+        assert_eq!(returned.unwrap().issuer, issuer);
+    }
+
+    #[test]
+    fn test_auth_config_jwt_config_returns_none_for_bearer() {
+        let config = AuthConfig {
+            mode: AuthMode::BearerToken("token".to_string()),
+            ..Default::default()
+        };
+        assert!(config.jwt_config().is_none());
+    }
+
+    #[test]
+    fn test_tenant_config_with_custom_values() {
+        let mut map = HashMap::new();
+        map.insert("t1".to_string(), "S1".to_string());
+
+        let config = TenantConfig {
+            enabled: true,
+            tenant_claim: "custom_tenant".to_string(),
+            schema_mapping: SchemaMappingStrategy::Lookup(map),
+            default_schema: Some("DEFAULT".to_string()),
+        };
+
+        assert!(config.enabled);
+        assert_eq!(config.tenant_claim, "custom_tenant");
+        assert_eq!(config.default_schema, Some("DEFAULT".to_string()));
+    }
+
+    #[test]
+    fn test_rbac_config_with_all_roles() {
+        let config = RbacConfig {
+            enabled: true,
+            roles_claim: "permissions".to_string(),
+            read_role: Some("reader".to_string()),
+            write_role: Some("writer".to_string()),
+            execute_role: Some("executor".to_string()),
+            admin_role: Some("admin".to_string()),
+        };
+
+        assert!(config.enabled);
+        assert_eq!(config.read_role, Some("reader".to_string()));
+        assert_eq!(config.write_role, Some("writer".to_string()));
+        assert_eq!(config.execute_role, Some("executor".to_string()));
+        assert_eq!(config.admin_role, Some("admin".to_string()));
+    }
+
+    #[test]
+    fn test_auth_config_default() {
+        let config = AuthConfig::default();
+        assert!(matches!(config.mode, AuthMode::None));
+        assert!(!config.tenant.enabled);
+        assert!(!config.rbac.enabled);
+    }
 }

@@ -84,6 +84,12 @@ impl<E> ExecuteError<E> {
     pub const fn is_timeout(&self) -> bool {
         matches!(self, Self::Timeout(_))
     }
+
+    /// Check if this is a query error
+    #[must_use]
+    pub const fn is_query(&self) -> bool {
+        matches!(self, Self::Query(_))
+    }
 }
 
 impl<E: std::fmt::Display> std::fmt::Display for ExecuteError<E> {
@@ -160,5 +166,125 @@ mod tests {
         );
 
         assert_eq!(guard.row_limit(), NonZeroU32::new(5000));
+    }
+
+    #[test]
+    fn test_query_guard_row_limit_none() {
+        let guard = QueryGuard::new(Duration::from_secs(30), SchemaFilter::AllowAll, None);
+
+        assert!(guard.row_limit().is_none());
+    }
+
+    #[test]
+    fn test_query_guard_timeout_accessor() {
+        let guard = QueryGuard::new(Duration::from_secs(42), SchemaFilter::AllowAll, None);
+
+        assert_eq!(guard.timeout(), Duration::from_secs(42));
+    }
+
+    #[test]
+    fn test_query_guard_whitelist_filter() {
+        let allowed: HashSet<String> = ["APP", "PUBLIC"].iter().map(|s| (*s).to_string()).collect();
+        let guard = QueryGuard::new(
+            Duration::from_secs(30),
+            SchemaFilter::Whitelist(allowed),
+            None,
+        );
+
+        assert!(guard.validate_schema("APP").is_ok());
+        assert!(guard.validate_schema("PUBLIC").is_ok());
+        assert!(guard.validate_schema("SYS").is_err());
+    }
+
+    #[test]
+    fn test_query_guard_debug() {
+        let guard = QueryGuard::new(Duration::from_secs(30), SchemaFilter::AllowAll, None);
+        let debug_str = format!("{guard:?}");
+        assert!(debug_str.contains("QueryGuard"));
+    }
+
+    #[test]
+    fn test_query_guard_clone() {
+        let guard = QueryGuard::new(
+            Duration::from_secs(30),
+            SchemaFilter::AllowAll,
+            NonZeroU32::new(1000),
+        );
+        let cloned = guard.clone();
+        assert_eq!(cloned.timeout(), guard.timeout());
+        assert_eq!(cloned.row_limit(), guard.row_limit());
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_error_success() {
+        let guard = QueryGuard::new(Duration::from_secs(5), SchemaFilter::AllowAll, None);
+
+        let result: Result<i32, ExecuteError<std::io::Error>> =
+            guard.execute_with_error(async { Ok(42) }).await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_error_timeout() {
+        let guard = QueryGuard::new(Duration::from_millis(10), SchemaFilter::AllowAll, None);
+
+        let result: Result<i32, ExecuteError<std::io::Error>> = guard
+            .execute_with_error(async {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                Ok(42)
+            })
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.is_timeout());
+        assert!(!err.is_query());
+    }
+
+    #[tokio::test]
+    async fn test_execute_with_error_query_error() {
+        let guard = QueryGuard::new(Duration::from_secs(5), SchemaFilter::AllowAll, None);
+
+        let result: Result<i32, ExecuteError<std::io::Error>> = guard
+            .execute_with_error(async {
+                Err::<i32, _>(std::io::Error::new(std::io::ErrorKind::Other, "test error"))
+            })
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.is_query());
+        assert!(!err.is_timeout());
+    }
+
+    #[test]
+    fn test_execute_error_display_timeout() {
+        let err: ExecuteError<std::io::Error> = ExecuteError::Timeout(Duration::from_secs(30));
+        let display = format!("{err}");
+        assert!(display.contains("timeout"));
+        assert!(display.contains("30"));
+    }
+
+    #[test]
+    fn test_execute_error_display_query() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::Other, "test error");
+        let err: ExecuteError<std::io::Error> = ExecuteError::Query(io_err);
+        let display = format!("{err}");
+        assert!(display.contains("test error"));
+    }
+
+    #[test]
+    fn test_execute_error_source_timeout() {
+        let err: ExecuteError<std::io::Error> = ExecuteError::Timeout(Duration::from_secs(30));
+        assert!(std::error::Error::source(&err).is_none());
+    }
+
+    #[test]
+    fn test_execute_error_source_query() {
+        let io_err = std::io::Error::new(std::io::ErrorKind::Other, "test error");
+        let err: ExecuteError<std::io::Error> = ExecuteError::Query(io_err);
+        assert!(std::error::Error::source(&err).is_some());
     }
 }
