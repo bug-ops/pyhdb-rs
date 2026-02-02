@@ -16,13 +16,15 @@ use std::sync::Arc;
 use hdbconnect_async::HdbValue;
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::{Json, Parameters};
-use rmcp::model::{ServerCapabilities, ServerInfo};
+use rmcp::model::ServerCapabilities;
 use rmcp::service::{RequestContext, RoleServer};
 use rmcp::{ErrorData, ServerHandler as RmcpServerHandler, tool, tool_handler, tool_router};
 
+#[cfg(all(feature = "cache", feature = "auth"))]
+use crate::auth::extract_user_id;
 #[cfg(feature = "cache")]
 use crate::cache::{CacheKey, CacheProvider};
-#[cfg(feature = "cache")]
+#[cfg(all(feature = "cache", not(feature = "auth")))]
 use crate::constants::CACHE_SYSTEM_USER;
 use crate::constants::{
     DESCRIBE_PROCEDURE_CURRENT_SCHEMA, DESCRIBE_PROCEDURE_TEMPLATE, DESCRIBE_TABLE_CURRENT_SCHEMA,
@@ -538,7 +540,7 @@ impl ServerHandler {
     #[tool(description = "Execute a SQL SELECT query")]
     async fn execute_sql(
         &self,
-        _context: RequestContext<RoleServer>,
+        context: RequestContext<RoleServer>,
         Parameters(params): Parameters<ExecuteSqlParams>,
     ) -> ToolResult<QueryResult> {
         if self.config.read_only() {
@@ -549,13 +551,15 @@ impl ServerHandler {
             .limit
             .or_else(|| self.query_guard.row_limit().map(NonZeroU32::get));
 
-        // Cache query results when read_only mode is enabled.
-        // TODO: For multi-tenant cache isolation, extract user from context when
-        // MCP protocol supports user context propagation from HTTP layer. Current
-        // implementation uses CACHE_SYSTEM_USER for all requests (single-tenant safe).
+        // Cache query results when read_only mode is enabled with per-user isolation.
         #[cfg(feature = "cache")]
         if self.config.read_only() && self.config.cache().enabled {
-            let cache_key = CacheKey::query_result(&params.sql, row_limit, CACHE_SYSTEM_USER);
+            #[cfg(feature = "auth")]
+            let user_id = extract_user_id(&context);
+            #[cfg(not(feature = "auth"))]
+            let user_id = CACHE_SYSTEM_USER;
+
+            let cache_key = CacheKey::query_result(&params.sql, row_limit, user_id);
             let ttl = self.config.cache().ttl.query;
             let sql = params.sql.clone();
 
@@ -574,6 +578,10 @@ impl ServerHandler {
 
             return Ok(Json(result));
         }
+
+        // Suppress unused variable warning when context is not used for user extraction
+        #[cfg(not(all(feature = "cache", feature = "auth")))]
+        let _ = &context;
 
         // Non-cached path (DML enabled or cache disabled)
         let result = self
@@ -1175,8 +1183,8 @@ fn json_value_to_sql_literal(value: &serde_json::Value) -> String {
 
 #[tool_handler]
 impl RmcpServerHandler for ServerHandler {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo {
+    fn get_info(&self) -> rmcp::model::ServerInfo {
+        rmcp::model::ServerInfo {
             instructions: Some(
                 "MCP server for SAP HANA database. Provides tools to query and explore HANA databases."
                     .to_string(),

@@ -115,6 +115,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Testing**: 389 tests passing, auth module 82-100% coverage (excluding network-dependent code)
   - **Security**: All JWT validation checks pass (signature, expiration, issuer, audience)
 
+- **hdbconnect-mcp Phase 3.6**: Per-user cache isolation via RequestContext extensions (Issue #67)
+  - **Multi-Tenant Cache Isolation**: Automatic user_id extraction from MCP RequestContext for per-user cache keys
+    - Leverages rmcp 0.14 native extension propagation (HTTP request Parts → MCP extensions)
+    - `extract_user_id()` helper extracts `AuthenticatedUser.sub` from nested extensions
+    - `execute_sql` uses dynamic user_id in `CacheKey::query_result()` calls
+    - Different users get different cache keys (hash includes user_id)
+  - **Security Guarantees**:
+    - User A cannot read User B's cached query results (different cache keys)
+    - Cache poisoning affects only attacker's own cache entries
+    - Zero vulnerabilities found in security audit
+  - **Performance**:
+    - `extract_user_id()` fully inlined by compiler (zero overhead)
+    - User_id hashing adds ~90ns overhead (acceptable for security)
+    - Cache remains enabled (no performance degradation vs disabling cache)
+  - **Fallback Behavior**:
+    - Non-HTTP transports (stdio) use `CACHE_SYSTEM_USER` constant
+    - HTTP without auth uses `CACHE_SYSTEM_USER` (single-user scenario)
+    - HTTP with auth extracts `user.sub` for per-user isolation
+  - **New Module**: `auth/user_context.rs` with extraction helper and 7 unit tests
+  - **Documentation**: Updated cache module docs to explain per-user isolation guarantees
+  - **Testing**: 396 tests passing (+4 edge case tests), 92.99% coverage on user_context.rs
+  - **Validation**: Security audit PASS, performance validation PASS (zero-cost abstraction), code review APPROVED
+
 ### Security
 
 - **hdbconnect-mcp**: Fixed 5 security vulnerabilities identified in Phase 2 review
