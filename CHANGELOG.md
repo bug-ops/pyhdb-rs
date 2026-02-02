@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **hdbconnect-mcp Phase 4**: Prometheus metrics infrastructure (`metrics` feature)
+  - Server metrics: uptime, version info, request counter
+  - Query performance: duration histogram, query count, row count, error tracking
+  - Cache observability: hit/miss counters, eviction tracking, size gauge
+  - Connection pool statistics: pool size (max/available/in_use/waiting), wait time histogram, error counter
+  - HTTP `/metrics` endpoint for Prometheus scraping (requires `http` feature)
+  - Zero-cost when feature disabled
+
 - **CI/CD**: MCP server binary releases with trusted publishing
   - Cross-platform binaries (Linux x86_64/aarch64, macOS x86_64/ARM64, Windows x86_64)
   - Static musl builds for Linux (no glibc dependency)
