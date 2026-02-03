@@ -134,6 +134,12 @@ impl ServerHandler {
             |schema_name| LIST_TABLES_TEMPLATE.replace("{SCHEMA}", &schema_name.name),
         );
 
+        tracing::debug!(
+            schema = ?schema.map(|s| &s.name),
+            query = %query,
+            "Fetching tables from database"
+        );
+
         let result_set = self.query_guard.execute(conn.query(&query)).await?;
 
         let rows = self.query_guard.execute(result_set.into_rows()).await?;
@@ -408,6 +414,11 @@ impl ServerHandler {
         context: RequestContext<RoleServer>,
         Parameters(mut params): Parameters<ListTablesParams>,
     ) -> ToolResult<Vec<TableInfo>> {
+        tracing::debug!(
+            schema = ?params.schema.as_ref().map(|s| &s.name),
+            "list_tables called"
+        );
+
         // If schema not provided and client supports elicitation, ask user
         if params.schema.is_none()
             && context.peer.supports_elicitation()
@@ -416,7 +427,10 @@ impl ServerHandler {
                 .elicit::<SchemaName>(ELICIT_SCHEMA_LIST_TABLES.to_string())
                 .await
         {
-            params.schema = Some(selection);
+            // Only set schema if user provided a non-empty name
+            if !selection.name.is_empty() {
+                params.schema = Some(selection);
+            }
         }
 
         // Validate schema access and identifier
@@ -482,7 +496,10 @@ impl ServerHandler {
                 .elicit::<SchemaName>(ELICIT_SCHEMA_DESCRIBE_TABLE.to_string())
                 .await
         {
-            params.schema = Some(selection);
+            // Only set schema if user provided a non-empty name
+            if !selection.name.is_empty() {
+                params.schema = Some(selection);
+            }
         }
 
         // Validate schema access and identifier
@@ -798,7 +815,10 @@ impl ServerHandler {
                 .elicit::<SchemaName>(ELICIT_SCHEMA_LIST_PROCEDURES.to_string())
                 .await
         {
-            params.schema = Some(selection);
+            // Only set schema if user provided a non-empty name
+            if !selection.name.is_empty() {
+                params.schema = Some(selection);
+            }
         }
 
         // Validate schema access
@@ -889,7 +909,10 @@ impl ServerHandler {
                 .elicit::<SchemaName>(ELICIT_SCHEMA_LIST_PROCEDURES.to_string())
                 .await
         {
-            params.schema = Some(selection);
+            // Only set schema if user provided a non-empty name
+            if !selection.name.is_empty() {
+                params.schema = Some(selection);
+            }
         }
 
         // Validate schema access

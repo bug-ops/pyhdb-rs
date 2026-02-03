@@ -19,13 +19,18 @@ pub fn init_telemetry(config: &TelemetryConfig) -> Result<()> {
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.log_level));
 
+    // Write logs to stderr to avoid mixing with JSON-RPC on stdout
     let fmt_layer = if config.json_logs {
         tracing_subscriber::fmt::layer()
             .json()
+            .with_writer(std::io::stderr)
             .with_target(true)
             .boxed()
     } else {
-        tracing_subscriber::fmt::layer().with_target(true).boxed()
+        tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stderr)
+            .with_target(true)
+            .boxed()
     };
 
     // Build subscriber with optional OTLP layer

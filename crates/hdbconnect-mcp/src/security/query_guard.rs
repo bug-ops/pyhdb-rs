@@ -51,23 +51,38 @@ impl QueryGuard {
     pub async fn execute<F, T, E>(&self, query_fn: F) -> Result<T, Error>
     where
         F: Future<Output = Result<T, E>>,
-        E: Into<Error>,
+        E: Into<Error> + std::fmt::Debug,
     {
-        tokio::time::timeout(self.timeout, query_fn)
-            .await
-            .map_err(|_| Error::QueryTimeout(self.timeout))?
-            .map_err(Into::into)
+        match tokio::time::timeout(self.timeout, query_fn).await {
+            Ok(Ok(result)) => Ok(result),
+            Ok(Err(e)) => {
+                tracing::error!(error = ?e, "Database query failed");
+                Err(e.into())
+            }
+            Err(_) => {
+                tracing::error!(timeout = ?self.timeout, "Database query timed out");
+                Err(Error::QueryTimeout(self.timeout))
+            }
+        }
     }
 
     /// Execute a query function with timeout, returning the raw error type
     pub async fn execute_with_error<F, T, E>(&self, query_fn: F) -> Result<T, ExecuteError<E>>
     where
         F: Future<Output = Result<T, E>>,
+        E: std::fmt::Debug,
     {
-        tokio::time::timeout(self.timeout, query_fn)
-            .await
-            .map_err(|_| ExecuteError::Timeout(self.timeout))?
-            .map_err(ExecuteError::Query)
+        match tokio::time::timeout(self.timeout, query_fn).await {
+            Ok(Ok(result)) => Ok(result),
+            Ok(Err(e)) => {
+                tracing::error!(error = ?e, "Database query failed");
+                Err(ExecuteError::Query(e))
+            }
+            Err(_) => {
+                tracing::error!(timeout = ?self.timeout, "Database query timed out");
+                Err(ExecuteError::Timeout(self.timeout))
+            }
+        }
     }
 }
 

@@ -23,9 +23,9 @@ struct Args {
     #[arg(short, long, env = "HANA_URL")]
     url: Option<String>,
 
-    /// Enable read-only mode (blocks DML/DDL)
-    #[arg(short, long, default_value_t = true)]
-    read_only: bool,
+    /// Disable read-only mode (allows DML/DDL)
+    #[arg(long)]
+    no_read_only: bool,
 
     /// Maximum rows per query
     #[arg(short = 'l', long, default_value = "10000")]
@@ -133,7 +133,7 @@ async fn main() -> anyhow::Result<()> {
 
     builder = builder
         .pool_size(NonZeroUsize::new(args.pool_size).unwrap_or(NonZeroUsize::MIN.saturating_add(3)))
-        .read_only(args.read_only)
+        .read_only(!args.no_read_only)
         .row_limit(NonZeroU32::new(args.row_limit))
         .query_timeout(std::time::Duration::from_secs(args.query_timeout))
         .transport_mode(transport_mode)
