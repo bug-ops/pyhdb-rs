@@ -38,6 +38,7 @@ pub fn create_pool(url: String, max_size: usize) -> Pool {
         .wait_timeout(Some(Duration::from_secs(10)))
         .create_timeout(Some(Duration::from_secs(30)))
         .recycle_timeout(Some(Duration::from_secs(5)))
+        .runtime(deadpool::Runtime::Tokio1)
         .build()
         .expect("Failed to create connection pool")
 }
