@@ -33,7 +33,7 @@ multiple_crate_versions = "allow"
 # Dependencies sorted ALPHABETICALLY - versions only (features in crates)
 [workspace.dependencies]
 anyhow = "1.0"
-arrow = { version = "57.0", default-features = false }
+arrow = { version = "57.3", default-features = false }
 arrow-array = "57.0"
 arrow-buffer = "57.0"
 arrow-data = "57.0"
@@ -50,7 +50,7 @@ hdbconnect = "0.32"
 hdbconnect_async = "0.32"
 hdbconnect-arrow = { path = "crates/hdbconnect-arrow", version = "0.3.4" }
 jsonwebtoken = { version = "10.3", features = ["rust_crypto"] }
-arc-swap = "1.7"
+arc-swap = "1.8"
 lru = "0.16"
 metrics = "0.24"
 metrics-exporter-prometheus = "0.18"
