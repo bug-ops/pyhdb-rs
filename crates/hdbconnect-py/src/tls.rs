@@ -63,7 +63,7 @@ pub(crate) enum TlsConfigInner {
 /// # Development only: skip verification (INSECURE)
 /// tls = TlsConfig.insecure()
 /// ```
-#[pyclass(name = "TlsConfig", module = "pyhdb_rs._core", frozen)]
+#[pyclass(name = "TlsConfig", module = "pyhdb_rs._core", frozen, from_py_object)]
 #[derive(Debug, Clone)]
 pub struct PyTlsConfig {
     pub(crate) inner: TlsConfigInner,

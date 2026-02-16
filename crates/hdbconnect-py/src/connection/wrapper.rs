@@ -31,7 +31,12 @@ pub enum ConnectionInner {
 }
 
 /// Python-exposed cache statistics.
-#[pyclass(name = "CacheStats", module = "pyhdb_rs._core", frozen)]
+#[pyclass(
+    name = "CacheStats",
+    module = "pyhdb_rs._core",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Debug, Clone)]
 pub struct PyCacheStats {
     /// Current number of cached statements.
