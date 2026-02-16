@@ -421,7 +421,7 @@ impl ServerHandler {
 
         // If schema not provided and client supports elicitation, ask user
         if params.schema.is_none()
-            && context.peer.supports_elicitation()
+            && !context.peer.supported_elicitation_modes().is_empty()
             && let Ok(Some(selection)) = context
                 .peer
                 .elicit::<SchemaName>(ELICIT_SCHEMA_LIST_TABLES.to_string())
@@ -490,7 +490,7 @@ impl ServerHandler {
 
         // If schema not provided and client supports elicitation, ask user
         if params.schema.is_none()
-            && context.peer.supports_elicitation()
+            && !context.peer.supported_elicitation_modes().is_empty()
             && let Ok(Some(selection)) = context
                 .peer
                 .elicit::<SchemaName>(ELICIT_SCHEMA_DESCRIBE_TABLE.to_string())
@@ -652,7 +652,10 @@ impl ServerHandler {
         }
 
         // 6. Request confirmation (unless force)
-        if dml_config.require_confirmation && !params.force && context.peer.supports_elicitation() {
+        if dml_config.require_confirmation
+            && !params.force
+            && !context.peer.supported_elicitation_modes().is_empty()
+        {
             let confirmation_msg =
                 ELICIT_DML_CONFIRMATION.replace(DML_SQL_PLACEHOLDER, &params.sql);
 
@@ -809,7 +812,7 @@ impl ServerHandler {
 
         // Schema elicitation if not provided
         if params.schema.is_none()
-            && context.peer.supports_elicitation()
+            && !context.peer.supported_elicitation_modes().is_empty()
             && let Ok(Some(selection)) = context
                 .peer
                 .elicit::<SchemaName>(ELICIT_SCHEMA_LIST_PROCEDURES.to_string())
@@ -903,7 +906,7 @@ impl ServerHandler {
 
         // Schema elicitation if still not provided
         if params.schema.is_none()
-            && context.peer.supports_elicitation()
+            && !context.peer.supported_elicitation_modes().is_empty()
             && let Ok(Some(selection)) = context
                 .peer
                 .elicit::<SchemaName>(ELICIT_SCHEMA_LIST_PROCEDURES.to_string())
@@ -996,7 +999,9 @@ impl ServerHandler {
         }
 
         // 5. Request confirmation (unless force)
-        if proc_config.require_confirmation && !params.force && context.peer.supports_elicitation()
+        if proc_config.require_confirmation
+            && !params.force
+            && !context.peer.supported_elicitation_modes().is_empty()
         {
             let params_json = params.parameters.as_ref().map_or_else(
                 || "{}".to_string(),
