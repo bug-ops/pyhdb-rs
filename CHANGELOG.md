@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Dependencies**: Bump pyo3 0.27 → 0.28, pyo3-arrow 0.15 → 0.16, pyo3-async-runtimes 0.27 → 0.28
+- **PyO3 0.28 migration**: Add explicit `from_py_object`/`skip_from_py_object` annotations to all `#[pyclass]` types with `Clone`
+
+### Added
+
+- **CI**: `CI Gate` aggregation job for branch protection required status checks
+- **Branch protection**: Enforce `CI Gate` as required check on `main`
+
 ## [0.3.4] - 2026-02-02
 
 ### Added
@@ -692,7 +704,10 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[0.3.2]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.3...v0.3.4
+[0.3.3]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.5...v0.3.0
 [0.2.5]: https://github.com/bug-ops/pyhdb-rs/compare/v0.2.4...v0.2.5
