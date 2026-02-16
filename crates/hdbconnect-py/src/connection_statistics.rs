@@ -4,7 +4,12 @@ use pyo3::prelude::*;
 ///
 /// Provides metrics for monitoring connection performance, query latency,
 /// and network compression efficiency.
-#[pyclass(name = "ConnectionStatistics", module = "pyhdb_rs._core", frozen)]
+#[pyclass(
+    name = "ConnectionStatistics",
+    module = "pyhdb_rs._core",
+    frozen,
+    skip_from_py_object
+)]
 #[derive(Debug, Clone)]
 pub struct PyConnectionStatistics {
     /// Number of roundtrips to the server.

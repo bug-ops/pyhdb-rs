@@ -40,7 +40,12 @@ pub const DEFAULT_ARROW_BATCH_SIZE: usize = 65536;
 /// config = ArrowConfig(batch_size=10000)
 /// reader = conn.execute_arrow("SELECT * FROM T", config=config)
 /// ```
-#[pyclass(name = "ArrowConfig", module = "pyhdb_rs._core", frozen)]
+#[pyclass(
+    name = "ArrowConfig",
+    module = "pyhdb_rs._core",
+    frozen,
+    from_py_object
+)]
 #[derive(Debug, Clone)]
 pub struct PyArrowConfig {
     batch_size: usize,
@@ -102,7 +107,12 @@ impl PyArrowConfig {
 ///
 /// Wraps values that will be applied to `hdbconnect::ConnectionConfiguration`.
 /// Uses `Option<T>` to distinguish "not set" (use default) from "explicitly set".
-#[pyclass(name = "ConnectionConfig", module = "pyhdb_rs._core", frozen)]
+#[pyclass(
+    name = "ConnectionConfig",
+    module = "pyhdb_rs._core",
+    frozen,
+    from_py_object
+)]
 #[derive(Debug, Clone)]
 pub struct PyConnectionConfig {
     fetch_size: Option<u32>,

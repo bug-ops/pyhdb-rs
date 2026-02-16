@@ -29,7 +29,13 @@ use pyo3::prelude::*;
 ///     .cursor_holdability(CursorHoldability.CommitAndRollback)
 ///     .build())
 /// ```
-#[pyclass(name = "CursorHoldability", module = "pyhdb_rs._core", eq, eq_int)]
+#[pyclass(
+    name = "CursorHoldability",
+    module = "pyhdb_rs._core",
+    eq,
+    eq_int,
+    from_py_object
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PyCursorHoldability {
     /// Cursor closed on commit and rollback (default).

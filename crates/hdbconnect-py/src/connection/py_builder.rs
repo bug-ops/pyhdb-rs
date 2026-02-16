@@ -74,7 +74,11 @@ use crate::utils::ParsedConnectionUrl;
 ///     .tls(TlsConfig.from_certificate(cert_pem))
 ///     .build())
 /// ```
-#[pyclass(name = "ConnectionBuilder", module = "pyhdb_rs._core")]
+#[pyclass(
+    name = "ConnectionBuilder",
+    module = "pyhdb_rs._core",
+    skip_from_py_object
+)]
 #[derive(Debug, Clone)]
 pub struct PyConnectionBuilder {
     host: Option<String>,
@@ -482,7 +486,11 @@ impl PyConnectionBuilder {
 ///     .build())
 /// ```
 #[cfg(feature = "async")]
-#[pyclass(name = "AsyncConnectionBuilder", module = "pyhdb_rs._core")]
+#[pyclass(
+    name = "AsyncConnectionBuilder",
+    module = "pyhdb_rs._core",
+    skip_from_py_object
+)]
 #[derive(Debug, Clone)]
 pub struct PyAsyncConnectionBuilder {
     host: Option<String>,

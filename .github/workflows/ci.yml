@@ -342,6 +342,27 @@ jobs:
           flags: hdbconnect-arrow,hdbconnect-mcp
           fail_ci_if_error: false
 
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs:
+      - lint-rust-fmt
+      - lint-rust-clippy
+      - lint-python
+      - test-rust
+      - test-python-ubuntu
+      - test-python
+      - msrv
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more required jobs failed or were cancelled"
+            exit 1
+          fi
+
   msrv:
     name: MSRV Check
     runs-on: ubuntu-latest
