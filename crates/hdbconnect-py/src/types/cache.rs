@@ -161,49 +161,42 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(deprecated)]
     fn test_datetime_cache() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
-            // First call initializes cache
+        Python::try_attach(|py| {
             let cls1 = get_datetime_cls(py).unwrap();
-            // Second call uses cache
             let cls2 = get_datetime_cls(py).unwrap();
-            // Should be the same object
             assert!(cls1.is(&cls2));
-        });
+        })
+        .unwrap();
     }
 
     #[test]
-    #[allow(deprecated)]
     fn test_date_cache() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::try_attach(|py| {
             let cls1 = get_date_cls(py).unwrap();
             let cls2 = get_date_cls(py).unwrap();
             assert!(cls1.is(&cls2));
-        });
+        })
+        .unwrap();
     }
 
     #[test]
-    #[allow(deprecated)]
     fn test_time_cache() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::try_attach(|py| {
             let cls1 = get_time_cls(py).unwrap();
             let cls2 = get_time_cls(py).unwrap();
             assert!(cls1.is(&cls2));
-        });
+        })
+        .unwrap();
     }
 
     #[test]
-    #[allow(deprecated)]
     fn test_decimal_cache() {
-        pyo3::prepare_freethreaded_python();
-        Python::with_gil(|py| {
+        Python::try_attach(|py| {
             let cls1 = get_decimal_cls(py).unwrap();
             let cls2 = get_decimal_cls(py).unwrap();
             assert!(cls1.is(&cls2));
-        });
+        })
+        .unwrap();
     }
 }
