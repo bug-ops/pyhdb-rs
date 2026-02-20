@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-02-20
+
+### Fixed
+
+- **hdbconnect-py**: Migrate tests from removed PyO3 0.28 APIs (`prepare_freethreaded_python`, `Python::with_gil`) to `Python::try_attach`
+
+### Changed
+
+- **Dependencies**: Bump rmcp 0.15 → 0.16
+
 ## [0.3.5] - 2026-02-16
 
 ### Fixed
@@ -718,7 +728,8 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.5...HEAD
+[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.6...HEAD
+[0.3.6]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.2...v0.3.3
