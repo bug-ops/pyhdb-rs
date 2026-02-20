@@ -35,8 +35,7 @@ pip install polars              # Polars DataFrame library
 pip install pandas pyarrow      # pandas with Arrow support
 ```
 
-> [!TIP]
-> Use `uv pip install pyhdb_rs` for faster installation.
+> **Tip:** Use `uv pip install pyhdb_rs` for faster installation.
 
 ## Quick start
 
@@ -121,8 +120,7 @@ async def main():
 asyncio.run(main())
 ```
 
-> [!NOTE]
-> Use `async with` for proper resource cleanup. The context manager automatically closes the connection on exit.
+> **Note:** Use `async with` for proper resource cleanup. The context manager automatically closes the connection on exit.
 
 ### Connection pooling
 

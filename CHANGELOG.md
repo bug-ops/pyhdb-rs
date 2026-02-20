@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **hdbconnect-py**: Migrate tests from removed PyO3 0.28 APIs (`prepare_freethreaded_python`, `Python::with_gil`) to `Python::try_attach`
 - **python**: Sync pyproject.toml version to 0.3.6 (was missed in release)
+- **python**: Replace GitHub-style admonitions (`[!TIP]`, `[!NOTE]`) with PyPI-compatible bold text in README
 
 ### Changed
 
