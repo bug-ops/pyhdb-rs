@@ -64,7 +64,7 @@ jobs:
         env:
           SCCACHE_GHA_ENABLED: "true"
       - name: Upload wheels
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-${{ matrix.target }}
           path: python/dist/*.whl
@@ -86,7 +86,7 @@ jobs:
           command: sdist
           args: --out dist
       - name: Upload sdist
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: sdist
           path: python/dist/*.tar.gz
@@ -185,7 +185,7 @@ jobs:
           certUtil -hashfile hdbconnect-mcp-${{ matrix.target }}.zip SHA256 > hdbconnect-mcp-${{ matrix.target }}.zip.sha256
         shell: cmd
       - name: Upload archive
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: mcp-binary-${{ matrix.target }}
           path: hdbconnect-mcp-${{ matrix.target }}.*
@@ -202,18 +202,18 @@ jobs:
       attestations: write
     steps:
       - name: Download wheels
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: wheels-*
           path: dist
           merge-multiple: true
       - name: Download sdist
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: sdist
           path: dist
       - name: Generate attestations
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: dist/*
       - name: Publish to PyPI
@@ -265,7 +265,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Download all artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
       - name: Create release
