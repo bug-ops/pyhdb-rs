@@ -118,7 +118,7 @@ jobs:
         env:
           SCCACHE_GHA_ENABLED: "true"
       - name: Upload wheel
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: test-wheel-ubuntu-latest
           path: python/dist/*.whl
@@ -148,7 +148,7 @@ jobs:
         env:
           SCCACHE_GHA_ENABLED: "true"
       - name: Upload wheel
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: test-wheel-${{ matrix.os }}
           path: python/dist/*.whl
@@ -175,7 +175,7 @@ jobs:
           cache-dependency-glob: python/uv.lock
           cache-suffix: ubuntu-latest-${{ matrix.python-version }}
       - name: Download wheel
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: test-wheel-ubuntu-latest
           path: python/dist
@@ -223,7 +223,7 @@ jobs:
           cache-dependency-glob: python/uv.lock
           cache-suffix: ${{ matrix.os }}-${{ matrix.python-version }}
       - name: Download wheel
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: test-wheel-${{ matrix.os }}
           path: python/dist
@@ -279,7 +279,7 @@ jobs:
         env:
           SCCACHE_GHA_ENABLED: "true"
       - name: Upload wheels
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-cross-${{ matrix.target }}
           path: python/dist/*.whl
@@ -293,19 +293,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download test wheels (native x86_64)
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: test-wheel-*
           path: dist
           merge-multiple: true
       - name: Download cross wheels
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           pattern: wheels-cross-*
           path: dist
           merge-multiple: true
       - name: Upload all wheels
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels
           path: dist/*.whl
