@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.7] - 2026-03-05
+
+### Changed
+
+- **Dependencies**: Bump `arrow`/`arrow-*` 57.3 → 58.0, `pyo3-arrow` 0.16 → 0.17 (#112)
+- **Dependencies**: Bump `rmcp` 0.16.0 → 0.17.0 (#109)
+- **Dependencies**: Bump `tempfile` 3.25.0 → 3.26.0 (#103)
+- **CI**: Bump GitHub Actions `actions/upload-artifact`, `actions/download-artifact`, `actions/attest-build-provenance` to v7 (#104)
+- **Python dev**: Bump `maturin` 1.12.4 → 1.12.6 in `uv.lock`
+
+### Security
+
+- **Dependencies**: Bump `aws-lc-sys` 0.37.1 → 0.38.0 (via `aws-lc-rs` 1.16.0 → 1.16.1) (#113)
+  - Fixes PKCS7_verify Certificate Chain Validation Bypass (CVSS 7.5)
+  - Fixes PKCS7_verify Signature Validation Bypass (CVSS 7.5)
+  - Fixes Timing Side-Channel in AES-CCM Tag Verification (CVSS 5.9)
+  - Resolves Dependabot alerts #5, #6, #7
+
 ## [0.3.6] - 2026-02-20
 
 ### Fixed
@@ -730,7 +748,8 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.6...HEAD
+[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.7...HEAD
+[0.3.7]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.3...v0.3.4
