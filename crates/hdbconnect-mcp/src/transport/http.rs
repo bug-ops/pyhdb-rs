@@ -88,10 +88,8 @@ pub async fn run_http(
 
     // Create SSE service for MCP
     let session_manager = Arc::new(LocalSessionManager::default());
-    let config = StreamableHttpServerConfig {
-        cancellation_token: token_clone,
-        ..Default::default()
-    };
+    let mut config = StreamableHttpServerConfig::default();
+    config.cancellation_token = token_clone;
 
     let mcp_service =
         StreamableHttpService::new(move || Ok(handler.clone()), session_manager, config);
