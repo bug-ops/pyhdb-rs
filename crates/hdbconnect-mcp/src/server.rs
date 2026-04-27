@@ -14,7 +14,6 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 
 use hdbconnect_async::HdbValue;
-use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::{Json, Parameters};
 use rmcp::model::ServerCapabilities;
 use rmcp::service::{RequestContext, RoleServer};
@@ -59,7 +58,6 @@ pub struct ServerHandler {
     query_guard: QueryGuard,
     #[cfg(feature = "cache")]
     cache: Arc<dyn CacheProvider>,
-    tool_router: ToolRouter<Self>,
 }
 
 impl Clone for ServerHandler {
@@ -70,7 +68,6 @@ impl Clone for ServerHandler {
             query_guard: self.query_guard.clone(),
             #[cfg(feature = "cache")]
             cache: Arc::clone(&self.cache),
-            tool_router: Self::tool_router(),
         }
     }
 }
@@ -83,7 +80,7 @@ impl fmt::Debug for ServerHandler {
             .field("query_guard", &self.query_guard);
         #[cfg(feature = "cache")]
         s.field("cache", &"<CacheProvider>");
-        s.field("tool_router", &"<ToolRouter>").finish()
+        s.finish()
     }
 }
 
@@ -101,7 +98,6 @@ impl ServerHandler {
             config: Arc::new(config),
             query_guard,
             cache,
-            tool_router: Self::tool_router(),
         }
     }
 
@@ -117,7 +113,6 @@ impl ServerHandler {
             pool: Arc::new(pool),
             config: Arc::new(config),
             query_guard,
-            tool_router: Self::tool_router(),
         }
     }
 
