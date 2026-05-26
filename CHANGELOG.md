@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.11] - 2026-05-26
+
+### Changed
+
+- **Dependencies**: Bump `tracing-opentelemetry` 0.32.1 → 0.33.0; align `opentelemetry`, `opentelemetry-otlp`, `opentelemetry_sdk` 0.31 → 0.32 (#147)
+- **Dependencies**: Bump `rmcp` 1.6.0 → 1.7.0, `metrics` 0.24.5 → 0.24.6, `tower-http` 0.6.10 → 0.6.11 (#145)
+- **Dependencies**: Bump `serde_json` 1.0.149 → 1.0.150 (#146)
+- **Dependencies**: Bump `reqwest` (#138), `axum` 0.8.9, `tokio` 1.52.1, `lru` 0.16.3 → 0.18.0 (#137), `clap`
+- **Dependencies**: Bump rust-minor-patch group (8 packages) (#139, #141)
+- **CI**: Bump `actions/dependency-review-action` (#140), `mozilla-actions/sccache-action` (#135)
+- **Python dev**: Update `pyarrow` requirement in `/python` (#134)
+
 ## [0.3.10] - 2026-04-26
 
 ### Changed
@@ -766,7 +778,8 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.10...HEAD
+[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.11...HEAD
+[0.3.11]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.7...v0.3.8
