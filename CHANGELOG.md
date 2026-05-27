@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **TLS (hdbsqls://)**: Fixed `Fatal Python error: Aborted` when connecting to SAP HANA Cloud via `hdbsqls://` URL. Two root causes: (1) `rustls 0.23` panicked due to missing `CryptoProvider` — now installed at module init; (2) `hdbconnect_impl` Drop impls called `tokio::task::spawn` without a runtime context on the Python main thread — now guarded with a tokio runtime enter guard.
+- **`ConnectionBuilder::build()`**: TLS flag parsed from `hdbsqls://` URL scheme was silently ignored; connections fell back to plain TCP. Now correctly applies `ServerCerts::RootCertificates` (Mozilla bundle) when TLS is requested.
+
 ## [0.3.11] - 2026-05-26
 
 ### Changed
