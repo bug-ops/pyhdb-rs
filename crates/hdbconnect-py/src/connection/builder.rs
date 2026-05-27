@@ -16,6 +16,7 @@ use std::marker::PhantomData;
 
 #[cfg(feature = "async")]
 use hdbconnect::ConnectionConfiguration;
+use hdbconnect::ServerCerts;
 
 use crate::error::PyHdbError;
 use crate::private::sealed::Sealed;
@@ -213,6 +214,10 @@ impl ConnectionBuilder<HasHost, HasCredentials> {
 
         if let Some(db) = &self.database {
             params_builder.dbname(db);
+        }
+
+        if self.tls {
+            params_builder.tls_with(ServerCerts::RootCertificates);
         }
 
         let params = params_builder
