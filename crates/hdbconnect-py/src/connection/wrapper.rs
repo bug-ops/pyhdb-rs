@@ -128,6 +128,11 @@ impl PyConnection {
 
     /// Create a connection with custom configuration.
     pub fn with_config(url: &str, config: &PyConnectionConfig) -> PyResult<Self> {
+        // hdbconnect_impl Drop impls call tokio::task::spawn (async feature). The guard makes the
+        // tokio runtime current on this thread so spawns from Connection/PreparedStatement drops
+        // succeed.
+        #[cfg(feature = "async")]
+        let _rt_guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let params = crate::connection::ConnectionBuilder::from_url(url)?.build()?;
         let hdb_config = config.to_hdbconnect_config();
 
@@ -172,6 +177,11 @@ impl PyConnection {
     #[new]
     #[pyo3(signature = (url))]
     pub fn new(url: &str) -> PyResult<Self> {
+        // hdbconnect_impl Drop impls call tokio::task::spawn (async feature). The guard makes the
+        // tokio runtime current on this thread so spawns from Connection/PreparedStatement drops
+        // succeed.
+        #[cfg(feature = "async")]
+        let _rt_guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let params = crate::connection::ConnectionBuilder::from_url(url)?.build()?;
         let conn = hdbconnect::Connection::new(params)
             .map_err(|e| PyHdbError::operational(e.to_string()))?;
@@ -193,6 +203,11 @@ impl PyConnection {
 
     /// Close the connection.
     fn close(&self) {
+        // hdbconnect_impl Drop impls call tokio::task::spawn (async feature). The guard makes the
+        // tokio runtime current on this thread so spawns from Connection/PreparedStatement drops
+        // succeed.
+        #[cfg(feature = "async")]
+        let _rt_guard = pyo3_async_runtimes::tokio::get_runtime().enter();
         let mut cache = self.stmt_cache.lock();
         let evicted = cache.clear();
         drop(evicted);

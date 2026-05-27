@@ -1563,6 +1563,7 @@ dependencies = [
  "pyo3",
  "pyo3-arrow",
  "pyo3-async-runtimes",
+ "rustls",
  "serde",
  "thiserror 2.0.18",
  "tokio",

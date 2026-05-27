@@ -41,6 +41,7 @@ pyo3-arrow = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 url = { workspace = true }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 # Async dependencies (optional)
 deadpool = { workspace = true, optional = true, features = ["rt_tokio_1", "managed"] }
