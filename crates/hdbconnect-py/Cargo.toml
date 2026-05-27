@@ -21,9 +21,7 @@ workspace = true
 [features]
 default = ["async"]
 async = [
-    "dep:hdbconnect_async",
     "dep:pyo3-async-runtimes",
-    "dep:tokio",
     "dep:deadpool",
     "hdbconnect-arrow/async",
 ]
@@ -32,22 +30,22 @@ test-utils = ["hdbconnect-arrow/test-utils"]
 [dependencies]
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
-hdbconnect = { workspace = true }
+hdbconnect_async = { workspace = true }
 hdbconnect-arrow = { workspace = true }
 lru = { workspace = true }
 parking_lot = { workspace = true }
+percent-encoding = "2.3"
 pyo3 = { workspace = true, features = ["extension-module", "abi3-py312", "generate-import-lib"] }
 pyo3-arrow = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "sync"] }
 url = { workspace = true }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
 # Async dependencies (optional)
 deadpool = { workspace = true, optional = true, features = ["rt_tokio_1", "managed"] }
-hdbconnect_async = { workspace = true, optional = true }
 pyo3-async-runtimes = { workspace = true, optional = true, features = ["tokio-runtime"] }
-tokio = { workspace = true, optional = true, features = ["rt-multi-thread", "sync"] }
 
 [dev-dependencies]
 criterion = { workspace = true }

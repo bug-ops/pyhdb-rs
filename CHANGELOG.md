@@ -9,8 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **TLS (hdbsqls://)**: Fixed `Fatal Python error: Aborted` when connecting to SAP HANA Cloud via `hdbsqls://` URL. Two root causes: (1) `rustls 0.23` panicked due to missing `CryptoProvider` — now installed at module init; (2) `hdbconnect_impl` Drop impls called `tokio::task::spawn` without a runtime context on the Python main thread — now guarded with a tokio runtime enter guard.
-- **`ConnectionBuilder::build()`**: TLS flag parsed from `hdbsqls://` URL scheme was silently ignored; connections fell back to plain TCP. Now correctly applies `ServerCerts::RootCertificates` (Mozilla bundle) when TLS is requested.
+- **TLS (hdbsqls://)**: Fixed `Fatal Python error: Aborted` when connecting to SAP HANA Cloud via `hdbsqls://` URL. Three root causes addressed:
+  1. `rustls 0.23` panicked at startup due to no `CryptoProvider` registered — now installed at module init.
+  2. `hdbconnect_impl` Drop impls (`ConnectionCore`, `RsCore`, `PreparedStatementCore`) called `tokio::spawn` unconditionally when compiled with both `sync` and `async` features, crashing when there was no active tokio runtime and hitting `unreachable!` when there was one (async task received a sync TCP client). Fixed via `[patch.crates-io]` on `hdbconnect_impl` to wrap spawns with `Handle::try_current()` and silently skip sync clients in the async Drop path.
+  3. `ConnectionBuilder::build()` silently ignored the TLS flag parsed from the `hdbsqls://` URL scheme; connections fell back to plain TCP. Now correctly applies `ServerCerts::RootCertificates` (Mozilla root bundle).
+- **URL percent-decoding**: `pyhdb_rs.connect("hdbsqls://user:pass%21@host")` failed with "Authentication failed" because the password was passed as the raw `%21` literal instead of `!`. Credentials in connection URLs are now percent-decoded before use.
 
 ## [0.3.11] - 2026-05-26
 

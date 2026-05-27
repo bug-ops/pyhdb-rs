@@ -132,14 +132,11 @@ impl PyHdbError {
     }
 }
 
-impl From<hdbconnect::HdbError> for PyHdbError {
-    fn from(err: hdbconnect::HdbError) -> Self {
+impl From<hdbconnect_async::HdbError> for PyHdbError {
+    fn from(err: hdbconnect_async::HdbError) -> Self {
         map_hdbconnect_error(&err)
     }
 }
-
-// Note: hdbconnect_async::HdbError is the same type as hdbconnect::HdbError,
-// so the From impl above handles both sync and async cases.
 
 impl From<hdbconnect_arrow::ArrowConversionError> for PyHdbError {
     fn from(err: hdbconnect_arrow::ArrowConversionError) -> Self {
@@ -168,13 +165,13 @@ impl From<PyHdbError> for PyErr {
 }
 
 /// Map HANA error codes to DB-API 2.0 exception types.
-fn map_hdbconnect_error(err: &hdbconnect::HdbError) -> PyHdbError {
+fn map_hdbconnect_error(err: &hdbconnect_async::HdbError) -> PyHdbError {
     let msg = build_detailed_error_message(err);
     categorize_hana_error(msg)
 }
 
 /// Build a detailed error message from `hdbconnect::HdbError`.
-fn build_detailed_error_message(err: &hdbconnect::HdbError) -> String {
+fn build_detailed_error_message(err: &hdbconnect_async::HdbError) -> String {
     if let Some(server_err) = err.server_error() {
         return format_server_error(server_err);
     }
@@ -182,7 +179,7 @@ fn build_detailed_error_message(err: &hdbconnect::HdbError) -> String {
 }
 
 /// Format server error with all available details (code, severity, SQLSTATE, position).
-fn format_server_error(server_err: &hdbconnect::ServerError) -> String {
+fn format_server_error(server_err: &hdbconnect_async::ServerError) -> String {
     use std::fmt::Write;
 
     let mut details = format!(

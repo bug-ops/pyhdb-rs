@@ -40,7 +40,7 @@
 use std::sync::Arc;
 
 use deadpool::managed::{Manager, Metrics, Object, RecycleError, RecycleResult};
-use hdbconnect::ConnectionConfiguration;
+use hdbconnect_async::ConnectionConfiguration;
 use pyo3::prelude::*;
 use tokio::sync::Mutex as TokioMutex;
 

@@ -11,6 +11,7 @@ use crate::connection::{ConnectionInner, SharedConnection};
 use crate::cursor::state::ColumnDescription;
 use crate::error::PyHdbError;
 use crate::reader::PyRecordBatchReader;
+use crate::runtime::block_on;
 use crate::types::{
     get_date_cls, get_datetime_cls, get_decimal_cls, get_time_cls, hana_value_to_python,
 };
@@ -22,14 +23,14 @@ pub enum CursorInner {
     Idle,
     /// Single result set from `execute()`.
     SingleResultSet {
-        result_set: hdbconnect::ResultSet,
+        result_set: hdbconnect_async::ResultSet,
         description: Vec<ColumnDescription>,
     },
     /// Multiple return values from `callproc()`.
     MultipleReturnValues {
-        return_values: Vec<hdbconnect::HdbReturnValue>,
+        return_values: Vec<hdbconnect_async::HdbReturnValue>,
         current_index: usize,
-        current_result_set: Option<hdbconnect::ResultSet>,
+        current_result_set: Option<hdbconnect_async::ResultSet>,
         current_description: Option<Vec<ColumnDescription>>,
     },
 }
@@ -75,13 +76,16 @@ impl PyCursor {
         } = &mut *guard
         {
             for i in 0..return_values.len() {
-                if matches!(return_values[i], hdbconnect::HdbReturnValue::ResultSet(_)) {
+                if matches!(
+                    return_values[i],
+                    hdbconnect_async::HdbReturnValue::ResultSet(_)
+                ) {
                     *current_index = i;
                     let rv = std::mem::replace(
                         &mut return_values[i],
-                        hdbconnect::HdbReturnValue::Success,
+                        hdbconnect_async::HdbReturnValue::Success,
                     );
-                    if let hdbconnect::HdbReturnValue::ResultSet(rs) = rv {
+                    if let hdbconnect_async::HdbReturnValue::ResultSet(rs) = rv {
                         let desc = build_description(&rs);
                         *current_result_set = Some(rs);
                         *current_description = Some(desc);
@@ -136,7 +140,7 @@ fn build_call_statement(procname: &str, parameters: Option<&Bound<'_, PyAny>>) -
 }
 
 /// Build column descriptions from result set metadata.
-fn build_description(rs: &hdbconnect::ResultSet) -> Vec<ColumnDescription> {
+fn build_description(rs: &hdbconnect_async::ResultSet) -> Vec<ColumnDescription> {
     rs.metadata()
         .iter()
         .map(|f| {
@@ -203,13 +207,13 @@ impl PyCursor {
                     Some(params) => {
                         // Convert Python params to serde-serializable values
                         let serializable_params = convert_to_serializable(params)?;
-                        let mut stmt = conn.prepare(sql).map_err(PyHdbError::from)?;
-                        stmt.execute(&serializable_params)
+                        let mut stmt = block_on(conn.prepare(sql)).map_err(PyHdbError::from)?;
+                        block_on(stmt.execute(&serializable_params))
                             .map_err(PyHdbError::from)?
                             .into_result_set()
                             .map_err(PyHdbError::from)?
                     }
-                    None => conn.query(sql).map_err(PyHdbError::from)?,
+                    None => block_on(conn.query(sql)).map_err(PyHdbError::from)?,
                 };
 
                 // Build description from metadata
@@ -247,7 +251,7 @@ impl PyCursor {
                     Some(seq) => {
                         // Use prepared statement with batch execution
                         let param_batches = convert_to_serializable_batch(seq)?;
-                        let mut stmt = conn.prepare(sql).map_err(PyHdbError::from)?;
+                        let mut stmt = block_on(conn.prepare(sql)).map_err(PyHdbError::from)?;
 
                         // Add all parameter sets to batch
                         for params in &param_batches {
@@ -255,10 +259,10 @@ impl PyCursor {
                         }
 
                         // Execute the batch
-                        let response = stmt.execute_batch().map_err(PyHdbError::from)?;
+                        let response = block_on(stmt.execute_batch()).map_err(PyHdbError::from)?;
                         response.count()
                     }
-                    None => conn.dml(sql).map_err(PyHdbError::from)?,
+                    None => block_on(conn.dml(sql)).map_err(PyHdbError::from)?,
                 };
                 drop(conn_guard);
 
@@ -315,15 +319,16 @@ impl PyCursor {
                 let response = match parameters {
                     Some(params) => {
                         let serializable_params = convert_to_serializable(params)?;
-                        let mut stmt = conn.prepare(&call_sql).map_err(PyHdbError::from)?;
-                        stmt.execute(&serializable_params)
-                            .map_err(PyHdbError::from)?
+                        let mut stmt =
+                            block_on(conn.prepare(&call_sql)).map_err(PyHdbError::from)?;
+                        block_on(stmt.execute(&serializable_params)).map_err(PyHdbError::from)?
                     }
-                    None => conn.statement(&call_sql).map_err(PyHdbError::from)?,
+                    None => block_on(conn.statement(&call_sql)).map_err(PyHdbError::from)?,
                 };
 
                 // Collect all return values from HdbResponse
-                let return_values: Vec<hdbconnect::HdbReturnValue> = response.into_iter().collect();
+                let return_values: Vec<hdbconnect_async::HdbReturnValue> =
+                    response.into_iter().collect();
                 drop(conn_guard);
 
                 // Initialize cursor state with collected return values
@@ -384,16 +389,19 @@ impl PyCursor {
                 // Scan from current_index + 1 for next ResultSet
                 let start_scan = *current_index + 1;
                 for i in start_scan..return_values.len() {
-                    if matches!(return_values[i], hdbconnect::HdbReturnValue::ResultSet(_)) {
+                    if matches!(
+                        return_values[i],
+                        hdbconnect_async::HdbReturnValue::ResultSet(_)
+                    ) {
                         *current_index = i;
 
                         // Extract the ResultSet - take ownership
                         let rv = std::mem::replace(
                             &mut return_values[i],
-                            hdbconnect::HdbReturnValue::Success,
+                            hdbconnect_async::HdbReturnValue::Success,
                         );
 
-                        if let hdbconnect::HdbReturnValue::ResultSet(rs) = rv {
+                        if let hdbconnect_async::HdbReturnValue::ResultSet(rs) = rv {
                             let desc = build_description(&rs);
                             *current_result_set = Some(rs);
                             *current_description = Some(desc);
@@ -427,13 +435,13 @@ impl PyCursor {
         };
 
         if let Some(rs) = result_set {
-            match rs.next() {
-                Some(Ok(row)) => {
+            match block_on(rs.next_row()) {
+                Ok(Some(row)) => {
                     let values = row_to_python(py, &row)?;
                     Ok(Some(PyTuple::new(py, values)?))
                 }
-                Some(Err(e)) => Err(PyHdbError::from(e).into()),
-                None => Ok(None),
+                Ok(None) => Ok(None),
+                Err(e) => Err(PyHdbError::from(e).into()),
             }
         } else {
             Ok(None)
@@ -459,13 +467,13 @@ impl PyCursor {
 
         if let Some(rs) = result_set {
             for _ in 0..size {
-                match rs.next() {
-                    Some(Ok(row)) => {
+                match block_on(rs.next_row()) {
+                    Ok(Some(row)) => {
                         let values = row_to_python(py, &row)?;
                         rows.push(PyTuple::new(py, values)?);
                     }
-                    Some(Err(e)) => return Err(PyHdbError::from(e).into()),
-                    None => break,
+                    Ok(None) => break,
+                    Err(e) => return Err(PyHdbError::from(e).into()),
                 }
             }
         }
@@ -489,12 +497,13 @@ impl PyCursor {
         };
 
         if let Some(rs) = result_set {
-            for row_result in rs.by_ref() {
-                match row_result {
-                    Ok(row) => {
+            loop {
+                match block_on(rs.next_row()) {
+                    Ok(Some(row)) => {
                         let values = row_to_python(py, &row)?;
                         rows.push(PyTuple::new(py, values)?);
                     }
+                    Ok(None) => break,
                     Err(e) => return Err(PyHdbError::from(e).into()),
                 }
             }
@@ -597,7 +606,7 @@ impl PyCursor {
             let mut conn_guard = self.connection.lock();
             match &mut *conn_guard {
                 ConnectionInner::Connected(conn) => {
-                    let rs = conn.query(sql).map_err(PyHdbError::from)?;
+                    let rs = block_on(conn.query(sql)).map_err(PyHdbError::from)?;
                     drop(conn_guard);
                     rs
                 }
@@ -644,7 +653,10 @@ impl PyCursor {
 }
 
 /// Convert a HANA row to Python values.
-fn row_to_python<'py>(py: Python<'py>, row: &hdbconnect::Row) -> PyResult<Vec<Bound<'py, PyAny>>> {
+fn row_to_python<'py>(
+    py: Python<'py>,
+    row: &hdbconnect_async::Row,
+) -> PyResult<Vec<Bound<'py, PyAny>>> {
     let mut values = Vec::with_capacity(row.len());
 
     for i in 0..row.len() {

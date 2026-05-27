@@ -40,6 +40,7 @@ pub mod cursor_holdability;
 pub mod error;
 mod private;
 pub mod reader;
+pub mod runtime;
 pub mod tls;
 pub mod types;
 pub mod utils;
