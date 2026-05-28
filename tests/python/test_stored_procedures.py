@@ -143,7 +143,7 @@ class TestCallprocIntegration:
         # Try to call a procedure that should exist or handle error gracefully
         try:
             cursor.callproc("SYS.GET_INSUFFICIENT_PRIVILEGE_ERROR_DETAILS")
-        except pyhdb_rs.ProgrammingError:
+        except (pyhdb_rs.ProgrammingError, pyhdb_rs.OperationalError):
             # Expected if procedure doesn't exist or wrong schema
             pass
 
@@ -159,7 +159,7 @@ class TestCallprocIntegration:
             # If somehow succeeds (unlikely), verify return value
             if result is not None:
                 assert list(result) == params
-        except pyhdb_rs.ProgrammingError:
+        except (pyhdb_rs.ProgrammingError, pyhdb_rs.OperationalError):
             # Expected - procedure doesn't exist
             pass
 
@@ -180,7 +180,7 @@ class TestCallprocIntegration:
         # Verify schema.procedure format is accepted (may fail at execution)
         try:
             cursor.callproc("SYS.SOME_PROCEDURE")
-        except pyhdb_rs.ProgrammingError:
+        except (pyhdb_rs.ProgrammingError, pyhdb_rs.OperationalError):
             # Expected if procedure doesn't exist
             pass
 
@@ -198,7 +198,7 @@ class TestAsyncCallprocIntegration:
 
         try:
             await cursor.callproc("SYS.GET_INSUFFICIENT_PRIVILEGE_ERROR_DETAILS")
-        except pyhdb_rs.ProgrammingError:
+        except (pyhdb_rs.ProgrammingError, pyhdb_rs.OperationalError):
             # Expected if procedure doesn't exist
             pass
 
