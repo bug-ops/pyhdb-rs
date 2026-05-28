@@ -55,9 +55,7 @@ class TestExecuteArrow:
         """Test DECIMAL type preserves precision."""
         pyarrow = pytest.importorskip("pyarrow")
 
-        reader = connection.execute_arrow(
-            "SELECT CAST(123.456 AS DECIMAL) AS dec_value FROM DUMMY"
-        )
+        reader = connection.execute_arrow("SELECT CAST(123.456 AS DECIMAL) AS dec_value FROM DUMMY")
         pa_reader = reader.to_pyarrow()
         table = pa_reader.read_all()
 
