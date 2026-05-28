@@ -22,7 +22,7 @@
 use pyo3::prelude::*;
 use pyo3::types::PyType;
 
-use crate::utils::apply_tls_to_sync_builder;
+use crate::utils::apply_tls_to_async_builder;
 
 /// Internal TLS configuration variant.
 #[derive(Debug, Clone)]
@@ -71,8 +71,11 @@ pub struct PyTlsConfig {
 
 impl PyTlsConfig {
     /// Apply TLS configuration to a mutable `ConnectParamsBuilder`.
-    pub(crate) fn apply_to_builder_mut(&self, builder: &mut hdbconnect::ConnectParamsBuilder) {
-        apply_tls_to_sync_builder(&self.inner, builder);
+    pub(crate) fn apply_to_builder_mut(
+        &self,
+        builder: &mut hdbconnect_async::ConnectParamsBuilder,
+    ) {
+        apply_tls_to_async_builder(&self.inner, builder);
     }
 }
 
@@ -321,7 +324,7 @@ mod tests {
         let config = PyTlsConfig {
             inner: TlsConfigInner::RootCertificates,
         };
-        let mut builder = hdbconnect::ConnectParams::builder();
+        let mut builder = hdbconnect_async::ConnectParams::builder();
         config.apply_to_builder_mut(&mut builder);
     }
 }

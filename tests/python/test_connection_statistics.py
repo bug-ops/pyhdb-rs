@@ -146,8 +146,9 @@ class TestPooledConnectionStatistics:
         self, connection_pool: pyhdb_rs.ConnectionPool
     ) -> None:
         """connection_id() raises OperationalError when returned to pool."""
-        pooled = await connection_pool.acquire()
-        await pooled.__aexit__(None, None, None)
+        guard = connection_pool.acquire()
+        pooled = await guard.__aenter__()
+        await guard.__aexit__(None, None, None)
 
         with pytest.raises(OperationalError, match="connection returned to pool"):
             await pooled.connection_id()
@@ -157,8 +158,9 @@ class TestPooledConnectionStatistics:
         self, connection_pool: pyhdb_rs.ConnectionPool
     ) -> None:
         """Server statistics methods raise OperationalError when returned to pool."""
-        pooled = await connection_pool.acquire()
-        await pooled.__aexit__(None, None, None)
+        guard = connection_pool.acquire()
+        pooled = await guard.__aenter__()
+        await guard.__aexit__(None, None, None)
 
         with pytest.raises(OperationalError, match="connection returned to pool"):
             await pooled.server_memory_usage()

@@ -19,7 +19,7 @@
 
 use std::time::Duration;
 
-use hdbconnect::ConnectionConfiguration;
+use hdbconnect_async::ConnectionConfiguration;
 use pyo3::prelude::*;
 
 use crate::error::PyHdbError;

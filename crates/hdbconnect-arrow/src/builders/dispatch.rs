@@ -147,7 +147,7 @@ impl BuilderEnum {
     ///
     /// Returns an error if the value cannot be converted to the target type.
     #[inline]
-    pub fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> Result<()> {
+    pub fn append_hana_value(&mut self, value: &hdbconnect_async::HdbValue) -> Result<()> {
         match self {
             Self::UInt8(b) => b.append_hana_value(value),
             Self::Int16(b) => b.append_hana_value(value),
@@ -252,7 +252,7 @@ mod tests {
         Int32Array, Int64Array, LargeBinaryArray, LargeStringArray, StringArray,
         Time64NanosecondArray, TimestampNanosecondArray, UInt8Array,
     };
-    use hdbconnect::HdbValue;
+    use hdbconnect_async::HdbValue;
 
     use super::*;
 

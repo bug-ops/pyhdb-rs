@@ -110,7 +110,7 @@ class TestCursorFetchArrowPandas:
         conn = ConnectionBuilder.from_url(hana_uri).build()
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT ? AS value FROM DUMMY", [42])
+            cursor.execute("SELECT CAST(? AS INT) AS value FROM DUMMY", [42])
             reader = cursor.fetch_arrow()
             pa_reader = pyarrow.RecordBatchReader.from_stream(reader)
             df = pa_reader.read_all().to_pandas()

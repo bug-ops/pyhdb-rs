@@ -39,6 +39,7 @@ use crate::config::PyConnectionConfig;
 use crate::connection::wrapper::{ConnectionInner, PyConnection};
 use crate::cursor_holdability::PyCursorHoldability;
 use crate::error::PyHdbError;
+use crate::runtime::block_on;
 use crate::tls::{PyTlsConfig, TlsConfigInner};
 use crate::types::prepared_cache::{DEFAULT_CACHE_CAPACITY, PreparedStatementCache};
 use crate::utils::ParsedConnectionUrl;
@@ -343,7 +344,7 @@ impl PyConnectionBuilder {
     ///         .application("OrderService", version="2.0.0", user="alice")
     ///         .build())
     ///     ```
-    #[pyo3(text_signature = "(self, name, version=None, user=None, source=None)")]
+    #[pyo3(signature = (name, version=None, user=None, source=None))]
     fn application<'py>(
         mut slf: PyRefMut<'py, Self>,
         name: &str,
@@ -387,7 +388,7 @@ impl PyConnectionBuilder {
             PyHdbError::interface("credentials not set - call .credentials() before .build()")
         })?;
 
-        let mut builder = hdbconnect::ConnectParams::builder();
+        let mut builder = hdbconnect_async::ConnectParams::builder();
         builder.hostname(host);
         builder.port(self.port);
         builder.dbuser(user);
@@ -416,17 +417,23 @@ impl PyConnectionBuilder {
                 hdb_config.set_cursor_holdability(holdability.into());
             }
 
-            let connection = hdbconnect::Connection::with_configuration(params, &hdb_config)
-                .map_err(|e| PyHdbError::operational(e.to_string()))?;
+            let connection = block_on(hdbconnect_async::Connection::with_configuration(
+                params,
+                &hdb_config,
+            ))
+            .map_err(|e| PyHdbError::operational(e.to_string()))?;
             (connection, cfg.statement_cache_size())
         } else {
             let connection = if let Some(holdability) = self.cursor_holdability {
-                let mut hdb_config = hdbconnect::ConnectionConfiguration::default();
+                let mut hdb_config = hdbconnect_async::ConnectionConfiguration::default();
                 hdb_config.set_cursor_holdability(holdability.into());
-                hdbconnect::Connection::with_configuration(params, &hdb_config)
-                    .map_err(|e| PyHdbError::operational(e.to_string()))?
+                block_on(hdbconnect_async::Connection::with_configuration(
+                    params,
+                    &hdb_config,
+                ))
+                .map_err(|e| PyHdbError::operational(e.to_string()))?
             } else {
-                hdbconnect::Connection::new(params)
+                block_on(hdbconnect_async::Connection::new(params))
                     .map_err(|e| PyHdbError::operational(e.to_string()))?
             };
             (connection, DEFAULT_CACHE_CAPACITY)
@@ -434,20 +441,16 @@ impl PyConnectionBuilder {
 
         // Apply application metadata post-connection
         if let Some(app_name) = &self.application_name {
-            conn.set_application(app_name)
-                .map_err(|e| PyHdbError::operational(e.to_string()))?;
+            block_on(conn.set_application(app_name));
         }
         if let Some(app_user) = &self.application_user {
-            conn.set_application_user(app_user)
-                .map_err(|e| PyHdbError::operational(e.to_string()))?;
+            block_on(conn.set_application_user(app_user));
         }
         if let Some(app_version) = &self.application_version {
-            conn.set_application_version(app_version)
-                .map_err(|e| PyHdbError::operational(e.to_string()))?;
+            block_on(conn.set_application_version(app_version));
         }
         if let Some(app_source) = &self.application_source {
-            conn.set_application_source(app_source)
-                .map_err(|e| PyHdbError::operational(e.to_string()))?;
+            block_on(conn.set_application_source(app_source));
         }
 
         Ok(PyConnection::from_parts(
@@ -681,7 +684,7 @@ impl PyAsyncConnectionBuilder {
     ///         .application("OrderService", version="2.0.0", user="alice")
     ///         .build())
     ///     ```
-    #[pyo3(text_signature = "(self, name, version=None, user=None, source=None)")]
+    #[pyo3(signature = (name, version=None, user=None, source=None))]
     fn application<'py>(
         mut slf: PyRefMut<'py, Self>,
         name: &str,

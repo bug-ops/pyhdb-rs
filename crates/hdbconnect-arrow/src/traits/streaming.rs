@@ -84,7 +84,10 @@ pub trait BatchProcessor {
     /// # Errors
     ///
     /// Returns an error if processing fails.
-    fn process<'a>(&'a mut self, rows: &[hdbconnect::Row]) -> Result<Self::Batch<'a>, Self::Error>;
+    fn process<'a>(
+        &'a mut self,
+        rows: &[hdbconnect_async::Row],
+    ) -> Result<Self::Batch<'a>, Self::Error>;
 
     /// Flush any buffered data and return the final batch.
     ///

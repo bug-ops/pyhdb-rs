@@ -63,8 +63,6 @@ pub use traits::row::RowLike;
 pub use traits::row::{MockRow, MockRowBuilder};
 pub use traits::sealed::FromHanaValue;
 pub use traits::streaming::{BatchConfig, BatchProcessor, LendingBatchIterator};
-#[cfg(feature = "async")]
-pub use types::arrow::FieldMetadataExtAsync;
 pub use types::arrow::{FieldMetadataExt, hana_field_to_arrow, hana_type_to_arrow};
 pub use types::conversion::TypeCategory;
 pub use types::hana::{

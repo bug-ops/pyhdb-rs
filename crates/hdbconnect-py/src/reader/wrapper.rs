@@ -153,133 +153,81 @@ impl std::fmt::Debug for PyRecordBatchReader {
     }
 }
 
-struct StreamingReader {
-    result_set: hdbconnect::ResultSet,
-    processor: HanaBatchProcessor,
+struct SyncFromAsyncResultSet {
+    batches: std::collections::VecDeque<RecordBatch>,
     schema: SchemaRef,
-    exhausted: bool,
-    guard: safety_validator::IterationGuard,
 }
 
-// SAFETY REVIEW: 2026-01-28
-// Reviewer: rust-architect
-// Next review: 2026-07-28 (6 months)
-// Invariants verified: [arrow-sequential, gil-sync, single-owner, lifetime-bound]
-//
-// Safety justification:
-// - ResultSet is !Send but we maintain single-owner semantics via mem::replace
-// - GIL synchronization enforced by PyO3 type system
-// - Arrow C Stream protocol is sequential by design
-// - Lifetime bound to Python object prevents use-after-free
-//
-// hdbconnect::ResultSet is !Send because it may contain non-thread-safe internals
-// (e.g., TCP stream state, internal buffers). However, we guarantee thread safety
-// through the following invariants:
-//
-// INVARIANTS:
-// 1. Single-owner semantics: StreamingReader takes ownership of ResultSet via std::mem::replace in
-//    fetch_arrow(), transferring it out of the Mutex-protected CursorInner. Only one
-//    StreamingReader can own a ResultSet at a time.
-//
-// 2. GIL synchronization: pyo3_arrow::PyRecordBatchReader exposes the iterator through Python's
-//    Arrow C Stream interface. All access from Python code requires holding the GIL, which
-//    serializes access.
-//
-// 3. No concurrent iteration: The Arrow C Stream protocol is inherently sequential - get_next() is
-//    called one batch at a time. The RecordBatchReader trait's Iterator impl is not accessed from
-//    multiple threads simultaneously.
-//
-// 4. Lifetime bound to Python object: The PyRecordBatchReader Python object prevents the underlying
-//    reader from being accessed after the object is dropped.
-//
-// VERIFICATION: If pyo3_arrow ever changes to access iterators without GIL held,
-// this impl would become unsound. Review pyo3_arrow updates for changes to
-// thread-safety guarantees.
-unsafe impl Send for StreamingReader {}
-
-impl StreamingReader {
-    fn new(result_set: hdbconnect::ResultSet, batch_size: usize) -> Self {
+impl SyncFromAsyncResultSet {
+    fn new(result_set: hdbconnect_async::ResultSet, batch_size: usize) -> Self {
         let schema = Self::build_schema(&result_set);
         let config = BatchConfig::with_batch_size(batch_size);
-        let processor = HanaBatchProcessor::new(Arc::clone(&schema), config);
-
-        Self {
-            result_set,
-            processor,
-            schema,
-            exhausted: false,
-            guard: safety_validator::IterationGuard::new(),
-        }
+        let batches =
+            crate::runtime::block_on(Self::collect(result_set, Arc::clone(&schema), config));
+        Self { batches, schema }
     }
 
-    fn build_schema(result_set: &hdbconnect::ResultSet) -> SchemaRef {
+    fn build_schema(result_set: &hdbconnect_async::ResultSet) -> SchemaRef {
         let fields: Vec<_> = result_set
             .metadata()
             .iter()
             .map(FieldMetadataExt::to_arrow_field)
             .collect();
-
         Arc::new(arrow_schema::Schema::new(fields))
     }
 
-    #[allow(clippy::needless_continue)]
-    fn next_inner(&mut self) -> Option<Result<RecordBatch, arrow_schema::ArrowError>> {
-        if self.exhausted {
-            return None;
-        }
-
+    async fn collect(
+        mut result_set: hdbconnect_async::ResultSet,
+        schema: SchemaRef,
+        config: BatchConfig,
+    ) -> std::collections::VecDeque<RecordBatch> {
+        let mut processor = HanaBatchProcessor::new(Arc::clone(&schema), config);
+        let mut batches = std::collections::VecDeque::new();
         loop {
-            match self.result_set.next() {
-                Some(Ok(row)) => match self.processor.process_row(&row) {
-                    Ok(Some(batch)) => return Some(Ok(batch)),
-                    Ok(None) => continue,
-                    Err(e) => {
-                        return Some(Err(arrow_schema::ArrowError::ExternalError(Box::new(
-                            std::io::Error::other(e.to_string()),
-                        ))));
-                    }
+            match result_set.next_row().await {
+                Ok(Some(row)) => match processor.process_row(&row) {
+                    Ok(Some(batch)) => batches.push_back(batch),
+                    Ok(None) => {}
+                    Err(_) => break,
                 },
-                Some(Err(e)) => {
-                    self.exhausted = true;
-                    return Some(Err(arrow_schema::ArrowError::ExternalError(Box::new(
-                        std::io::Error::other(e.to_string()),
-                    ))));
+                Ok(None) => {
+                    if let Ok(Some(batch)) = processor.flush() {
+                        batches.push_back(batch);
+                    }
+                    break;
                 }
-                None => {
-                    self.exhausted = true;
-                    return match self.processor.flush() {
-                        Ok(Some(batch)) => Some(Ok(batch)),
-                        Ok(None) => None,
-                        Err(e) => Some(Err(arrow_schema::ArrowError::ExternalError(Box::new(
-                            std::io::Error::other(e.to_string()),
-                        )))),
-                    };
-                }
+                Err(_) => break,
             }
         }
+        // result_set drops here — inside block_on, so tokio context is active
+        batches
+    }
+
+    fn next_inner(&mut self) -> Option<Result<RecordBatch, arrow_schema::ArrowError>> {
+        self.batches.pop_front().map(Ok)
     }
 }
 
-impl Iterator for StreamingReader {
+impl Iterator for SyncFromAsyncResultSet {
     type Item = Result<RecordBatch, arrow_schema::ArrowError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.guard.begin_iteration();
-        let result = self.next_inner();
-        self.guard.end_iteration();
-        result
+        self.next_inner()
     }
 }
 
-impl arrow_array::RecordBatchReader for StreamingReader {
+impl arrow_array::RecordBatchReader for SyncFromAsyncResultSet {
     fn schema(&self) -> SchemaRef {
         Arc::clone(&self.schema)
     }
 }
 
 impl PyRecordBatchReader {
-    pub fn from_resultset(result_set: hdbconnect::ResultSet, batch_size: usize) -> PyResult<Self> {
-        let reader = StreamingReader::new(result_set, batch_size);
+    pub fn from_resultset(
+        result_set: hdbconnect_async::ResultSet,
+        batch_size: usize,
+    ) -> PyResult<Self> {
+        let reader = SyncFromAsyncResultSet::new(result_set, batch_size);
         let pyo3_reader = pyo3_arrow::PyRecordBatchReader::new(Box::new(reader));
         Ok(Self {
             inner: Some(pyo3_reader),
@@ -541,7 +489,7 @@ mod tests {
     #[test]
     fn test_streaming_reader_is_send() {
         // Compile-time verification that Send is implemented
-        assert_send::<StreamingReader>();
+        assert_send::<SyncFromAsyncResultSet>();
     }
 
     #[cfg(feature = "async")]

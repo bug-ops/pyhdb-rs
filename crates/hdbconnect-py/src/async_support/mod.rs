@@ -54,5 +54,6 @@ pub use common::ConnectionState;
 pub use connection::{AsyncConnectionInner, AsyncPyConnection, SharedAsyncConnection};
 pub use cursor::AsyncPyCursor;
 pub use pool::{
-    HanaConnectionManager, PoolConfig, PooledConnection, PyConnectionPool, PyConnectionPoolBuilder,
+    AcquireGuard, HanaConnectionManager, PoolConfig, PooledConnection, PyConnectionPool,
+    PyConnectionPoolBuilder,
 };

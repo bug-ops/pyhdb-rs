@@ -30,6 +30,7 @@
 //! ```
 
 use pyo3::prelude::*;
+use rustls::crypto::aws_lc_rs as rustls_aws_lc;
 
 pub mod config;
 pub mod connection;
@@ -39,6 +40,7 @@ pub mod cursor_holdability;
 pub mod error;
 mod private;
 pub mod reader;
+pub mod runtime;
 pub mod tls;
 pub mod types;
 pub mod utils;
@@ -49,6 +51,7 @@ pub mod async_support;
 #[cfg(feature = "async")]
 pub use async_support::{
     AsyncPyConnection, AsyncPyCursor, PooledConnection, PyConnectionPool, PyConnectionPoolBuilder,
+    pool::AcquireGuard,
 };
 pub use config::{PyArrowConfig, PyConnectionConfig};
 #[cfg(feature = "async")]
@@ -110,6 +113,11 @@ fn connect(url: &str, config: Option<&PyConnectionConfig>) -> PyResult<PyConnect
 #[pymodule]
 #[pyo3(name = "_core")]
 fn pyhdb_rs_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // rustls 0.23 requires an explicit CryptoProvider; hdbconnect_impl uses default-features=false
+    // so no provider is auto-registered. install_default() is idempotent (returns Err if already
+    // set).
+    let _ = rustls_aws_lc::default_provider().install_default();
+
     // DB-API 2.0 module globals
     m.add("apilevel", APILEVEL)?;
     m.add("threadsafety", THREADSAFETY)?;
@@ -142,6 +150,7 @@ fn pyhdb_rs_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_class::<AsyncPyCursor>()?;
         m.add_class::<PyConnectionPool>()?;
         m.add_class::<PooledConnection>()?;
+        m.add_class::<AcquireGuard>()?;
         m.add_class::<async_support::pool::PoolStatus>()?;
         m.add_class::<PyAsyncConnectionBuilder>()?;
         m.add_class::<PyConnectionPoolBuilder>()?;

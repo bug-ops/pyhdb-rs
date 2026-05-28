@@ -27,7 +27,7 @@
 use std::collections::HashMap;
 
 use arrow_schema::{DataType, Field, TimeUnit};
-use hdbconnect::TypeId;
+use hdbconnect_async::TypeId;
 
 /// Convert HANA `TypeId` to Arrow `DataType`.
 ///
@@ -131,7 +131,7 @@ pub fn hana_field_to_arrow(
     )
 }
 
-/// Extension trait for hdbconnect `FieldMetadata`.
+/// Extension trait for `FieldMetadata`.
 ///
 /// Provides convenient conversion methods for HANA metadata to Arrow types.
 pub trait FieldMetadataExt {
@@ -142,21 +142,9 @@ pub trait FieldMetadataExt {
     fn arrow_data_type(&self) -> DataType;
 }
 
-/// Extension trait for `hdbconnect_async` `FieldMetadata`.
-///
-/// Provides convenient conversion methods for async HANA metadata to Arrow types.
-#[cfg(feature = "async")]
-pub trait FieldMetadataExtAsync {
-    /// Convert to Arrow Field.
-    fn to_arrow_field(&self) -> Field;
-
-    /// Get the Arrow `DataType` for this field.
-    fn arrow_data_type(&self) -> DataType;
-}
-
 /// Internal macro to implement `FieldMetadataExt` for different `FieldMetadata` types.
 ///
-/// Both `hdbconnect::FieldMetadata` and `hdbconnect_async::FieldMetadata` have
+/// Both `hdbconnect_async::FieldMetadata` and `hdbconnect_async::FieldMetadata` have
 /// identical interfaces, so we use a macro to avoid code duplication.
 macro_rules! impl_field_metadata_ext {
     ($trait_name:ident for $type:ty) => {
@@ -223,12 +211,7 @@ macro_rules! impl_field_metadata_ext {
     };
 }
 
-// Apply macro for sync version
-impl_field_metadata_ext!(FieldMetadataExt for hdbconnect::FieldMetadata);
-
-// Apply macro for async version
-#[cfg(feature = "async")]
-impl_field_metadata_ext!(FieldMetadataExtAsync for hdbconnect_async::FieldMetadata);
+impl_field_metadata_ext!(FieldMetadataExt for hdbconnect_async::FieldMetadata);
 
 /// Get the HANA type category for a `TypeId`.
 ///

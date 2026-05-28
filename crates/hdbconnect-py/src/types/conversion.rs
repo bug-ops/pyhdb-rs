@@ -50,9 +50,9 @@ fn parse_timestamp_to_python<'py>(py: Python<'py>, s: &str) -> PyResult<Bound<'p
 /// Convert a HANA value to a Python object.
 pub fn hana_value_to_python<'py>(
     py: Python<'py>,
-    value: &hdbconnect::HdbValue,
+    value: &hdbconnect_async::HdbValue,
 ) -> PyResult<Bound<'py, PyAny>> {
-    use hdbconnect::HdbValue;
+    use hdbconnect_async::HdbValue;
 
     match value {
         HdbValue::NULL => Ok(py.None().into_bound(py)),
@@ -109,24 +109,18 @@ pub fn hana_value_to_python<'py>(
         HdbValue::LONGDATE(ts) => parse_timestamp_to_python(py, &ts.to_string()),
         HdbValue::SECONDDATE(sd) => parse_timestamp_to_python(py, &sd.to_string()),
         // LOB types: materialize and convert to Python str/bytes
-        HdbValue::SYNC_CLOB(clob) => {
-            let content = clob
-                .clone()
-                .into_string()
+        HdbValue::ASYNC_CLOB(clob) => {
+            let content = crate::runtime::block_on(clob.clone().into_string())
                 .map_err(|e| PyHdbError::data(format!("CLOB read failed: {e}")))?;
             Ok(content.into_pyobject(py)?.clone().into_any())
         }
-        HdbValue::SYNC_NCLOB(nclob) => {
-            let content = nclob
-                .clone()
-                .into_string()
+        HdbValue::ASYNC_NCLOB(nclob) => {
+            let content = crate::runtime::block_on(nclob.clone().into_string())
                 .map_err(|e| PyHdbError::data(format!("NCLOB read failed: {e}")))?;
             Ok(content.into_pyobject(py)?.clone().into_any())
         }
-        HdbValue::SYNC_BLOB(blob) => {
-            let content = blob
-                .clone()
-                .into_bytes()
+        HdbValue::ASYNC_BLOB(blob) => {
+            let content = crate::runtime::block_on(blob.clone().into_bytes())
                 .map_err(|e| PyHdbError::data(format!("BLOB read failed: {e}")))?;
             Ok(PyBytes::new(py, &content).clone().into_any())
         }
@@ -143,8 +137,10 @@ pub fn hana_value_to_python<'py>(
 /// # Errors
 ///
 /// Returns error if conversion is not possible.
-pub fn python_to_hana_value(obj: &Bound<'_, PyAny>) -> PyResult<hdbconnect::HdbValue<'static>> {
-    use hdbconnect::HdbValue;
+pub fn python_to_hana_value(
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<hdbconnect_async::HdbValue<'static>> {
+    use hdbconnect_async::HdbValue;
 
     if obj.is_none() {
         return Ok(HdbValue::NULL);
@@ -234,67 +230,6 @@ pub fn python_to_hana_value(obj: &Bound<'_, PyAny>) -> PyResult<hdbconnect::HdbV
         obj.get_type().name()?
     ))
     .into())
-}
-
-/// Convert an async HANA value to a Python object.
-#[cfg(feature = "async")]
-pub fn hana_value_to_python_async<'py>(
-    py: Python<'py>,
-    value: &hdbconnect_async::HdbValue,
-) -> PyResult<Bound<'py, PyAny>> {
-    use hdbconnect_async::HdbValue;
-
-    match value {
-        HdbValue::NULL => Ok(py.None().into_bound(py)),
-        HdbValue::BOOLEAN(b) => Ok(b.into_pyobject(py)?.to_owned().into_any()),
-        HdbValue::TINYINT(v) => Ok(v.into_pyobject(py)?.clone().into_any()),
-        HdbValue::SMALLINT(v) => Ok(v.into_pyobject(py)?.clone().into_any()),
-        HdbValue::INT(v) => Ok(v.into_pyobject(py)?.clone().into_any()),
-        HdbValue::BIGINT(v) => Ok(v.into_pyobject(py)?.clone().into_any()),
-        HdbValue::REAL(v) => Ok(v.into_pyobject(py)?.clone().into_any()),
-        HdbValue::DOUBLE(v) => Ok(v.into_pyobject(py)?.clone().into_any()),
-        HdbValue::STRING(s) => Ok(s.into_pyobject(py)?.clone().into_any()),
-        HdbValue::BINARY(b) => Ok(PyBytes::new(py, b).clone().into_any()),
-        HdbValue::DECIMAL(d) => {
-            let decimal_cls = get_decimal_cls(py)?;
-            let s = d.to_string();
-            decimal_cls.call1((s,))
-        }
-        HdbValue::DAYDATE(d) => {
-            let date_cls = get_date_cls(py)?;
-            let s = d.to_string();
-            let parts: Vec<&str> = s.split('-').collect();
-            if parts.len() == 3 {
-                // Fallback to epoch date on parse failure (see parse_timestamp_to_python)
-                let year: i32 = parts[0].parse().unwrap_or(1970);
-                let month: u32 = parts[1].parse().unwrap_or(1);
-                let day: u32 = parts[2].parse().unwrap_or(1);
-                date_cls.call1((year, month, day))
-            } else {
-                Ok(s.into_pyobject(py)?.clone().into_any())
-            }
-        }
-        HdbValue::SECONDTIME(t) => {
-            let time_cls = get_time_cls(py)?;
-            let s = t.to_string();
-            let parts: Vec<&str> = s.split(':').collect();
-            if parts.len() == 3 {
-                // Fallback to midnight on parse failure (see parse_timestamp_to_python)
-                let hour: u32 = parts[0].parse().unwrap_or(0);
-                let minute: u32 = parts[1].parse().unwrap_or(0);
-                let second: u32 = parts[2].parse().unwrap_or(0);
-                time_cls.call1((hour, minute, second))
-            } else {
-                Ok(s.into_pyobject(py)?.clone().into_any())
-            }
-        }
-        HdbValue::LONGDATE(ts) => parse_timestamp_to_python(py, &ts.to_string()),
-        HdbValue::SECONDDATE(sd) => parse_timestamp_to_python(py, &sd.to_string()),
-        other => {
-            let s = format!("{other:?}");
-            Ok(s.into_pyobject(py)?.clone().into_any())
-        }
-    }
 }
 
 #[cfg(test)]

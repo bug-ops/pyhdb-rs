@@ -14,8 +14,7 @@
 
 use std::marker::PhantomData;
 
-#[cfg(feature = "async")]
-use hdbconnect::ConnectionConfiguration;
+use hdbconnect_async::{ConnectionConfiguration, ServerCerts};
 
 use crate::error::PyHdbError;
 use crate::private::sealed::Sealed;
@@ -194,7 +193,7 @@ impl ConnectionBuilder<HasHost, HasCredentials> {
     /// # Errors
     ///
     /// Returns error if parameters are invalid or if an internal invariant is violated.
-    pub fn build(self) -> Result<hdbconnect::ConnectParams, PyHdbError> {
+    pub fn build(self) -> Result<hdbconnect_async::ConnectParams, PyHdbError> {
         let host = self
             .host
             .ok_or_else(|| PyHdbError::internal("internal: host missing"))?;
@@ -205,7 +204,7 @@ impl ConnectionBuilder<HasHost, HasCredentials> {
             .password
             .ok_or_else(|| PyHdbError::internal("internal: password missing"))?;
 
-        let mut params_builder = hdbconnect::ConnectParams::builder();
+        let mut params_builder = hdbconnect_async::ConnectParams::builder();
         params_builder.hostname(&host);
         params_builder.port(self.port);
         params_builder.dbuser(&user);
@@ -213,6 +212,10 @@ impl ConnectionBuilder<HasHost, HasCredentials> {
 
         if let Some(db) = &self.database {
             params_builder.dbname(db);
+        }
+
+        if self.tls {
+            params_builder.tls_with(ServerCerts::RootCertificates);
         }
 
         let params = params_builder
@@ -269,21 +272,18 @@ impl ConnectionBuilder<HasHost, HasCredentials> {
 /// # Ok(())
 /// # }
 /// ```
-#[cfg(feature = "async")]
 #[derive(Debug)]
 pub struct AsyncConnectionBuilder<H: BuilderState, C: BuilderState> {
     inner: ConnectionBuilder<H, C>,
     config: Option<ConnectionConfiguration>,
 }
 
-#[cfg(feature = "async")]
 impl Default for AsyncConnectionBuilder<MissingHost, MissingCredentials> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-#[cfg(feature = "async")]
 impl AsyncConnectionBuilder<MissingHost, MissingCredentials> {
     /// Create a new async connection builder.
     #[must_use]
@@ -312,7 +312,6 @@ impl AsyncConnectionBuilder<MissingHost, MissingCredentials> {
     }
 }
 
-#[cfg(feature = "async")]
 impl<C: BuilderState> AsyncConnectionBuilder<MissingHost, C> {
     /// Set the host.
     #[must_use]
@@ -324,7 +323,6 @@ impl<C: BuilderState> AsyncConnectionBuilder<MissingHost, C> {
     }
 }
 
-#[cfg(feature = "async")]
 impl<H: BuilderState> AsyncConnectionBuilder<H, MissingCredentials> {
     /// Set the credentials.
     #[must_use]
@@ -340,7 +338,6 @@ impl<H: BuilderState> AsyncConnectionBuilder<H, MissingCredentials> {
     }
 }
 
-#[cfg(feature = "async")]
 impl<H: BuilderState, C: BuilderState> AsyncConnectionBuilder<H, C> {
     /// Set the port.
     #[must_use]
@@ -379,7 +376,6 @@ impl<H: BuilderState, C: BuilderState> AsyncConnectionBuilder<H, C> {
     }
 }
 
-#[cfg(feature = "async")]
 impl AsyncConnectionBuilder<HasHost, HasCredentials> {
     /// Build connection parameters.
     ///
@@ -388,7 +384,7 @@ impl AsyncConnectionBuilder<HasHost, HasCredentials> {
     /// # Errors
     ///
     /// Returns error if parameters are invalid.
-    pub fn build(self) -> Result<hdbconnect::ConnectParams, PyHdbError> {
+    pub fn build(self) -> Result<hdbconnect_async::ConnectParams, PyHdbError> {
         self.inner.build()
     }
 
@@ -518,21 +514,18 @@ mod tests {
     // AsyncConnectionBuilder Tests (async feature only)
     // ═══════════════════════════════════════════════════════════════════════════
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_from_url() {
         let builder = AsyncConnectionBuilder::from_url("hdbsql://user:pass@localhost:30015/mydb");
         assert!(builder.is_ok());
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_missing_host() {
         let result = AsyncConnectionBuilder::from_url("hdbsql://user:pass@/mydb");
         assert!(result.is_err());
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_fluent() {
         let _builder = AsyncConnectionBuilder::new()
@@ -544,42 +537,36 @@ mod tests {
         // Type system ensures this is AsyncConnectionBuilder<HasHost, HasCredentials>
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_missing_username() {
         let result = AsyncConnectionBuilder::from_url("hdbsql://:pass@localhost:30015");
         assert!(result.is_err());
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_missing_password() {
         let result = AsyncConnectionBuilder::from_url("hdbsql://user@localhost:30015");
         assert!(result.is_err());
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_with_tls_scheme() {
         let builder = AsyncConnectionBuilder::from_url("hdbsqls://user:pass@localhost:30015");
         assert!(builder.is_ok());
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_without_database() {
         let builder = AsyncConnectionBuilder::from_url("hdbsql://user:pass@localhost:30015");
         assert!(builder.is_ok());
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_default_port() {
         let builder = AsyncConnectionBuilder::from_url("hdbsql://user:pass@localhost");
         assert!(builder.is_ok());
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_default() {
         let builder = AsyncConnectionBuilder::<MissingHost, MissingCredentials>::default();
@@ -587,14 +574,12 @@ mod tests {
         assert!(debug_str.contains("AsyncConnectionBuilder"));
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_invalid_url() {
         let result = AsyncConnectionBuilder::from_url("not-a-valid-url");
         assert!(result.is_err());
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_with_config() {
         let config = ConnectionConfiguration::default();
@@ -604,7 +589,6 @@ mod tests {
         assert!(builder.config.is_some());
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_build_params() {
         let result = AsyncConnectionBuilder::from_url("hdbsql://user:pass@localhost:30015")
@@ -613,7 +597,6 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_programmatic_build() {
         let result = AsyncConnectionBuilder::new()
@@ -625,7 +608,6 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_config_chaining() {
         let config = ConnectionConfiguration::default();
@@ -642,7 +624,6 @@ mod tests {
         assert!(debug_str.contains("AsyncConnectionBuilder"));
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_without_config() {
         let builder =
@@ -650,7 +631,6 @@ mod tests {
         assert!(builder.config.is_none());
     }
 
-    #[cfg(feature = "async")]
     #[test]
     fn test_async_builder_with_database_creates_params() {
         let builder = AsyncConnectionBuilder::from_url("hdbsql://user:pass@localhost:30015/mydb");

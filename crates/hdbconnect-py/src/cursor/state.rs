@@ -94,8 +94,6 @@ pub struct ColumnDescription {
 /// Typed cursor with compile-time state tracking.
 #[derive(Debug)]
 pub struct TypedCursor<S: CursorState> {
-    /// The result set (if executed).
-    result_set: Option<hdbconnect::ResultSet>,
     /// Column descriptions.
     description: Option<Vec<ColumnDescription>>,
     /// Number of rows affected by last DML.
@@ -147,24 +145,7 @@ impl TypedCursor<Idle> {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            result_set: None,
             description: None,
-            rowcount: -1,
-            _state: PhantomData,
-        }
-    }
-
-    /// Execute a query.
-    ///
-    /// Transitions from Idle to Executed state.
-    pub fn execute(
-        self,
-        result_set: hdbconnect::ResultSet,
-        description: Vec<ColumnDescription>,
-    ) -> TypedCursor<Executed> {
-        TypedCursor {
-            result_set: Some(result_set),
-            description: Some(description),
             rowcount: -1,
             _state: PhantomData,
         }
@@ -179,122 +160,6 @@ impl TypedCursor<Idle> {
         self.description = None;
         self
     }
-}
-
-impl TypedCursor<Executed> {
-    /// Fetch one row.
-    ///
-    /// Transitions to Fetching or Exhausted state.
-    pub fn fetchone(mut self) -> FetchResult {
-        if let Some(ref mut rs) = self.result_set {
-            match rs.next() {
-                Some(Ok(row)) => FetchResult::Row(
-                    row,
-                    TypedCursor {
-                        result_set: self.result_set,
-                        description: self.description,
-                        rowcount: self.rowcount,
-                        _state: PhantomData,
-                    },
-                ),
-                Some(Err(e)) => FetchResult::Error(e),
-                None => FetchResult::Empty(TypedCursor {
-                    result_set: None,
-                    description: self.description,
-                    rowcount: self.rowcount,
-                    _state: PhantomData,
-                }),
-            }
-        } else {
-            FetchResult::Empty(TypedCursor {
-                result_set: None,
-                description: self.description,
-                rowcount: self.rowcount,
-                _state: PhantomData,
-            })
-        }
-    }
-
-    /// Reset to idle state.
-    pub fn reset(self) -> TypedCursor<Idle> {
-        TypedCursor {
-            result_set: None,
-            description: None,
-            rowcount: -1,
-            _state: PhantomData,
-        }
-    }
-
-    /// Get mutable reference to result set.
-    pub const fn result_set_mut(&mut self) -> Option<&mut hdbconnect::ResultSet> {
-        self.result_set.as_mut()
-    }
-}
-
-impl TypedCursor<Fetching> {
-    /// Fetch one more row.
-    pub fn fetchone(mut self) -> FetchResult {
-        if let Some(ref mut rs) = self.result_set {
-            match rs.next() {
-                Some(Ok(row)) => FetchResult::Row(
-                    row,
-                    Self {
-                        result_set: self.result_set,
-                        description: self.description,
-                        rowcount: self.rowcount,
-                        _state: PhantomData,
-                    },
-                ),
-                Some(Err(e)) => FetchResult::Error(e),
-                None => FetchResult::Empty(TypedCursor {
-                    result_set: None,
-                    description: self.description,
-                    rowcount: self.rowcount,
-                    _state: PhantomData,
-                }),
-            }
-        } else {
-            FetchResult::Empty(TypedCursor {
-                result_set: None,
-                description: self.description,
-                rowcount: self.rowcount,
-                _state: PhantomData,
-            })
-        }
-    }
-
-    /// Reset to idle state.
-    pub fn reset(self) -> TypedCursor<Idle> {
-        TypedCursor {
-            result_set: None,
-            description: None,
-            rowcount: -1,
-            _state: PhantomData,
-        }
-    }
-}
-
-impl TypedCursor<Exhausted> {
-    /// Reset to idle state.
-    pub fn reset(self) -> TypedCursor<Idle> {
-        TypedCursor {
-            result_set: None,
-            description: None,
-            rowcount: -1,
-            _state: PhantomData,
-        }
-    }
-}
-
-/// Result of a fetch operation.
-#[derive(Debug)]
-pub enum FetchResult {
-    /// Row fetched successfully.
-    Row(hdbconnect::Row, TypedCursor<Fetching>),
-    /// No more rows.
-    Empty(TypedCursor<Exhausted>),
-    /// Error occurred.
-    Error(hdbconnect::HdbError),
 }
 
 #[cfg(test)]

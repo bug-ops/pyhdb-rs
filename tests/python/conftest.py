@@ -6,6 +6,7 @@ import os
 from typing import TYPE_CHECKING
 
 import pytest
+import pytest_asyncio
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -126,7 +127,7 @@ def sync_connection(hana_uri: str) -> Generator[pyhdb_rs.Connection, None, None]
         conn.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def async_connection(hana_uri: str):
     """Create an async HANA connection for tests.
 
@@ -144,7 +145,7 @@ async def async_connection(hana_uri: str):
         await conn.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def connection_pool(hana_uri: str):
     """Create a connection pool for tests.
 
@@ -160,7 +161,7 @@ async def connection_pool(hana_uri: str):
         await pool.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def pooled_connection(connection_pool):
     """Create a pooled connection for tests.
 
@@ -169,6 +170,5 @@ async def pooled_connection(connection_pool):
 
     After the test completes, the connection is returned to the pool.
     """
-    pooled = await connection_pool.acquire()
-    async with pooled:
+    async with connection_pool.acquire() as pooled:
         yield pooled

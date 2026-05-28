@@ -746,10 +746,8 @@ impl AsyncPyConnection {
         })
     }
 
-    // PyO3 requires &self for Python __aenter__ protocol binding.
-    #[allow(clippy::unused_self)]
-    fn __aenter__(slf: Py<Self>) -> Py<Self> {
-        slf
+    fn __aenter__(slf: Py<Self>, py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
+        pyo3_async_runtimes::tokio::future_into_py(py, async move { Ok(slf) })
     }
 
     fn __aexit__<'py>(

@@ -13,6 +13,7 @@ use crate::config::{DEFAULT_ARROW_BATCH_SIZE, PyArrowConfig, PyConnectionConfig}
 use crate::cursor::PyCursor;
 use crate::error::PyHdbError;
 use crate::reader::PyRecordBatchReader;
+use crate::runtime::block_on;
 use crate::types::prepared_cache::{
     CacheStatistics, DEFAULT_CACHE_CAPACITY, PreparedStatementCache,
 };
@@ -25,7 +26,7 @@ pub type SharedConnection = Arc<Mutex<ConnectionInner>>;
 #[derive(Debug)]
 pub enum ConnectionInner {
     /// Active connection.
-    Connected(hdbconnect::Connection),
+    Connected(hdbconnect_async::Connection),
     /// Disconnected state.
     Disconnected,
 }
@@ -105,7 +106,7 @@ pub struct PyConnection {
     /// Auto-commit mode.
     autocommit: bool,
     /// Prepared statement cache.
-    stmt_cache: Mutex<PreparedStatementCache<hdbconnect::PreparedStatement>>,
+    stmt_cache: Mutex<PreparedStatementCache<hdbconnect_async::PreparedStatement>>,
 }
 
 impl PyConnection {
@@ -117,7 +118,7 @@ impl PyConnection {
     pub fn from_parts(
         inner: SharedConnection,
         autocommit: bool,
-        stmt_cache: Mutex<PreparedStatementCache<hdbconnect::PreparedStatement>>,
+        stmt_cache: Mutex<PreparedStatementCache<hdbconnect_async::PreparedStatement>>,
     ) -> Self {
         Self {
             inner,
@@ -131,8 +132,11 @@ impl PyConnection {
         let params = crate::connection::ConnectionBuilder::from_url(url)?.build()?;
         let hdb_config = config.to_hdbconnect_config();
 
-        let conn = hdbconnect::Connection::with_configuration(params, &hdb_config)
-            .map_err(|e| PyHdbError::operational(e.to_string()))?;
+        let conn = block_on(hdbconnect_async::Connection::with_configuration(
+            params,
+            &hdb_config,
+        ))
+        .map_err(|e| PyHdbError::operational(e.to_string()))?;
 
         let cache_size = config.statement_cache_size();
 
@@ -151,7 +155,7 @@ impl PyConnection {
     /// Get the statement cache reference (for cursor integration).
     pub const fn statement_cache(
         &self,
-    ) -> &Mutex<PreparedStatementCache<hdbconnect::PreparedStatement>> {
+    ) -> &Mutex<PreparedStatementCache<hdbconnect_async::PreparedStatement>> {
         &self.stmt_cache
     }
 }
@@ -173,7 +177,7 @@ impl PyConnection {
     #[pyo3(signature = (url))]
     pub fn new(url: &str) -> PyResult<Self> {
         let params = crate::connection::ConnectionBuilder::from_url(url)?.build()?;
-        let conn = hdbconnect::Connection::new(params)
+        let conn = block_on(hdbconnect_async::Connection::new(params))
             .map_err(|e| PyHdbError::operational(e.to_string()))?;
 
         Ok(Self {
@@ -198,7 +202,10 @@ impl PyConnection {
         drop(evicted);
         drop(cache);
 
-        *self.inner.lock() = ConnectionInner::Disconnected;
+        let old = std::mem::replace(&mut *self.inner.lock(), ConnectionInner::Disconnected);
+        if let ConnectionInner::Connected(conn) = old {
+            block_on(async move { drop(conn) });
+        }
     }
 
     /// Commit the current transaction.
@@ -206,7 +213,7 @@ impl PyConnection {
         let mut guard = self.inner.lock();
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
-                conn.commit().map_err(PyHdbError::from)?;
+                block_on(conn.commit()).map_err(PyHdbError::from)?;
                 Ok(())
             }
             ConnectionInner::Disconnected => {
@@ -220,7 +227,7 @@ impl PyConnection {
         let mut guard = self.inner.lock();
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
-                conn.rollback().map_err(PyHdbError::from)?;
+                block_on(conn.rollback()).map_err(PyHdbError::from)?;
                 Ok(())
             }
             ConnectionInner::Disconnected => {
@@ -258,7 +265,7 @@ impl PyConnection {
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
                 if check_connection {
-                    conn.query(VALIDATION_QUERY).is_ok()
+                    block_on(conn.query(VALIDATION_QUERY)).is_ok()
                 } else {
                     true
                 }
@@ -278,7 +285,7 @@ impl PyConnection {
         let mut guard = self.inner.lock();
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
-                conn.set_auto_commit(value).map_err(PyHdbError::from)?;
+                block_on(conn.set_auto_commit(value));
                 drop(guard);
                 self.autocommit = value;
                 Ok(())
@@ -294,7 +301,7 @@ impl PyConnection {
     fn fetch_size(&self) -> PyResult<u32> {
         let guard = self.inner.lock();
         match &*guard {
-            ConnectionInner::Connected(conn) => Ok(conn.fetch_size().map_err(PyHdbError::from)?),
+            ConnectionInner::Connected(conn) => Ok(block_on(conn.fetch_size())),
             ConnectionInner::Disconnected => {
                 Err(PyHdbError::operational("connection is closed").into())
             }
@@ -315,7 +322,7 @@ impl PyConnection {
         let mut guard = self.inner.lock();
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
-                conn.set_fetch_size(value).map_err(PyHdbError::from)?;
+                block_on(conn.set_fetch_size(value));
                 Ok(())
             }
             ConnectionInner::Disconnected => {
@@ -330,7 +337,8 @@ impl PyConnection {
         let guard = self.inner.lock();
         match &*guard {
             ConnectionInner::Connected(conn) => {
-                let timeout: Option<Duration> = conn.read_timeout().map_err(PyHdbError::from)?;
+                let timeout: Option<Duration> =
+                    block_on(conn.read_timeout()).map_err(PyHdbError::from)?;
                 Ok(timeout.map(|d| d.as_secs_f64()))
             }
             ConnectionInner::Disconnected => {
@@ -354,7 +362,7 @@ impl PyConnection {
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
                 let duration = value.filter(|&v| v > 0.0).map(Duration::from_secs_f64);
-                conn.set_read_timeout(duration).map_err(PyHdbError::from)?;
+                block_on(conn.set_read_timeout(duration)).map_err(PyHdbError::from)?;
                 Ok(())
             }
             ConnectionInner::Disconnected => {
@@ -368,9 +376,7 @@ impl PyConnection {
     fn lob_read_length(&self) -> PyResult<u32> {
         let guard = self.inner.lock();
         match &*guard {
-            ConnectionInner::Connected(conn) => {
-                Ok(conn.lob_read_length().map_err(PyHdbError::from)?)
-            }
+            ConnectionInner::Connected(conn) => Ok(block_on(conn.lob_read_length())),
             ConnectionInner::Disconnected => {
                 Err(PyHdbError::operational("connection is closed").into())
             }
@@ -391,7 +397,7 @@ impl PyConnection {
         let mut guard = self.inner.lock();
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
-                conn.set_lob_read_length(value).map_err(PyHdbError::from)?;
+                block_on(conn.set_lob_read_length(value));
                 Ok(())
             }
             ConnectionInner::Disconnected => {
@@ -405,9 +411,7 @@ impl PyConnection {
     fn lob_write_length(&self) -> PyResult<u32> {
         let guard = self.inner.lock();
         match &*guard {
-            ConnectionInner::Connected(conn) => {
-                Ok(conn.lob_write_length().map_err(PyHdbError::from)?)
-            }
+            ConnectionInner::Connected(conn) => Ok(block_on(conn.lob_write_length())),
             ConnectionInner::Disconnected => {
                 Err(PyHdbError::operational("connection is closed").into())
             }
@@ -428,7 +432,7 @@ impl PyConnection {
         let mut guard = self.inner.lock();
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
-                conn.set_lob_write_length(value).map_err(PyHdbError::from)?;
+                block_on(conn.set_lob_write_length(value));
                 Ok(())
             }
             ConnectionInner::Disconnected => {
@@ -459,7 +463,7 @@ impl PyConnection {
         let guard = self.inner.lock();
         match &*guard {
             ConnectionInner::Connected(conn) => {
-                conn.set_application(name).map_err(PyHdbError::from)?;
+                block_on(conn.set_application(name));
                 Ok(())
             }
             ConnectionInner::Disconnected => {
@@ -487,7 +491,7 @@ impl PyConnection {
         let guard = self.inner.lock();
         match &*guard {
             ConnectionInner::Connected(conn) => {
-                conn.set_application_user(user).map_err(PyHdbError::from)?;
+                block_on(conn.set_application_user(user));
                 Ok(())
             }
             ConnectionInner::Disconnected => {
@@ -512,8 +516,7 @@ impl PyConnection {
         let guard = self.inner.lock();
         match &*guard {
             ConnectionInner::Connected(conn) => {
-                conn.set_application_version(version)
-                    .map_err(PyHdbError::from)?;
+                block_on(conn.set_application_version(version));
                 Ok(())
             }
             ConnectionInner::Disconnected => {
@@ -538,8 +541,7 @@ impl PyConnection {
         let guard = self.inner.lock();
         match &*guard {
             ConnectionInner::Connected(conn) => {
-                conn.set_application_source(source)
-                    .map_err(PyHdbError::from)?;
+                block_on(conn.set_application_source(source));
                 Ok(())
             }
             ConnectionInner::Disconnected => {
@@ -568,7 +570,7 @@ impl PyConnection {
         let guard = self.inner.lock();
         match &*guard {
             ConnectionInner::Connected(conn) => {
-                let info = conn.client_info().map_err(PyHdbError::from)?;
+                let info = block_on(conn.client_info());
                 Ok(info.into_iter().collect())
             }
             ConnectionInner::Disconnected => {
@@ -600,7 +602,7 @@ impl PyConnection {
         let guard = self.inner.lock();
         match &*guard {
             ConnectionInner::Connected(conn) => {
-                let id = conn.id().map_err(PyHdbError::from)?;
+                let id = block_on(conn.id());
                 Ok(id as i32)
             }
             ConnectionInner::Disconnected => {
@@ -628,7 +630,7 @@ impl PyConnection {
         let guard = self.inner.lock();
         match &*guard {
             ConnectionInner::Connected(conn) => {
-                let usage = conn.server_usage().map_err(PyHdbError::from)?;
+                let usage = block_on(conn.server_usage());
                 Ok(*usage.server_memory_usage() as i64)
             }
             ConnectionInner::Disconnected => {
@@ -659,7 +661,7 @@ impl PyConnection {
         let guard = self.inner.lock();
         match &*guard {
             ConnectionInner::Connected(conn) => {
-                let usage = conn.server_usage().map_err(PyHdbError::from)?;
+                let usage = block_on(conn.server_usage());
                 Ok(usage.accum_proc_time().as_micros() as i64)
             }
             ConnectionInner::Disconnected => {
@@ -692,7 +694,7 @@ impl PyConnection {
         let guard = self.inner.lock();
         match &*guard {
             ConnectionInner::Connected(conn) => {
-                let stats = conn.statistics().map_err(PyHdbError::from)?;
+                let stats = block_on(conn.statistics());
                 Ok(stats.into())
             }
             ConnectionInner::Disconnected => {
@@ -719,7 +721,7 @@ impl PyConnection {
         let mut guard = self.inner.lock();
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
-                conn.reset_statistics().map_err(PyHdbError::from)?;
+                block_on(conn.reset_statistics());
                 Ok(())
             }
             ConnectionInner::Disconnected => {
@@ -764,7 +766,7 @@ impl PyConnection {
         let mut guard = self.inner.lock();
         match &mut *guard {
             ConnectionInner::Connected(conn) => {
-                let rs = conn.query(sql).map_err(PyHdbError::from)?;
+                let rs = block_on(conn.query(sql)).map_err(PyHdbError::from)?;
                 drop(guard);
                 PyRecordBatchReader::from_resultset(rs, batch_size)
             }

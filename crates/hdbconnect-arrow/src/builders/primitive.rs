@@ -62,8 +62,8 @@ macro_rules! impl_primitive_builder {
         impl Sealed for $name {}
 
         impl HanaCompatibleBuilder for $name {
-            fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> Result<()> {
-                use hdbconnect::HdbValue;
+            fn append_hana_value(&mut self, value: &hdbconnect_async::HdbValue) -> Result<()> {
+                use hdbconnect_async::HdbValue;
 
                 match value {
                     HdbValue::$hana_variant(v) => {
@@ -121,7 +121,7 @@ impl_primitive_builder!(Float64BuilderWrapper, Float64Builder, f64, DOUBLE);
 #[cfg(test)]
 mod tests {
     use arrow_array::{Array, Float32Array, Int16Array, Int32Array, Int64Array, UInt8Array};
-    use hdbconnect::HdbValue;
+    use hdbconnect_async::HdbValue;
 
     use super::*;
 

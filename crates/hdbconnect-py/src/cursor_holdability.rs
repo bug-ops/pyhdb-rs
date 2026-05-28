@@ -49,15 +49,15 @@ pub enum PyCursorHoldability {
     CommitAndRollback = 3,
 }
 
-impl From<PyCursorHoldability> for hdbconnect::CursorHoldability {
+impl From<PyCursorHoldability> for hdbconnect_async::CursorHoldability {
     #[allow(clippy::use_self)]
     fn from(value: PyCursorHoldability) -> Self {
         match value {
-            PyCursorHoldability::None => hdbconnect::CursorHoldability::None,
-            PyCursorHoldability::Commit => hdbconnect::CursorHoldability::Commit,
-            PyCursorHoldability::Rollback => hdbconnect::CursorHoldability::Rollback,
+            PyCursorHoldability::None => hdbconnect_async::CursorHoldability::None,
+            PyCursorHoldability::Commit => hdbconnect_async::CursorHoldability::Commit,
+            PyCursorHoldability::Rollback => hdbconnect_async::CursorHoldability::Rollback,
             PyCursorHoldability::CommitAndRollback => {
-                hdbconnect::CursorHoldability::CommitAndRollback
+                hdbconnect_async::CursorHoldability::CommitAndRollback
             }
         }
     }
@@ -121,19 +121,26 @@ mod tests {
 
     #[test]
     fn test_cursor_holdability_to_hdbconnect() {
-        let none: hdbconnect::CursorHoldability = PyCursorHoldability::None.into();
-        assert!(matches!(none, hdbconnect::CursorHoldability::None));
+        let none: hdbconnect_async::CursorHoldability = PyCursorHoldability::None.into();
+        assert!(matches!(none, hdbconnect_async::CursorHoldability::None));
 
-        let commit: hdbconnect::CursorHoldability = PyCursorHoldability::Commit.into();
-        assert!(matches!(commit, hdbconnect::CursorHoldability::Commit));
+        let commit: hdbconnect_async::CursorHoldability = PyCursorHoldability::Commit.into();
+        assert!(matches!(
+            commit,
+            hdbconnect_async::CursorHoldability::Commit
+        ));
 
-        let rollback: hdbconnect::CursorHoldability = PyCursorHoldability::Rollback.into();
-        assert!(matches!(rollback, hdbconnect::CursorHoldability::Rollback));
+        let rollback: hdbconnect_async::CursorHoldability = PyCursorHoldability::Rollback.into();
+        assert!(matches!(
+            rollback,
+            hdbconnect_async::CursorHoldability::Rollback
+        ));
 
-        let both: hdbconnect::CursorHoldability = PyCursorHoldability::CommitAndRollback.into();
+        let both: hdbconnect_async::CursorHoldability =
+            PyCursorHoldability::CommitAndRollback.into();
         assert!(matches!(
             both,
-            hdbconnect::CursorHoldability::CommitAndRollback
+            hdbconnect_async::CursorHoldability::CommitAndRollback
         ));
     }
 

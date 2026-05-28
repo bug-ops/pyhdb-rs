@@ -69,6 +69,7 @@ manifest-path = "../crates/hdbconnect-py/Cargo.toml"
 [tool.pytest.ini_options]
 testpaths = ["../tests/python"]
 addopts = "-v --tb=short"
+env_files = ["../.env"]
 
 [tool.ruff]
 target-version = "py312"
@@ -89,3 +90,8 @@ python_version = "3.12"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+
+[dependency-groups]
+dev = [
+    "pytest-dotenv>=0.5.2",
+]

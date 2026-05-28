@@ -2,6 +2,13 @@
 
 use crate::error::PyHdbError;
 
+fn percent_decode(s: &str) -> Result<String, PyHdbError> {
+    percent_encoding::percent_decode_str(s)
+        .decode_utf8()
+        .map(std::borrow::Cow::into_owned)
+        .map_err(|e| PyHdbError::interface(format!("invalid percent-encoding in URL: {e}")))
+}
+
 /// Parsed connection URL with validated components.
 ///
 /// Use `ParsedConnectionUrl::parse()` to create from a URL string.
@@ -77,12 +84,13 @@ impl ParsedConnectionUrl {
         if parsed.username().is_empty() {
             return Err(PyHdbError::interface("missing username in URL"));
         }
-        let user = parsed.username().to_string();
+        let user = percent_decode(parsed.username())?;
 
-        let password = parsed
-            .password()
-            .ok_or_else(|| PyHdbError::interface("missing password in URL"))?
-            .to_string();
+        let password = percent_decode(
+            parsed
+                .password()
+                .ok_or_else(|| PyHdbError::interface("missing password in URL"))?,
+        )?;
 
         let database = parsed
             .path()

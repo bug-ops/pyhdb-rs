@@ -73,13 +73,30 @@ pub async fn execute_arrow_impl(
     PyRecordBatchReader::from_resultset_async(rs, batch_size)
 }
 
-/// Executes a query without returning results (for cursor execute).
+/// Executes a query and returns column descriptions (rows are discarded).
 pub async fn execute_query_impl(
     connection: &mut hdbconnect_async::Connection,
     sql: &str,
-) -> PyResult<()> {
-    connection.query(sql).await.map_err(PyHdbError::from)?;
-    Ok(())
+) -> PyResult<Vec<crate::cursor::state::ColumnDescription>> {
+    let rs = connection.query(sql).await.map_err(PyHdbError::from)?;
+    let desc: Vec<crate::cursor::state::ColumnDescription> = rs
+        .metadata()
+        .iter()
+        .map(|f| {
+            let precision = f.precision();
+            let scale = f.scale();
+            crate::cursor::state::ColumnDescription {
+                name: f.columnname().to_string(),
+                type_code: f.type_id() as i16,
+                display_size: None,
+                internal_size: None,
+                precision: if precision > 0 { Some(precision) } else { None },
+                scale: if scale > 0 { Some(scale) } else { None },
+                nullable: f.is_nullable(),
+            }
+        })
+        .collect();
+    Ok(desc)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

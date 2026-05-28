@@ -99,7 +99,7 @@ class TestCursorFetchArrowPolars:
         conn = ConnectionBuilder.from_url(hana_uri).build()
         try:
             cursor = conn.cursor()
-            cursor.execute("SELECT ? AS value FROM DUMMY", [42])
+            cursor.execute("SELECT CAST(? AS INT) AS value FROM DUMMY", [42])
             reader = cursor.fetch_arrow()
             df = polars.from_arrow(reader)
             assert len(df) == 1

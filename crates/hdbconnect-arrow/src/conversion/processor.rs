@@ -18,10 +18,10 @@ use crate::traits::streaming::BatchConfig;
 #[inline]
 fn append_value_to_builder<B: HanaCompatibleBuilder>(
     builder: &mut B,
-    value: &hdbconnect::HdbValue,
+    value: &hdbconnect_async::HdbValue,
 ) -> Result<()> {
     match value {
-        hdbconnect::HdbValue::NULL => {
+        hdbconnect_async::HdbValue::NULL => {
             builder.append_null();
             Ok(())
         }
@@ -235,7 +235,7 @@ impl HanaBatchProcessor {
     /// # Errors
     ///
     /// Returns error if value conversion fails or schema mismatches.
-    pub fn process_row(&mut self, row: &hdbconnect::Row) -> Result<Option<RecordBatch>> {
+    pub fn process_row(&mut self, row: &hdbconnect_async::Row) -> Result<Option<RecordBatch>> {
         self.process_row_generic(row)
     }
 
@@ -318,7 +318,7 @@ impl HanaBatchProcessor {
         for (i, builder) in self.builders.iter_mut().enumerate() {
             let value = row.get(i);
             match value {
-                hdbconnect::HdbValue::NULL => builder.append_null(),
+                hdbconnect_async::HdbValue::NULL => builder.append_null(),
                 v => builder.append_hana_value(v)?,
             }
         }

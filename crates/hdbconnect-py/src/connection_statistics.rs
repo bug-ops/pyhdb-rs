@@ -45,9 +45,9 @@ pub struct PyConnectionStatistics {
     pub compressed_replies_uncompressed_size: u64,
 }
 
-impl From<hdbconnect::ConnectionStatistics> for PyConnectionStatistics {
+impl From<hdbconnect_async::ConnectionStatistics> for PyConnectionStatistics {
     #[inline]
-    fn from(stats: hdbconnect::ConnectionStatistics) -> Self {
+    fn from(stats: hdbconnect_async::ConnectionStatistics) -> Self {
         Self {
             call_count: stats.call_count(),
             accumulated_wait_time: stats.accumulated_wait_time().as_secs_f64() * 1000.0,

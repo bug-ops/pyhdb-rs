@@ -2,14 +2,16 @@
 //!
 //! Note: fetch methods raise `NotSupportedError`. Use `execute_arrow()` on connection.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use pyo3::prelude::*;
+use pyo3::types::PyList;
 use tokio::sync::Mutex as TokioMutex;
 
 use super::common::{ConnectionState, execute_query_impl};
 use super::connection::{AsyncConnectionInner, SharedAsyncConnection};
 use super::pool::PooledObject;
+use crate::cursor::state::ColumnDescription;
 use crate::error::PyHdbError;
 
 enum CursorConnection {
@@ -20,6 +22,8 @@ enum CursorConnection {
 #[pyclass(name = "AsyncCursor", module = "hdbconnect.aio")]
 pub struct AsyncPyCursor {
     connection: CursorConnection,
+    /// Column descriptions from the last executed query. Set by `execute()`.
+    last_description: Arc<Mutex<Option<Vec<ColumnDescription>>>>,
     #[pyo3(get)]
     rowcount: i64,
     #[pyo3(get, set)]
@@ -39,6 +43,7 @@ impl AsyncPyCursor {
     pub fn new(connection: SharedAsyncConnection) -> Self {
         Self {
             connection: CursorConnection::Direct(connection),
+            last_description: Arc::new(Mutex::new(None)),
             rowcount: -1,
             arraysize: 1,
         }
@@ -47,6 +52,7 @@ impl AsyncPyCursor {
     pub fn from_pooled(pooled: Arc<TokioMutex<Option<PooledObject>>>) -> Self {
         Self {
             connection: CursorConnection::Pooled(pooled),
+            last_description: Arc::new(Mutex::new(None)),
             rowcount: -1,
             arraysize: 1,
         }
@@ -79,11 +85,28 @@ fn validate_procedure_name(name: &str) -> PyResult<()> {
 
 #[pymethods]
 impl AsyncPyCursor {
-    // PyO3 requires &self for Python property getter binding.
-    #[allow(clippy::unused_self)]
     #[getter]
-    fn description<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
-        py.None().into_bound(py)
+    fn description<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        match self.last_description.lock().unwrap().as_deref() {
+            Some(descs) => {
+                let rows: Vec<_> = descs
+                    .iter()
+                    .map(|col| {
+                        (
+                            col.name.clone(),
+                            col.type_code,
+                            col.display_size,
+                            col.internal_size,
+                            col.precision,
+                            col.scale,
+                            col.nullable,
+                        )
+                    })
+                    .collect();
+                Ok(PyList::new(py, rows)?.into_any())
+            }
+            None => Ok(py.None().into_bound(py)),
+        }
     }
 
     #[pyo3(signature = (sql, parameters=None))]
@@ -108,11 +131,14 @@ impl AsyncPyCursor {
         match &self.connection {
             CursorConnection::Direct(conn) => {
                 let connection = Arc::clone(conn);
+                let desc_slot = Arc::clone(&self.last_description);
                 pyo3_async_runtimes::tokio::future_into_py(py, async move {
                     let mut conn_guard = connection.lock().await;
                     match &mut *conn_guard {
                         AsyncConnectionInner::Connected { connection, .. } => {
-                            execute_query_impl(connection, &sql).await
+                            let desc = execute_query_impl(connection, &sql).await?;
+                            *desc_slot.lock().unwrap() = Some(desc);
+                            Ok(())
                         }
                         AsyncConnectionInner::Disconnected => Err(ConnectionState::Closed.into()),
                     }
@@ -120,12 +146,15 @@ impl AsyncPyCursor {
             }
             CursorConnection::Pooled(pooled) => {
                 let pooled = Arc::clone(pooled);
+                let desc_slot = Arc::clone(&self.last_description);
                 pyo3_async_runtimes::tokio::future_into_py(py, async move {
                     let mut guard = pooled.lock().await;
                     let obj = guard
                         .as_mut()
                         .ok_or_else(|| ConnectionState::ReturnedToPool.into_error())?;
-                    execute_query_impl(&mut obj.connection, &sql).await
+                    let desc = execute_query_impl(&mut obj.connection, &sql).await?;
+                    *desc_slot.lock().unwrap() = Some(desc);
+                    Ok(())
                 })
             }
         }
