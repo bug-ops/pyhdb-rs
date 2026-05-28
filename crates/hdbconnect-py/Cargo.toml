@@ -41,7 +41,7 @@ serde = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "sync"] }
 url = { workspace = true }
-rustls = { version = "0.23", default-features = false, features = ["ring"] }
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }
 
 # Async dependencies (optional)
 deadpool = { workspace = true, optional = true, features = ["rt_tokio_1", "managed"] }
