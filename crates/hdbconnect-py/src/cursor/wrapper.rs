@@ -207,11 +207,17 @@ impl PyCursor {
                     Some(params) => {
                         // Convert Python params to serde-serializable values
                         let serializable_params = convert_to_serializable(params)?;
-                        let mut stmt = block_on(conn.prepare(sql)).map_err(PyHdbError::from)?;
-                        block_on(stmt.execute(&serializable_params))
-                            .map_err(PyHdbError::from)?
-                            .into_result_set()
-                            .map_err(PyHdbError::from)?
+                        // Prepare, execute, and drop stmt inside one block_on so that
+                        // PreparedStatement::drop() runs with an active tokio reactor.
+                        block_on(async {
+                            let mut stmt = conn.prepare(sql).await.map_err(PyHdbError::from)?;
+                            let response = stmt
+                                .execute(&serializable_params)
+                                .await
+                                .map_err(PyHdbError::from)?;
+                            // stmt drops here, inside block_on context
+                            response.into_result_set().map_err(PyHdbError::from)
+                        })?
                     }
                     None => block_on(conn.query(sql)).map_err(PyHdbError::from)?,
                 };

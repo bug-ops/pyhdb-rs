@@ -220,6 +220,61 @@ impl Manager for HanaConnectionManager {
 
 pub type Pool = deadpool::managed::Pool<HanaConnectionManager>;
 
+/// Async context manager returned by `ConnectionPool.acquire()`.
+///
+/// Acquires a `PooledConnection` on enter and returns it to the pool on exit.
+/// Shared `Arc` ensures the connection is released even if `conn` remains in scope.
+#[pyclass(name = "AcquireGuard", module = "hdbconnect.aio")]
+pub struct AcquireGuard {
+    pool: Pool,
+    /// Slot shared with the `PooledConnection` returned by `__aenter__`.
+    shared: Arc<TokioMutex<Option<PooledObject>>>,
+}
+
+impl std::fmt::Debug for AcquireGuard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AcquireGuard").finish_non_exhaustive()
+    }
+}
+
+#[pymethods]
+impl AcquireGuard {
+    fn __aenter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let pool = self.pool.clone();
+        let shared = Arc::clone(&self.shared);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let obj = pool
+                .get()
+                .await
+                .map_err(|e| PyHdbError::operational(e.to_string()))?;
+            *shared.lock().await = Some(obj);
+            Ok(PooledConnection {
+                object: Arc::clone(&shared),
+            })
+        })
+    }
+
+    fn __aexit__<'py>(
+        &self,
+        py: Python<'py>,
+        _exc_type: Option<&Bound<'py, PyAny>>,
+        _exc_val: Option<&Bound<'py, PyAny>>,
+        _exc_tb: Option<&Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let shared = Arc::clone(&self.shared);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let _ = shared.lock().await.take();
+            Ok(false)
+        })
+    }
+
+    // PyO3 requires &self for Python method binding.
+    #[allow(clippy::unused_self)]
+    fn __repr__(&self) -> &'static str {
+        "AcquireGuard()"
+    }
+}
+
 /// Python connection pool.
 ///
 /// Use `ConnectionPoolBuilder` to create instances.
@@ -269,19 +324,38 @@ impl std::fmt::Debug for PyConnectionPool {
     }
 }
 
+impl Drop for PyConnectionPool {
+    fn drop(&mut self) {
+        // hdbconnect_async::Connection::drop() spawns a tokio task to send a
+        // close notification to the server.  When idle connections are evicted
+        // from the pool (via pool.close()), they must be dropped while an active
+        // tokio reactor is running.  Calling pool.close() inside block_on() ensures
+        // the current thread is a tokio worker for the duration of the drop.
+        let pool = self.pool.clone();
+        crate::runtime::block_on(async move {
+            pool.close();
+        });
+    }
+}
+
 #[pymethods]
 impl PyConnectionPool {
     /// Acquire a connection from the pool.
-    fn acquire<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let pool = self.pool.clone();
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let obj = pool
-                .get()
-                .await
-                .map_err(|e| PyHdbError::operational(e.to_string()))?;
-
-            Ok(PooledConnection::new(obj))
-        })
+    ///
+    /// Returns an async context manager that acquires a `PooledConnection` on enter
+    /// and returns it to the pool on exit.
+    ///
+    /// Usage:
+    ///
+    /// ```python
+    /// async with pool.acquire() as conn:
+    ///     reader = await conn.execute_arrow("SELECT 1 FROM DUMMY")
+    /// ```
+    fn acquire(&self) -> AcquireGuard {
+        AcquireGuard {
+            pool: self.pool.clone(),
+            shared: Arc::new(TokioMutex::new(None)),
+        }
     }
 
     #[getter]
@@ -507,6 +581,9 @@ impl PyConnectionPoolBuilder {
             .clone()
             .ok_or_else(|| PyHdbError::interface("url not set - call .url() before .build()"))?;
 
+        // Validate URL at pool creation time (fail-fast instead of lazy first-connection failure)
+        ParsedConnectionUrl::parse(&url)?;
+
         // Validate min_idle doesn't exceed max_size
         if let Some(min) = self.min_idle
             && min > self.max_size
@@ -548,6 +625,7 @@ impl PyConnectionPoolBuilder {
             .wait_timeout(Some(std::time::Duration::from_secs(
                 self.connection_timeout,
             )))
+            .runtime(deadpool::Runtime::Tokio1)
             .build()
             .map_err(|e| PyHdbError::operational(e.to_string()))?;
 
@@ -656,18 +734,8 @@ impl PooledConnection {
         })
     }
 
-    fn cursor<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let object = Arc::clone(&self.object);
-
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let guard = object.lock().await;
-            if guard.is_none() {
-                return Err(ConnectionState::ReturnedToPool.into_error().into());
-            }
-            Ok(super::cursor::AsyncPyCursor::from_pooled(Arc::clone(
-                &object,
-            )))
-        })
+    fn cursor(&self) -> super::cursor::AsyncPyCursor {
+        super::cursor::AsyncPyCursor::from_pooled(Arc::clone(&self.object))
     }
 
     fn commit<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
@@ -1232,17 +1300,10 @@ impl PooledConnection {
         })
     }
 
-    fn __repr__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        let object = Arc::clone(&self.object);
-
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let guard = object.lock().await;
-            if guard.is_some() {
-                Ok("PooledConnection(active)".to_string())
-            } else {
-                Ok("PooledConnection(returned)".to_string())
-            }
-        })
+    // PyO3 requires &self for Python method binding.
+    #[allow(clippy::unused_self)]
+    fn __repr__(&self) -> &'static str {
+        "PooledConnection()"
     }
 }
 

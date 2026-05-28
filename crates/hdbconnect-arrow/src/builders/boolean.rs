@@ -36,8 +36,8 @@ impl BooleanBuilderWrapper {
 impl Sealed for BooleanBuilderWrapper {}
 
 impl HanaCompatibleBuilder for BooleanBuilderWrapper {
-    fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> Result<()> {
-        use hdbconnect::HdbValue;
+    fn append_hana_value(&mut self, value: &hdbconnect_async::HdbValue) -> Result<()> {
+        use hdbconnect_async::HdbValue;
 
         match value {
             HdbValue::BOOLEAN(b) => {
@@ -76,7 +76,7 @@ impl HanaCompatibleBuilder for BooleanBuilderWrapper {
 #[cfg(test)]
 mod tests {
     use arrow_array::{Array, BooleanArray};
-    use hdbconnect::HdbValue;
+    use hdbconnect_async::HdbValue;
 
     use super::*;
 

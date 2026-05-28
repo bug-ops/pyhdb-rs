@@ -51,6 +51,7 @@ pub mod async_support;
 #[cfg(feature = "async")]
 pub use async_support::{
     AsyncPyConnection, AsyncPyCursor, PooledConnection, PyConnectionPool, PyConnectionPoolBuilder,
+    pool::AcquireGuard,
 };
 pub use config::{PyArrowConfig, PyConnectionConfig};
 #[cfg(feature = "async")]
@@ -149,6 +150,7 @@ fn pyhdb_rs_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_class::<AsyncPyCursor>()?;
         m.add_class::<PyConnectionPool>()?;
         m.add_class::<PooledConnection>()?;
+        m.add_class::<AcquireGuard>()?;
         m.add_class::<async_support::pool::PoolStatus>()?;
         m.add_class::<PyAsyncConnectionBuilder>()?;
         m.add_class::<PyConnectionPoolBuilder>()?;

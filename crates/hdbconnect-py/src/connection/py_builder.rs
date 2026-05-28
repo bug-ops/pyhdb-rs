@@ -344,7 +344,7 @@ impl PyConnectionBuilder {
     ///         .application("OrderService", version="2.0.0", user="alice")
     ///         .build())
     ///     ```
-    #[pyo3(text_signature = "(self, name, version=None, user=None, source=None)")]
+    #[pyo3(signature = (name, version=None, user=None, source=None))]
     fn application<'py>(
         mut slf: PyRefMut<'py, Self>,
         name: &str,
@@ -684,7 +684,7 @@ impl PyAsyncConnectionBuilder {
     ///         .application("OrderService", version="2.0.0", user="alice")
     ///         .build())
     ///     ```
-    #[pyo3(text_signature = "(self, name, version=None, user=None, source=None)")]
+    #[pyo3(signature = (name, version=None, user=None, source=None))]
     fn application<'py>(
         mut slf: PyRefMut<'py, Self>,
         name: &str,

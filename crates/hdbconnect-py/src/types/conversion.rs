@@ -109,24 +109,18 @@ pub fn hana_value_to_python<'py>(
         HdbValue::LONGDATE(ts) => parse_timestamp_to_python(py, &ts.to_string()),
         HdbValue::SECONDDATE(sd) => parse_timestamp_to_python(py, &sd.to_string()),
         // LOB types: materialize and convert to Python str/bytes
-        HdbValue::SYNC_CLOB(clob) => {
-            let content = clob
-                .clone()
-                .into_string()
+        HdbValue::ASYNC_CLOB(clob) => {
+            let content = crate::runtime::block_on(clob.clone().into_string())
                 .map_err(|e| PyHdbError::data(format!("CLOB read failed: {e}")))?;
             Ok(content.into_pyobject(py)?.clone().into_any())
         }
-        HdbValue::SYNC_NCLOB(nclob) => {
-            let content = nclob
-                .clone()
-                .into_string()
+        HdbValue::ASYNC_NCLOB(nclob) => {
+            let content = crate::runtime::block_on(nclob.clone().into_string())
                 .map_err(|e| PyHdbError::data(format!("NCLOB read failed: {e}")))?;
             Ok(content.into_pyobject(py)?.clone().into_any())
         }
-        HdbValue::SYNC_BLOB(blob) => {
-            let content = blob
-                .clone()
-                .into_bytes()
+        HdbValue::ASYNC_BLOB(blob) => {
+            let content = crate::runtime::block_on(blob.clone().into_bytes())
                 .map_err(|e| PyHdbError::data(format!("BLOB read failed: {e}")))?;
             Ok(PyBytes::new(py, &content).clone().into_any())
         }

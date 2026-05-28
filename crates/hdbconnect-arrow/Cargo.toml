@@ -15,7 +15,7 @@ workspace = true
 
 [features]
 default = []
-async = ["dep:hdbconnect_async"]
+async = []
 profiling = ["dep:dhat"]
 test-utils = ["dep:bigdecimal"]
 
@@ -28,8 +28,7 @@ arrow-data = { workspace = true }
 arrow-schema = { workspace = true }
 bigdecimal = { workspace = true, optional = true }
 dhat = { workspace = true, optional = true }
-hdbconnect = { workspace = true }
-hdbconnect_async = { workspace = true, optional = true }
+hdbconnect_async = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 thiserror = { workspace = true }

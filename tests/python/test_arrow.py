@@ -94,10 +94,12 @@ class TestCursorFetchArrow:
 
     def test_fetch_arrow_batch_size(self, cursor: pyhdb_rs.Cursor) -> None:
         """Test fetch_arrow with custom batch size."""
+        import pyhdb_rs
+
         pytest.importorskip("pyarrow")
 
         cursor.execute("SELECT 1 AS value FROM DUMMY")
-        reader = cursor.fetch_arrow(batch_size=100)
+        reader = cursor.fetch_arrow(config=pyhdb_rs.ArrowConfig(batch_size=100))
         pa_reader = reader.to_pyarrow()
 
         table = pa_reader.read_all()

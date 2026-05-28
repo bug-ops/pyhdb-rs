@@ -36,7 +36,10 @@ use crate::traits::builder::HanaCompatibleBuilder;
 /// let schema = Arc::new(/* Arrow schema */);
 /// let batch = rows_to_record_batch(&rows, schema)?;
 /// ```
-pub fn rows_to_record_batch(rows: &[hdbconnect::Row], schema: SchemaRef) -> Result<RecordBatch> {
+pub fn rows_to_record_batch(
+    rows: &[hdbconnect_async::Row],
+    schema: SchemaRef,
+) -> Result<RecordBatch> {
     if rows.is_empty() {
         // Return empty batch with correct schema
         return Ok(RecordBatch::new_empty(schema));
@@ -78,7 +81,7 @@ pub fn rows_to_record_batch(rows: &[hdbconnect::Row], schema: SchemaRef) -> Resu
 /// Returns error if value conversion fails or column count mismatches.
 fn append_row_to_builders(
     builders: &mut [Box<dyn HanaCompatibleBuilder>],
-    row: &hdbconnect::Row,
+    row: &hdbconnect_async::Row,
 ) -> Result<()> {
     if builders.len() != row.len() {
         return Err(crate::ArrowConversionError::schema_mismatch(
@@ -92,7 +95,7 @@ fn append_row_to_builders(
         let value = &row[i];
 
         match value {
-            hdbconnect::HdbValue::NULL => builder.append_null(),
+            hdbconnect_async::HdbValue::NULL => builder.append_null(),
             v => builder.append_hana_value(v)?,
         }
     }

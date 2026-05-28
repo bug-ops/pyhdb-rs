@@ -66,6 +66,11 @@ except ImportError:  # pragma: no cover
     PoolStatus = None  # type: ignore[misc, assignment]
 
 
+async def connect(url: str) -> "AsyncConnection":
+    """Connect to HANA via hdbsqls:// or hdbsql:// URL."""
+    return await AsyncConnectionBuilder.from_url(url).build()
+
+
 __all__ = [
     # Feature flag
     "ASYNC_AVAILABLE",
@@ -77,4 +82,6 @@ __all__ = [
     "ConnectionPoolBuilder",
     "PooledConnection",
     "PoolStatus",
+    # Functions
+    "connect",
 ]

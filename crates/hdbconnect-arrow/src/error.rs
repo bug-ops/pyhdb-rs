@@ -308,8 +308,8 @@ impl ArrowConversionError {
     }
 }
 
-impl From<hdbconnect::HdbError> for ArrowConversionError {
-    fn from(err: hdbconnect::HdbError) -> Self {
+impl From<hdbconnect_async::HdbError> for ArrowConversionError {
+    fn from(err: hdbconnect_async::HdbError) -> Self {
         Self {
             kind: ErrorKind::Hdbconnect {
                 message: err.to_string(),

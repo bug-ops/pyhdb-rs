@@ -60,8 +60,8 @@ impl StringBuilderWrapper {
 impl Sealed for StringBuilderWrapper {}
 
 impl HanaCompatibleBuilder for StringBuilderWrapper {
-    fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> Result<()> {
-        use hdbconnect::HdbValue;
+    fn append_hana_value(&mut self, value: &hdbconnect_async::HdbValue) -> Result<()> {
+        use hdbconnect_async::HdbValue;
 
         match value {
             HdbValue::STRING(s) => {
@@ -139,59 +139,35 @@ impl LargeStringBuilderWrapper {
         self
     }
 
-    /// Materialize a CLOB value with size checking.
-    fn materialize_clob(&self, clob: hdbconnect::types::CLob) -> Result<String> {
-        if let Some(max) = self.max_lob_bytes {
-            // Intentional truncation: LOBs > usize::MAX are rejected anyway by size check
-            #[allow(clippy::cast_possible_truncation)]
-            let lob_size = clob.total_byte_length() as usize;
-            if lob_size > max {
-                return Err(crate::ArrowConversionError::lob_streaming(format!(
-                    "CLOB size {lob_size} bytes exceeds max_lob_bytes limit {max} bytes",
-                )));
-            }
-        }
-
-        clob.into_string().map_err(|e| {
-            crate::ArrowConversionError::lob_streaming(format!("CLOB read failed: {e}"))
-        })
+    fn materialize_clob(_clob: hdbconnect_async::types::CLob) -> Result<String> {
+        Err(crate::ArrowConversionError::lob_streaming(
+            "CLOB materialization via async connection not yet supported",
+        ))
     }
 
-    /// Materialize an NCLOB value with size checking.
-    fn materialize_nclob(&self, nclob: hdbconnect::types::NCLob) -> Result<String> {
-        if let Some(max) = self.max_lob_bytes {
-            // Intentional truncation: LOBs > usize::MAX are rejected anyway by size check
-            #[allow(clippy::cast_possible_truncation)]
-            let lob_size = nclob.total_byte_length() as usize;
-            if lob_size > max {
-                return Err(crate::ArrowConversionError::lob_streaming(format!(
-                    "NCLOB size {lob_size} bytes exceeds max_lob_bytes limit {max} bytes",
-                )));
-            }
-        }
-
-        nclob.into_string().map_err(|e| {
-            crate::ArrowConversionError::lob_streaming(format!("NCLOB read failed: {e}"))
-        })
+    fn materialize_nclob(_nclob: hdbconnect_async::types::NCLob) -> Result<String> {
+        Err(crate::ArrowConversionError::lob_streaming(
+            "NCLOB materialization via async connection not yet supported",
+        ))
     }
 }
 
 impl Sealed for LargeStringBuilderWrapper {}
 
 impl HanaCompatibleBuilder for LargeStringBuilderWrapper {
-    fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> Result<()> {
-        use hdbconnect::HdbValue;
+    fn append_hana_value(&mut self, value: &hdbconnect_async::HdbValue) -> Result<()> {
+        use hdbconnect_async::HdbValue;
 
         match value {
             HdbValue::STRING(s) => {
                 self.builder.append_value(s);
             }
-            HdbValue::SYNC_CLOB(clob) => {
-                let content = self.materialize_clob(clob.clone())?;
+            HdbValue::ASYNC_CLOB(clob) => {
+                let content = Self::materialize_clob(clob.clone())?;
                 self.builder.append_value(&content);
             }
-            HdbValue::SYNC_NCLOB(nclob) => {
-                let content = self.materialize_nclob(nclob.clone())?;
+            HdbValue::ASYNC_NCLOB(nclob) => {
+                let content = Self::materialize_nclob(nclob.clone())?;
                 self.builder.append_value(&content);
             }
             other => {
@@ -258,8 +234,8 @@ impl BinaryBuilderWrapper {
 impl Sealed for BinaryBuilderWrapper {}
 
 impl HanaCompatibleBuilder for BinaryBuilderWrapper {
-    fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> Result<()> {
-        use hdbconnect::HdbValue;
+    fn append_hana_value(&mut self, value: &hdbconnect_async::HdbValue) -> Result<()> {
+        use hdbconnect_async::HdbValue;
 
         match value {
             // Binary and spatial types as WKB
@@ -333,37 +309,25 @@ impl LargeBinaryBuilderWrapper {
         self
     }
 
-    /// Materialize a BLOB value with size checking.
-    fn materialize_blob(&self, blob: hdbconnect::types::BLob) -> Result<Vec<u8>> {
-        if let Some(max) = self.max_lob_bytes {
-            // Intentional truncation: LOBs > usize::MAX are rejected anyway by size check
-            #[allow(clippy::cast_possible_truncation)]
-            let lob_size = blob.total_byte_length() as usize;
-            if lob_size > max {
-                return Err(crate::ArrowConversionError::lob_streaming(format!(
-                    "BLOB size {lob_size} bytes exceeds max_lob_bytes limit {max} bytes",
-                )));
-            }
-        }
-
-        blob.into_bytes().map_err(|e| {
-            crate::ArrowConversionError::lob_streaming(format!("BLOB read failed: {e}"))
-        })
+    fn materialize_blob(_blob: hdbconnect_async::types::BLob) -> Result<Vec<u8>> {
+        Err(crate::ArrowConversionError::lob_streaming(
+            "BLOB materialization via async connection not yet supported",
+        ))
     }
 }
 
 impl Sealed for LargeBinaryBuilderWrapper {}
 
 impl HanaCompatibleBuilder for LargeBinaryBuilderWrapper {
-    fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> Result<()> {
-        use hdbconnect::HdbValue;
+    fn append_hana_value(&mut self, value: &hdbconnect_async::HdbValue) -> Result<()> {
+        use hdbconnect_async::HdbValue;
 
         match value {
             HdbValue::BINARY(bytes) => {
                 self.builder.append_value(bytes);
             }
-            HdbValue::SYNC_BLOB(blob) => {
-                let content = self.materialize_blob(blob.clone())?;
+            HdbValue::ASYNC_BLOB(blob) => {
+                let content = Self::materialize_blob(blob.clone())?;
                 self.builder.append_value(&content);
             }
             other => {
@@ -427,8 +391,8 @@ impl FixedSizeBinaryBuilderWrapper {
 impl Sealed for FixedSizeBinaryBuilderWrapper {}
 
 impl HanaCompatibleBuilder for FixedSizeBinaryBuilderWrapper {
-    fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> Result<()> {
-        use hdbconnect::HdbValue;
+    fn append_hana_value(&mut self, value: &hdbconnect_async::HdbValue) -> Result<()> {
+        use hdbconnect_async::HdbValue;
 
         match value {
             HdbValue::BINARY(bytes) => {
@@ -481,7 +445,7 @@ mod tests {
     use arrow_array::{
         Array, BinaryArray, FixedSizeBinaryArray, LargeBinaryArray, LargeStringArray, StringArray,
     };
-    use hdbconnect::HdbValue;
+    use hdbconnect_async::HdbValue;
 
     use super::*;
 

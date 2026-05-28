@@ -69,8 +69,8 @@ impl Date32BuilderWrapper {
     }
 
     /// Convert HANA date value to days since epoch.
-    fn hana_date_to_days(value: &hdbconnect::HdbValue) -> Result<i32> {
-        use hdbconnect::HdbValue;
+    fn hana_date_to_days(value: &hdbconnect_async::HdbValue) -> Result<i32> {
+        use hdbconnect_async::HdbValue;
 
         match value {
             HdbValue::DAYDATE(dd) => {
@@ -89,7 +89,7 @@ impl Date32BuilderWrapper {
 impl Sealed for Date32BuilderWrapper {}
 
 impl HanaCompatibleBuilder for Date32BuilderWrapper {
-    fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> Result<()> {
+    fn append_hana_value(&mut self, value: &hdbconnect_async::HdbValue) -> Result<()> {
         let days = Self::hana_date_to_days(value)?;
         self.builder.append_value(days);
         self.len += 1;
@@ -165,8 +165,8 @@ impl Time64NanosecondBuilderWrapper {
     }
 
     /// Convert HANA time to nanoseconds since midnight.
-    fn hana_time_to_nanos(value: &hdbconnect::HdbValue) -> Result<i64> {
-        use hdbconnect::HdbValue;
+    fn hana_time_to_nanos(value: &hdbconnect_async::HdbValue) -> Result<i64> {
+        use hdbconnect_async::HdbValue;
 
         match value {
             HdbValue::SECONDTIME(st) => {
@@ -185,7 +185,7 @@ impl Time64NanosecondBuilderWrapper {
 impl Sealed for Time64NanosecondBuilderWrapper {}
 
 impl HanaCompatibleBuilder for Time64NanosecondBuilderWrapper {
-    fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> Result<()> {
+    fn append_hana_value(&mut self, value: &hdbconnect_async::HdbValue) -> Result<()> {
         let nanos = Self::hana_time_to_nanos(value)?;
         self.builder.append_value(nanos);
         self.len += 1;
@@ -325,8 +325,8 @@ impl TimestampNanosecondBuilderWrapper {
     }
 
     /// Convert HANA timestamp to nanoseconds since epoch.
-    fn hana_timestamp_to_nanos(value: &hdbconnect::HdbValue) -> Result<i64> {
-        use hdbconnect::HdbValue;
+    fn hana_timestamp_to_nanos(value: &hdbconnect_async::HdbValue) -> Result<i64> {
+        use hdbconnect_async::HdbValue;
 
         match value {
             HdbValue::LONGDATE(ld) => {
@@ -350,7 +350,7 @@ impl TimestampNanosecondBuilderWrapper {
 impl Sealed for TimestampNanosecondBuilderWrapper {}
 
 impl HanaCompatibleBuilder for TimestampNanosecondBuilderWrapper {
-    fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> Result<()> {
+    fn append_hana_value(&mut self, value: &hdbconnect_async::HdbValue) -> Result<()> {
         let nanos = Self::hana_timestamp_to_nanos(value)?;
         self.builder.append_value(nanos);
         self.len += 1;

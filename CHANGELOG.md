@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`AsyncCursor.description`**: The `description` property on `AsyncCursor` and pooled-connection cursors now returns column metadata after `execute()`, complying with DB-API 2.0.
+- **`ConnectionPool.acquire()` — sync context manager**: `pool.acquire()` now returns an `AcquireGuard` directly (no `await` required) enabling idiomatic `async with pool.acquire() as conn:` usage; the actual pool slot is acquired during `__aenter__`.
+- **Fail-fast URL validation**: `ConnectionPoolBuilder.build()` now validates the connection URL at construction time and raises `InterfaceError` immediately for malformed URLs instead of failing lazily on first connection.
+
 ### Fixed
 
 - **TLS (hdbsqls://)**: Fixed `Fatal Python error: Aborted` when connecting to SAP HANA Cloud via `hdbsqls://` URL. Three root causes addressed:
@@ -14,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2. `hdbconnect_impl` Drop impls (`ConnectionCore`, `RsCore`, `PreparedStatementCore`) called `tokio::spawn` unconditionally when compiled with both `sync` and `async` features, crashing when there was no active tokio runtime and hitting `unreachable!` when there was one (async task received a sync TCP client). Fixed via `[patch.crates-io]` on `hdbconnect_impl` to wrap spawns with `Handle::try_current()` and silently skip sync clients in the async Drop path.
   3. `ConnectionBuilder::build()` silently ignored the TLS flag parsed from the `hdbsqls://` URL scheme; connections fell back to plain TCP. Now correctly applies `ServerCerts::RootCertificates` (Mozilla root bundle).
 - **URL percent-decoding**: `pyhdb_rs.connect("hdbsqls://user:pass%21@host")` failed with "Authentication failed" because the password was passed as the raw `%21` literal instead of `!`. Credentials in connection URLs are now percent-decoded before use.
+- **`ConnectionPool` GC crash**: `PyConnectionPool::drop()` now runs `pool.close()` inside a `block_on` context so idle `hdbconnect_async::Connection` objects are dropped with an active tokio reactor, preventing `Fatal Python error: Aborted` during garbage collection.
+- **`PooledConnection.cursor()`**: Made synchronous; previously returned a coroutine that tests had to await unnecessarily.
+- **Test fixtures**: Async fixtures (`async_connection`, `connection_pool`, `pooled_connection`) in `conftest.py` now use `@pytest_asyncio.fixture` as required by pytest-asyncio strict mode, eliminating 24 spurious `ERROR` collection entries.
 
 ## [0.3.11] - 2026-05-26
 

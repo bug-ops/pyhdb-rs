@@ -4,7 +4,7 @@
 //! Rust/Arrow types.
 
 use arrow_schema::DataType;
-use hdbconnect::TypeId;
+use hdbconnect_async::TypeId;
 
 /// Classification of HANA types into logical categories.
 ///

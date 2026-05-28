@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use arrow_schema::{DataType, Field, Schema, SchemaRef, TimeUnit};
-use hdbconnect::HdbValue;
+use hdbconnect_async::HdbValue;
 
 use crate::traits::row::{MockRow, MockRowBuilder};
 

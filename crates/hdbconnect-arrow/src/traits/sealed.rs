@@ -51,7 +51,7 @@ pub trait FromHanaValue: private::Sealed {
     /// # Errors
     ///
     /// Returns an error if the conversion fails.
-    fn from_hana(value: &hdbconnect::HdbValue) -> crate::Result<Self>
+    fn from_hana(value: &hdbconnect_async::HdbValue) -> crate::Result<Self>
     where
         Self: Sized;
 }
@@ -69,7 +69,7 @@ pub trait StreamingProcessor: private::Sealed {
     /// # Errors
     ///
     /// Returns an error if processing fails.
-    fn process_batch(&mut self, rows: Vec<hdbconnect::Row>) -> crate::Result<Self::Output>;
+    fn process_batch(&mut self, rows: Vec<hdbconnect_async::Row>) -> crate::Result<Self::Output>;
 
     /// Signal that no more rows will be provided and flush any buffered data.
     ///
@@ -89,8 +89,8 @@ impl FromHanaValue for i8 {
         DataType::Int8
     }
 
-    fn from_hana(value: &hdbconnect::HdbValue) -> crate::Result<Self> {
-        use hdbconnect::HdbValue;
+    fn from_hana(value: &hdbconnect_async::HdbValue) -> crate::Result<Self> {
+        use hdbconnect_async::HdbValue;
         match value {
             #[allow(clippy::cast_possible_wrap)]
             HdbValue::TINYINT(v) => Ok(*v as Self),
@@ -114,8 +114,8 @@ impl FromHanaValue for i16 {
         DataType::Int16
     }
 
-    fn from_hana(value: &hdbconnect::HdbValue) -> crate::Result<Self> {
-        use hdbconnect::HdbValue;
+    fn from_hana(value: &hdbconnect_async::HdbValue) -> crate::Result<Self> {
+        use hdbconnect_async::HdbValue;
         match value {
             HdbValue::TINYINT(v) => Ok(Self::from(*v)),
             HdbValue::SMALLINT(v) => Ok(*v),
@@ -136,8 +136,8 @@ impl FromHanaValue for i32 {
         DataType::Int32
     }
 
-    fn from_hana(value: &hdbconnect::HdbValue) -> crate::Result<Self> {
-        use hdbconnect::HdbValue;
+    fn from_hana(value: &hdbconnect_async::HdbValue) -> crate::Result<Self> {
+        use hdbconnect_async::HdbValue;
         match value {
             HdbValue::TINYINT(v) => Ok(Self::from(*v)),
             HdbValue::SMALLINT(v) => Ok(Self::from(*v)),
@@ -159,8 +159,8 @@ impl FromHanaValue for i64 {
         DataType::Int64
     }
 
-    fn from_hana(value: &hdbconnect::HdbValue) -> crate::Result<Self> {
-        use hdbconnect::HdbValue;
+    fn from_hana(value: &hdbconnect_async::HdbValue) -> crate::Result<Self> {
+        use hdbconnect_async::HdbValue;
         match value {
             HdbValue::TINYINT(v) => Ok(Self::from(*v)),
             HdbValue::SMALLINT(v) => Ok(Self::from(*v)),
@@ -180,8 +180,8 @@ impl FromHanaValue for f32 {
         DataType::Float32
     }
 
-    fn from_hana(value: &hdbconnect::HdbValue) -> crate::Result<Self> {
-        use hdbconnect::HdbValue;
+    fn from_hana(value: &hdbconnect_async::HdbValue) -> crate::Result<Self> {
+        use hdbconnect_async::HdbValue;
         match value {
             HdbValue::REAL(v) => Ok(*v),
             #[allow(clippy::cast_possible_truncation)]
@@ -200,8 +200,8 @@ impl FromHanaValue for f64 {
         DataType::Float64
     }
 
-    fn from_hana(value: &hdbconnect::HdbValue) -> crate::Result<Self> {
-        use hdbconnect::HdbValue;
+    fn from_hana(value: &hdbconnect_async::HdbValue) -> crate::Result<Self> {
+        use hdbconnect_async::HdbValue;
         match value {
             HdbValue::REAL(v) => Ok(Self::from(*v)),
             HdbValue::DOUBLE(v) => Ok(*v),
@@ -219,8 +219,8 @@ impl FromHanaValue for bool {
         DataType::Boolean
     }
 
-    fn from_hana(value: &hdbconnect::HdbValue) -> crate::Result<Self> {
-        use hdbconnect::HdbValue;
+    fn from_hana(value: &hdbconnect_async::HdbValue) -> crate::Result<Self> {
+        use hdbconnect_async::HdbValue;
         match value {
             HdbValue::BOOLEAN(v) => Ok(*v),
             other => Err(crate::ArrowConversionError::value_conversion(
@@ -237,8 +237,8 @@ impl FromHanaValue for String {
         DataType::Utf8
     }
 
-    fn from_hana(value: &hdbconnect::HdbValue) -> crate::Result<Self> {
-        use hdbconnect::HdbValue;
+    fn from_hana(value: &hdbconnect_async::HdbValue) -> crate::Result<Self> {
+        use hdbconnect_async::HdbValue;
         match value {
             HdbValue::STRING(s) => Ok(s.clone()),
             // Note: LOB handles are now handled differently in hdbconnect 0.32+
@@ -253,8 +253,8 @@ impl FromHanaValue for Vec<u8> {
         DataType::Binary
     }
 
-    fn from_hana(value: &hdbconnect::HdbValue) -> crate::Result<Self> {
-        use hdbconnect::HdbValue;
+    fn from_hana(value: &hdbconnect_async::HdbValue) -> crate::Result<Self> {
+        use hdbconnect_async::HdbValue;
         match value {
             HdbValue::BINARY(b) => Ok(b.clone()),
             other => Err(crate::ArrowConversionError::value_conversion(
@@ -267,7 +267,7 @@ impl FromHanaValue for Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use hdbconnect::HdbValue;
+    use hdbconnect_async::HdbValue;
 
     use super::*;
 

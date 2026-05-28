@@ -202,7 +202,10 @@ impl PyConnection {
         drop(evicted);
         drop(cache);
 
-        *self.inner.lock() = ConnectionInner::Disconnected;
+        let old = std::mem::replace(&mut *self.inner.lock(), ConnectionInner::Disconnected);
+        if let ConnectionInner::Connected(conn) = old {
+            block_on(async move { drop(conn) });
+        }
     }
 
     /// Commit the current transaction.

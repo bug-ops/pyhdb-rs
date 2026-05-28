@@ -1499,7 +1499,6 @@ dependencies = [
  "bigdecimal",
  "codspeed-criterion-compat",
  "dhat",
- "hdbconnect",
  "hdbconnect_async",
  "num-bigint",
  "num-traits",

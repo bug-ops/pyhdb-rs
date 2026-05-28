@@ -34,7 +34,7 @@ impl SchemaMapper {
     ///
     /// * `result_set` - The HANA `ResultSet` to extract metadata from
     #[must_use]
-    pub fn from_result_set(result_set: &hdbconnect::ResultSet) -> Schema {
+    pub fn from_result_set(result_set: &hdbconnect_async::ResultSet) -> Schema {
         // ResultSetMetadata derefs to Vec<FieldMetadata>
         let metadata = result_set.metadata();
         let fields: Vec<Field> = metadata
@@ -51,7 +51,7 @@ impl SchemaMapper {
     ///
     /// * `metadata` - Slice of HANA field metadata
     #[must_use]
-    pub fn from_field_metadata(metadata: &[hdbconnect::FieldMetadata]) -> Schema {
+    pub fn from_field_metadata(metadata: &[hdbconnect_async::FieldMetadata]) -> Schema {
         let fields: Vec<Field> = metadata
             .iter()
             .map(super::super::types::arrow::FieldMetadataExt::to_arrow_field)
@@ -64,7 +64,7 @@ impl SchemaMapper {
     ///
     /// Returns an `Arc<Schema>` for efficient sharing.
     #[must_use]
-    pub fn schema_ref_from_result_set(result_set: &hdbconnect::ResultSet) -> SchemaRef {
+    pub fn schema_ref_from_result_set(result_set: &hdbconnect_async::ResultSet) -> SchemaRef {
         Arc::new(Self::from_result_set(result_set))
     }
 
@@ -72,7 +72,9 @@ impl SchemaMapper {
     ///
     /// Returns an `Arc<Schema>` for efficient sharing.
     #[must_use]
-    pub fn schema_ref_from_field_metadata(metadata: &[hdbconnect::FieldMetadata]) -> SchemaRef {
+    pub fn schema_ref_from_field_metadata(
+        metadata: &[hdbconnect_async::FieldMetadata],
+    ) -> SchemaRef {
         Arc::new(Self::from_field_metadata(metadata))
     }
 }
@@ -80,11 +82,11 @@ impl SchemaMapper {
 /// Extension trait for building Arrow Schema from HANA metadata.
 pub trait SchemaFromHana {
     /// Build an Arrow schema from HANA field metadata.
-    fn from_hana_metadata(metadata: &[hdbconnect::FieldMetadata]) -> Schema;
+    fn from_hana_metadata(metadata: &[hdbconnect_async::FieldMetadata]) -> Schema;
 }
 
 impl SchemaFromHana for Schema {
-    fn from_hana_metadata(metadata: &[hdbconnect::FieldMetadata]) -> Schema {
+    fn from_hana_metadata(metadata: &[hdbconnect_async::FieldMetadata]) -> Schema {
         SchemaMapper::from_field_metadata(metadata)
     }
 }
@@ -147,7 +149,7 @@ mod tests {
     #[test]
     fn test_arrow_field_int32() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -160,7 +162,7 @@ mod tests {
     #[test]
     fn test_arrow_field_nullable() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -172,7 +174,7 @@ mod tests {
     #[test]
     fn test_arrow_field_decimal() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -183,7 +185,7 @@ mod tests {
     #[test]
     fn test_arrow_field_varchar() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -194,7 +196,7 @@ mod tests {
     #[test]
     fn test_arrow_field_clob() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -205,7 +207,7 @@ mod tests {
     #[test]
     fn test_arrow_field_blob() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -216,7 +218,7 @@ mod tests {
     #[test]
     fn test_arrow_field_date() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -227,7 +229,7 @@ mod tests {
     #[test]
     fn test_arrow_field_timestamp() {
         use arrow_schema::{DataType, TimeUnit};
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -241,7 +243,7 @@ mod tests {
     #[test]
     fn test_arrow_field_boolean() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -252,7 +254,7 @@ mod tests {
     #[test]
     fn test_arrow_field_tinyint() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -263,7 +265,7 @@ mod tests {
     #[test]
     fn test_arrow_field_smallint() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -274,7 +276,7 @@ mod tests {
     #[test]
     fn test_arrow_field_bigint() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -285,7 +287,7 @@ mod tests {
     #[test]
     fn test_arrow_field_real() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -296,7 +298,7 @@ mod tests {
     #[test]
     fn test_arrow_field_double() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -307,7 +309,7 @@ mod tests {
     #[test]
     fn test_arrow_field_binary() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -318,7 +320,7 @@ mod tests {
     #[test]
     fn test_arrow_field_time() {
         use arrow_schema::{DataType, TimeUnit};
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -329,7 +331,7 @@ mod tests {
     #[test]
     fn test_arrow_field_geometry() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -340,7 +342,7 @@ mod tests {
     #[test]
     fn test_arrow_field_point() {
         use arrow_schema::DataType;
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -354,7 +356,7 @@ mod tests {
 
     #[test]
     fn test_arrow_field_empty_name() {
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -364,7 +366,7 @@ mod tests {
 
     #[test]
     fn test_arrow_field_special_chars_in_name() {
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 
@@ -374,7 +376,7 @@ mod tests {
 
     #[test]
     fn test_arrow_field_unicode_name() {
-        use hdbconnect::TypeId;
+        use hdbconnect_async::TypeId;
 
         use crate::types::arrow::hana_field_to_arrow;
 

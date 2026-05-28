@@ -208,8 +208,8 @@ impl Decimal128BuilderWrapper {
     /// # Errors
     ///
     /// Returns error if value cannot be represented in Decimal128.
-    fn convert_decimal(&self, value: &hdbconnect::HdbValue) -> Result<i128> {
-        use hdbconnect::HdbValue;
+    fn convert_decimal(&self, value: &hdbconnect_async::HdbValue) -> Result<i128> {
+        use hdbconnect_async::HdbValue;
         use num_traits::ToPrimitive;
 
         match value {
@@ -248,7 +248,7 @@ impl Decimal128BuilderWrapper {
 impl Sealed for Decimal128BuilderWrapper {}
 
 impl HanaCompatibleBuilder for Decimal128BuilderWrapper {
-    fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> Result<()> {
+    fn append_hana_value(&mut self, value: &hdbconnect_async::HdbValue) -> Result<()> {
         let i128_val = self.convert_decimal(value)?;
         self.builder.append_value(i128_val);
         self.len += 1;

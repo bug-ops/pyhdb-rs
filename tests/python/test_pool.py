@@ -153,11 +153,7 @@ class TestPoolOperations:
         async with pool.acquire() as conn:
             # Start a transaction
             cursor = conn.cursor()
-
-            # Execute some queries
             await cursor.execute("SELECT 1 FROM DUMMY")
-
-            # Commit
             await conn.commit()
 
     @pytest.mark.asyncio

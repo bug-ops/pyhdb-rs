@@ -29,7 +29,7 @@ pub trait HanaCompatibleBuilder: Sealed + Send {
     /// # Errors
     ///
     /// Returns an error if the value cannot be converted to the target type.
-    fn append_hana_value(&mut self, value: &hdbconnect::HdbValue) -> crate::Result<()>;
+    fn append_hana_value(&mut self, value: &hdbconnect_async::HdbValue) -> crate::Result<()>;
 
     /// Append a null value to this builder.
     fn append_null(&mut self);
@@ -65,7 +65,7 @@ pub trait HanaCompatibleBuilder: Sealed + Send {
 
 #[cfg(test)]
 mod tests {
-    use hdbconnect::HdbValue;
+    use hdbconnect_async::HdbValue;
 
     use super::*;
     use crate::builders::boolean::BooleanBuilderWrapper;

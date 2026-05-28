@@ -179,21 +179,21 @@ class TestPooledConnectionApplicationMetadata:
 
     async def test_pooled_set_application(self, connection_pool):
         """Test set_application() on pooled connection."""
-        async with await connection_pool.acquire() as conn:
+        async with connection_pool.acquire() as conn:
             await conn.set_application("PooledApp")
             info = await conn.client_info()
             assert isinstance(info, dict)
 
     async def test_pooled_set_application_user(self, connection_pool):
         """Test set_application_user() on pooled connection."""
-        async with await connection_pool.acquire() as conn:
+        async with connection_pool.acquire() as conn:
             await conn.set_application_user("pooled_user@test.com")
             info = await conn.client_info()
             assert isinstance(info, dict)
 
     async def test_pooled_all_methods(self, connection_pool):
         """Test all application metadata methods on pooled connection."""
-        async with await connection_pool.acquire() as conn:
+        async with connection_pool.acquire() as conn:
             await conn.set_application("PooledTestApp")
             await conn.set_application_user("pool_user")
             await conn.set_application_version("4.0.0")

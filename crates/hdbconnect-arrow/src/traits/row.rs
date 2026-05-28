@@ -3,12 +3,12 @@
 //! This module provides the [`RowLike`] trait for abstracting over row sources,
 //! enabling unit tests to use mock rows instead of requiring a HANA connection.
 
-use hdbconnect::HdbValue;
+use hdbconnect_async::HdbValue;
 
 /// Trait for types that can be used as row sources in batch processing.
 ///
 /// Implemented by:
-/// - `hdbconnect::Row` - real HANA rows
+/// - `hdbconnect_async::Row` - real HANA rows
 /// - `MockRow` - test rows for unit testing
 ///
 /// # Example
@@ -42,8 +42,7 @@ pub trait RowLike {
     fn get(&self, index: usize) -> &HdbValue<'static>;
 }
 
-// Implement for hdbconnect::Row
-impl RowLike for hdbconnect::Row {
+impl RowLike for hdbconnect_async::Row {
     fn len(&self) -> usize {
         self.len()
     }
@@ -58,7 +57,7 @@ impl RowLike for hdbconnect::Row {
 /// # Example
 ///
 /// ```rust,ignore
-/// use hdbconnect::HdbValue;
+/// use hdbconnect_async::HdbValue;
 /// use hdbconnect_arrow::traits::row::MockRow;
 ///
 /// let row = MockRow::new(vec![

@@ -45,6 +45,7 @@ from __future__ import annotations
 # Import from Rust extension module
 from pyhdb_rs._core import (
     # Classes
+    ArrowConfig,
     Connection,
     ConnectionBuilder,
     ConnectionConfig,
@@ -97,6 +98,7 @@ except ImportError:
 __all__ = [
     # Connection
     "connect",
+    "ArrowConfig",
     "Connection",
     "ConnectionBuilder",
     "ConnectionConfig",
