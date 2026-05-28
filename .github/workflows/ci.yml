@@ -278,6 +278,8 @@ jobs:
           sccache: true
         env:
           SCCACHE_GHA_ENABLED: "true"
+          # ring requires __ARM_ARCH to be defined when cross-compiling for aarch64-linux-gnu
+          CFLAGS_aarch64_unknown_linux_gnu: "-march=armv8-a"
       - name: Upload wheels
         uses: actions/upload-artifact@v7
         with:

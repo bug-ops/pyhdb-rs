@@ -30,7 +30,7 @@
 //! ```
 
 use pyo3::prelude::*;
-use rustls::crypto::aws_lc_rs as rustls_aws_lc;
+use rustls::crypto::ring as rustls_ring;
 
 pub mod config;
 pub mod connection;
@@ -116,7 +116,7 @@ fn pyhdb_rs_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // rustls 0.23 requires an explicit CryptoProvider; hdbconnect_impl uses default-features=false
     // so no provider is auto-registered. install_default() is idempotent (returns Err if already
     // set).
-    let _ = rustls_aws_lc::default_provider().install_default();
+    let _ = rustls_ring::default_provider().install_default();
 
     // DB-API 2.0 module globals
     m.add("apilevel", APILEVEL)?;
