@@ -111,7 +111,7 @@ jobs:
           pip install target/wheels/*.whl
 
       - name: Install benchmark dependencies
-        run: pip install pytest pytest-codspeed pyarrow polars pandas
+        run: pip install pytest pytest-codspeed pytest-asyncio pyarrow polars pandas
 
       - name: Run Python benchmarks
         uses: CodSpeedHQ/action@v4
