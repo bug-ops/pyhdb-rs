@@ -15,8 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Dependencies**: Bump `arrow` 58.3 → 59.0, `pyo3-arrow` 0.17 → 0.18; lockfile update (~100 packages including `aws-lc-rs`, `bitflags`, `chrono`, `hashbrown`, `hyper`, `libc`, `uuid`, `windows-sys`, `zerocopy`, `zeroize`)
-- **Python**: Remove `<25` upper cap on `pyarrow` in `pandas` extra
+- **Dependencies**: Bump `arrow` 58.3 → 59.0, `pyo3-arrow` 0.17 → 0.18; lockfile update (~100 packages including `aws-lc-rs`, `bitflags`, `chrono`, `hashbrown`, `hyper`, `libc`, `uuid`, `windows-sys`, `zerocopy`, `zeroize`); pyo3 held at 0.28 (pyo3-arrow 0.18 requires `^0.28`; upgrade pending pyo3-arrow 0.19)
+- **Python**: Remove `<25` upper cap on `pyarrow` in `pandas` extra (uses Arrow C Data Interface ABI, not Python API; consistent with `all`/`dev` extras)
+- **Security**: Suppress RUSTSEC-2026-0176 and RUSTSEC-2026-0177 (pyo3 0.28 OOB-read and missing-Sync advisories) in `deny.toml` with justification — neither code path is reachable in this project; fixed in pyo3 0.29, upgrade blocked by pyo3-arrow 0.18
 
 ### Fixed
 
