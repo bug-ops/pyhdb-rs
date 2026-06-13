@@ -86,7 +86,7 @@ impl QueryGuard {
     }
 }
 
-/// Error type for [`Self::execute_with_error`]
+/// Error type returned by [`QueryGuard::execute_with_error`].
 #[derive(Debug)]
 pub enum ExecuteError<E> {
     Timeout(Duration),

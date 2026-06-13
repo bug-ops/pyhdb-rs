@@ -39,7 +39,7 @@ pub(crate) mod private {
 ///
 /// # Sealed
 ///
-/// This trait requires implementing [`private::Sealed`], which is not
+/// This trait requires implementing `private::Sealed`, which is not
 /// accessible outside this crate. This prevents external implementations
 /// and allows us to add methods without breaking changes.
 pub trait FromHanaValue: private::Sealed {

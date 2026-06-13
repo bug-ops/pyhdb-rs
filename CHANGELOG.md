@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ConnectionPool.acquire()` — sync context manager**: `pool.acquire()` now returns an `AcquireGuard` directly (no `await` required) enabling idiomatic `async with pool.acquire() as conn:` usage; the actual pool slot is acquired during `__aenter__`.
 - **Fail-fast URL validation**: `ConnectionPoolBuilder.build()` now validates the connection URL at construction time and raises `InterfaceError` immediately for malformed URLs instead of failing lazily on first connection.
 
+### Changed
+
+- **Dependencies**: Bump `arrow` 58.3 → 59.0, `pyo3-arrow` 0.17 → 0.18; lockfile update (~100 packages including `aws-lc-rs`, `bitflags`, `chrono`, `hashbrown`, `hyper`, `libc`, `uuid`, `windows-sys`, `zerocopy`, `zeroize`)
+- **Python**: Remove `<25` upper cap on `pyarrow` in `pandas` extra
+
 ### Fixed
 
 - **TLS (hdbsqls://)**: Fixed `Fatal Python error: Aborted` when connecting to SAP HANA Cloud via `hdbsqls://` URL. Three root causes addressed:
