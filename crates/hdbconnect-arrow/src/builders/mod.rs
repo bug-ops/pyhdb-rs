@@ -1,6 +1,6 @@
 //! Arrow array builders for HANA value conversion.
 //!
-//! This module provides implementations of the [`HanaCompatibleBuilder`]
+//! This module provides implementations of the [`crate::traits::HanaCompatibleBuilder`]
 //! trait for all supported Arrow data types.
 
 pub mod boolean;
