@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependencies**: Bump `pyo3` 0.28 → 0.29, `pyo3-arrow` 0.18 → 0.19, `pyo3-async-runtimes` 0.28 → 0.29, `numpy` 0.28 → 0.29; unblocks previously-pinned upgrade now that `pyo3-arrow` 0.19 supports `pyo3` `^0.29`
+- **Security**: Remove `RUSTSEC-2026-0176` and `RUSTSEC-2026-0177` (pyo3 0.28 OOB-read and missing-Sync advisories) suppressions from `deny.toml` — both fixed upstream by the pyo3 0.29 upgrade
+
 ### Added
 
 - **`AsyncCursor.description`**: The `description` property on `AsyncCursor` and pooled-connection cursors now returns column metadata after `execute()`, complying with DB-API 2.0.

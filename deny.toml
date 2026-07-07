@@ -20,14 +20,6 @@ ignore = [
     # decryption) over network, which we do not perform. Our use case is a resource
     # server validating tokens, not generating them.
     "RUSTSEC-2023-0071",
-    # RUSTSEC-2026-0176: OOB read in PyList/PyTuple nth/nth_back iterators (pyo3 0.28)
-    # Not reachable — project never calls .nth()/.nth_back() on Python sequence iterators.
-    # Fixed in pyo3 0.29; upgrade blocked by pyo3-arrow 0.18 requiring pyo3 ^0.28.
-    { id = "RUSTSEC-2026-0176", reason = "OOB read in PyList/PyTuple nth/nth_back; not reachable — project never calls .nth()/.nth_back() on Python sequence iterators" },
-    # RUSTSEC-2026-0177: Missing Sync bound on PyCFunction::new_closure (pyo3 0.28)
-    # Not reachable — project does not use pyo3::types::PyCFunction::new_closure.
-    # Fixed in pyo3 0.29; upgrade blocked by pyo3-arrow 0.18 requiring pyo3 ^0.28.
-    { id = "RUSTSEC-2026-0177", reason = "Missing Sync bound on new_closure; not reachable — project does not use pyo3::types::PyCFunction::new_closure; fixed in pyo3 0.29, upgrade blocked by pyo3-arrow 0.18 requiring pyo3 ^0.28" },
 ]
 
 [licenses]
