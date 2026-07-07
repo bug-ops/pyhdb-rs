@@ -353,7 +353,7 @@ hdbconnect-mcp = { version = "0.3", features = ["telemetry"] }
 │   MCP Client     │  (Claude Desktop, Cline, etc.)
 └─────────┬────────┘
           │ stdio/HTTP
-┌─────────▼────────┐
+┌─────────▼─────────┐
 │  hdbconnect-mcp   │
 │  ├─ server.rs     │  Tool handlers with elicitation
 │  ├─ pool.rs       │  Connection pooling
