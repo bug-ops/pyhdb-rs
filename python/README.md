@@ -213,4 +213,4 @@ See the [main repository](https://github.com/bug-ops/pyhdb-rs) for full document
 
 ## License
 
-Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or [MIT license](LICENSE-MIT) at your option.
+Licensed under either of [Apache License, Version 2.0](https://github.com/bug-ops/pyhdb-rs/blob/main/LICENSE-APACHE) or [MIT license](https://github.com/bug-ops/pyhdb-rs/blob/main/LICENSE-MIT) at your option.
