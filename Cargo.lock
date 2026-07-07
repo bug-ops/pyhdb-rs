@@ -1498,7 +1498,7 @@ dependencies = [
 
 [[package]]
 name = "hdbconnect-arrow"
-version = "0.3.11"
+version = "0.3.12"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -1516,7 +1516,7 @@ dependencies = [
 
 [[package]]
 name = "hdbconnect-mcp"
-version = "0.3.11"
+version = "0.3.12"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1557,7 +1557,7 @@ dependencies = [
 
 [[package]]
 name = "hdbconnect-py"
-version = "0.3.11"
+version = "0.3.12"
 dependencies = [
  "arrow-array",
  "arrow-schema",
