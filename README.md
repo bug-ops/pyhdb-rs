@@ -155,7 +155,7 @@ Production-ready server that exposes SAP HANA to Claude, Cline, Cursor, and any 
 **Why it matters:** Instead of copy-pasting schemas or writing boilerplate queries, let AI discover and query your data directly — with guardrails.
 
 **Security by design:**
-- Read-only mode blocks DML/DDL by default
+- Read-only mode blocks DML/DDL by default; writes and stored procedures are opt-in, confirmed, and rate-limited
 - Row limits prevent data exfiltration
 - OIDC/JWT authentication for enterprise deployments
 - Per-user cache isolation in multi-tenant setups
@@ -167,6 +167,8 @@ Production-ready server that exposes SAP HANA to Claude, Cline, Cursor, and any 
 | `list_tables` | Explore schemas: *"What tables exist in SAPABAP1?"* |
 | `describe_table` | Understand structure: *"Show me VBAK columns"* |
 | `execute_sql` | Query data: *"Get top customers by revenue"* |
+| `execute_dml` | Guarded writes: *"Update this customer's status"* (opt-in, confirmed) |
+| `list_procedures` / `describe_procedure` / `call_procedure` | Discover and invoke stored procedures (opt-in, confirmed) |
 | `ping` | Verify connectivity |
 
 **Full documentation:** [MCP server README](crates/hdbconnect-mcp/README.md) — HTTP transport, Kubernetes deployment, Prometheus metrics.

@@ -4,7 +4,7 @@
 [![docs.rs](https://img.shields.io/docsrs/hdbconnect-arrow)](https://docs.rs/hdbconnect-arrow)
 [![codecov](https://codecov.io/gh/bug-ops/pyhdb-rs/graph/badge.svg?token=75RR61N6FI&flag=hdbconnect-arrow)](https://codecov.io/gh/bug-ops/pyhdb-rs)
 [![MSRV](https://img.shields.io/badge/MSRV-1.88-blue)](https://github.com/bug-ops/pyhdb-rs)
-[![License](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue.svg)](LICENSE-APACHE)
+[![License](https://img.shields.io/badge/license-Apache--2.0%20OR%20MIT-blue.svg)](../../LICENSE-APACHE)
 
 Apache Arrow integration for the [hdbconnect](https://crates.io/crates/hdbconnect) SAP HANA driver. Converts HANA result sets to Arrow `RecordBatch` format, enabling zero-copy interoperability with the entire Arrow ecosystem.
 
@@ -360,7 +360,7 @@ Related crates:
 
 Licensed under either of:
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT license ([LICENSE-MIT](LICENSE-MIT))
+- Apache License, Version 2.0 ([LICENSE-APACHE](../../LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](../../LICENSE-MIT))
 
 at your option.
