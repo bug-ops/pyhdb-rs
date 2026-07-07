@@ -349,25 +349,25 @@ hdbconnect-mcp = { version = "0.3", features = ["telemetry"] }
 ## Architecture
 
 ```
-┌──────────────────┐
-│   MCP Client     │  (Claude Desktop, Cline, etc.)
-└─────────┬────────┘
+┌────────────────────┐
+│   MCP Client       │  (Claude Desktop, Cline, etc.)
+└─────────┬──────────┘
           │ stdio/HTTP
-┌─────────▼─────────┐
-│  hdbconnect-mcp   │
-│  ├─ server.rs     │  Tool handlers with elicitation
-│  ├─ pool.rs       │  Connection pooling
-│  ├─ config/       │  CLI/env/file configuration, precedence merging
-│  ├─ types.rs      │  JSON Schema types for tool I/O
-│  ├─ validation.rs │  SQL safety checks (read-only, DML, WHERE clause)
-│  ├─ auth/         │  OIDC/JWT (feature "auth")
-│  ├─ cache/        │  Per-user result caching (feature "cache")
-│  └─ observability/│  Tracing, metrics, OTLP export
-└─────────┬─────────┘
+┌─────────▼──────────┐
+│  hdbconnect-mcp    │
+│  ├─ server.rs      │  Tool handlers with elicitation
+│  ├─ pool.rs        │  Connection pooling
+│  ├─ config/        │  CLI/env/file configuration, precedence merging
+│  ├─ types.rs       │  JSON Schema types for tool I/O
+│  ├─ validation.rs  │  SQL safety checks (read-only, DML, WHERE clause)
+│  ├─ auth/          │  OIDC/JWT (feature "auth")
+│  ├─ cache/         │  Per-user result caching (feature "cache")
+│  └─ observability/ │  Tracing, metrics, OTLP export
+└─────────┬──────────┘
           │ hdbconnect_async
-┌─────────▼────────┐
-│   SAP HANA DB    │
-└──────────────────┘
+┌─────────▼──────────┐
+│   SAP HANA DB      │
+└────────────────────┘
 ```
 
 ## Contributing
