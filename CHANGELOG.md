@@ -7,11 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- **Dependencies**: Bump `pyo3` 0.28 → 0.29, `pyo3-arrow` 0.18 → 0.19, `pyo3-async-runtimes` 0.28 → 0.29, `numpy` 0.28 → 0.29; unblocks previously-pinned upgrade now that `pyo3-arrow` 0.19 supports `pyo3` `^0.29`
-- **Dependencies**: Bump `arrow` family (arrow, arrow-array, arrow-buffer, arrow-cast, arrow-data, arrow-ipc, arrow-ord, arrow-row, arrow-schema, arrow-select, arrow-string, arrow-arith) 59.0 → 59.1
-- **Security**: Remove `RUSTSEC-2026-0176` and `RUSTSEC-2026-0177` (pyo3 0.28 OOB-read and missing-Sync advisories) suppressions from `deny.toml` — both fixed upstream by the pyo3 0.29 upgrade
+## [0.3.12] - 2026-07-07
 
 ### Added
 
@@ -21,9 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Dependencies**: Bump `arrow` 58.3 → 59.0, `pyo3-arrow` 0.17 → 0.18; lockfile update (~100 packages including `aws-lc-rs`, `bitflags`, `chrono`, `hashbrown`, `hyper`, `libc`, `uuid`, `windows-sys`, `zerocopy`, `zeroize`); pyo3 held at 0.28 (pyo3-arrow 0.18 requires `^0.28`; upgrade pending pyo3-arrow 0.19)
+- **Dependencies**: Bump `pyo3` 0.28 → 0.29, `pyo3-arrow` 0.18 → 0.19, `pyo3-async-runtimes` 0.28 → 0.29, `numpy` 0.28 → 0.29; unblocks previously-pinned upgrade now that `pyo3-arrow` 0.19 supports `pyo3` `^0.29` (#163)
+- **Dependencies**: Bump `arrow` family (arrow, arrow-array, arrow-buffer, arrow-cast, arrow-data, arrow-ipc, arrow-ord, arrow-row, arrow-schema, arrow-select, arrow-string, arrow-arith) 58.3 → 59.1, `pyo3-arrow` 0.17 → 0.18 (#153, #163); lockfile update (~100 packages including `aws-lc-rs`, `bitflags`, `chrono`, `hashbrown`, `hyper`, `libc`, `uuid`, `windows-sys`, `zerocopy`, `zeroize`)
+- **Dependencies**: Bump `rmcp` 1.7.0 → 2.1.0 (#157, #159), `tower-http` 0.6.11 → 0.7.0 (#156), `anyhow` 1.0.102 → 1.0.103, `arc-swap` 1.9.1 → 1.9.2, `rustls` 0.23.37 → 0.23.41, `opentelemetry_sdk` 0.32.0 → 0.32.1, `reqwest` 0.13.3 → 0.13.4 (#151, #157)
 - **Python**: Remove `<25` upper cap on `pyarrow` in `pandas` extra (uses Arrow C Data Interface ABI, not Python API; consistent with `all`/`dev` extras)
-- **Security**: Suppress RUSTSEC-2026-0176 and RUSTSEC-2026-0177 (pyo3 0.28 OOB-read and missing-Sync advisories) in `deny.toml` with justification — neither code path is reachable in this project; fixed in pyo3 0.29, upgrade blocked by pyo3-arrow 0.18
+- **CI**: Bump `actions/checkout` 6 → 7 (#155), `codecov/codecov-action` 6 → 7 (#152), `lewagon/wait-on-check-action` 1.7.0 → 1.8.1 (#154, #158)
 
 ### Fixed
 
@@ -35,6 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`ConnectionPool` GC crash**: `PyConnectionPool::drop()` now runs `pool.close()` inside a `block_on` context so idle `hdbconnect_async::Connection` objects are dropped with an active tokio reactor, preventing `Fatal Python error: Aborted` during garbage collection.
 - **`PooledConnection.cursor()`**: Made synchronous; previously returned a coroutine that tests had to await unnecessarily.
 - **Test fixtures**: Async fixtures (`async_connection`, `connection_pool`, `pooled_connection`) in `conftest.py` now use `@pytest_asyncio.fixture` as required by pytest-asyncio strict mode, eliminating 24 spurious `ERROR` collection entries.
+- **Tests against live HANA Cloud** (#150): Fixed 7 test failures — `test_decimal_precision` now uses `CAST(... AS DECIMAL)` without precision/scale to avoid TypeId 81 (`DECIMAL(p,s)`, maps to fixed-size binary) instead of TypeId 5 (plain `DECIMAL`, maps to Decimal128); Arrow parameter-fetch tests (pandas, polars) wrap the bound parameter in `CAST(? AS INT)` so HANA can infer the column type in a bare `SELECT`; `test_callproc_*` now also catches `OperationalError`, since HANA returns it (not `ProgrammingError`) for wrong argument count `[1281]` and unknown procedure `[328]`
+- **CI (aarch64-linux-gnu cross-compilation)** (#150): Switched the rustls crypto provider from `aws_lc_rs` back to `ring` — `aws-lc-sys` 0.39.0 failed to compile `bcm.c` in the `manylinux2014-cross:aarch64` container; explicitly set `CFLAGS_aarch64_unknown_linux_gnu="-march=armv8-a -D__ARM_ARCH=8"` so `ring`'s pregenerated ARM assembly compiles under the cross-compiler
+- **CI**: Add `pytest-asyncio` to Python benchmark dependencies — `conftest.py` imports it at module level, causing an `ImportError` when the benchmark job loaded test configuration
+
+### Security
+
+- **`crossbeam-epoch`**: Bump 0.9.18 → 0.9.20, resolving `RUSTSEC-2026-0204` (invalid pointer dereference in `fmt::Pointer` for `Atomic`/`Shared`), which was failing the Cargo Deny advisories check on `main` and blocking CI for all pull requests (#162)
 
 ## [0.3.11] - 2026-05-26
 
@@ -807,7 +812,8 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.11...HEAD
+[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.12...HEAD
+[0.3.12]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.8...v0.3.9
