@@ -63,6 +63,10 @@ jobs:
           sccache: true
         env:
           SCCACHE_GHA_ENABLED: "true"
+          # ring 0.17's pregenerated ARM assembly requires __ARM_ARCH to be
+          # predefined, but the manylinux2014-cross aarch64 gcc doesn't set it.
+          # https://github.com/briansmith/ring/issues/1728
+          CFLAGS_aarch64_unknown_linux_gnu: "-D__ARM_ARCH=8"
       - name: Upload wheels
         uses: actions/upload-artifact@v7
         with:
