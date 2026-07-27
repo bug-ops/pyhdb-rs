@@ -7,9 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.13] - 2026-07-27
+
 ### Security
 
-- **`quinn-proto`**: Bump 0.11.14 → 0.11.16, resolving `GHSA-4w2j-m93h-cj5j` (`RUSTSEC-2026-0185`), a remote memory exhaustion issue from unbounded out-of-order stream reassembly
+- **`quinn-proto`**: Bump 0.11.14 → 0.11.16, resolving `GHSA-4w2j-m93h-cj5j` (`RUSTSEC-2026-0185`), a remote memory exhaustion issue from unbounded out-of-order stream reassembly (#172)
+
+### Changed
+
+- **Dependencies**: Bump `jsonwebtoken` 10.4.0 → 11.0.0 (#171)
+- **Dependencies**: Bump `clap` 4.6.1 → 4.6.4, `tokio` 1.52.3 → 1.53.1, `tokio-stream` 0.1.18 → 0.1.19, `tokio-util` 0.7.18 → 0.7.19, `anyhow` 1.0.103 → 1.0.104, `async-trait` 0.1.89 → 0.1.91, `serde` 1.0.228 → 1.0.229, `serde_json` 1.0.150 → 1.0.151, `thiserror` 2.0.18 → 2.0.19, `toml` 1.1.2 → 1.1.3, `rustls` 0.23.41 → 0.23.42, `lru` 0.18.0 → 0.18.1, `rmcp` 2.1.0 → 2.2.0 (#166, #168, #170)
+- **CI**: Bump `lewagon/wait-on-check-action` 1.8.1 → 1.9.0, `actions/labeler` 6 → 7, `actions/setup-python` 6 → 7 (#167, #169)
+- **Python**: Reformat `python/README.md` code blocks to match updated `ruff` formatting rules (#170)
+
+### Fixed
+
+- **CI (aarch64 wheel cross-compile)**: Explicitly define `__ARM_ARCH` for the `manylinux2014-cross` aarch64 gcc used by `maturin-action` — `ring` 0.17's pregenerated ARM assembly requires the compiler to predefine it, and the cross-compiler doesn't set it by default
 
 ## [0.3.12] - 2026-07-07
 
@@ -816,7 +829,8 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.12...HEAD
+[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.13...HEAD
+[0.3.13]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.9...v0.3.10
