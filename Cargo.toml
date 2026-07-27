@@ -49,7 +49,7 @@ futures = "0.3"
 hdbconnect = "0.32"
 hdbconnect_async = "0.32"
 hdbconnect-arrow = { path = "crates/hdbconnect-arrow", version = "0.3.12" }
-jsonwebtoken = { version = "10.4", features = ["rust_crypto"] }
+jsonwebtoken = { version = "11.0", features = ["rust_crypto"] }
 arc-swap = "1.9"
 lru = "0.18"
 metrics = "0.24"
