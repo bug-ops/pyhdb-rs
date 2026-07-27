@@ -101,11 +101,11 @@ import asyncio
 import polars as pl
 from pyhdb_rs.aio import AsyncConnectionBuilder
 
+
 async def main():
-    conn = await (AsyncConnectionBuilder()
-        .host("hana.example.com")
-        .credentials("USER", "PASSWORD")
-        .build())
+    conn = await (
+        AsyncConnectionBuilder().host("hana.example.com").credentials("USER", "PASSWORD").build()
+    )
 
     async with conn:
         reader = await conn.execute_arrow(
@@ -116,6 +116,7 @@ async def main():
         )
         df = pl.from_arrow(reader)
         print(df)
+
 
 asyncio.run(main())
 ```
@@ -129,11 +130,8 @@ import asyncio
 import polars as pl
 from pyhdb_rs.aio import create_pool
 
-pool = create_pool(
-    "hdbsql://USER:PASSWORD@HOST:39017",
-    max_size=10,
-    connection_timeout=30
-)
+pool = create_pool("hdbsql://USER:PASSWORD@HOST:39017", max_size=10, connection_timeout=30)
+
 
 async def handle_request(customer_id: int):
     async with pool.acquire() as conn:
@@ -145,12 +143,9 @@ async def handle_request(customer_id: int):
         )
         return pl.from_arrow(reader)
 
+
 # Run concurrent queries
-results = await asyncio.gather(
-    handle_request(1001),
-    handle_request(1002),
-    handle_request(1003)
-)
+results = await asyncio.gather(handle_request(1001), handle_request(1002), handle_request(1003))
 ```
 
 ## Error handling
@@ -162,8 +157,7 @@ try:
     conn = ConnectionBuilder.from_url("hdbsql://USER:PASSWORD@HOST:39017").build()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT CUSTOMER_NAME, EMAIL FROM CUSTOMERS WHERE REGISTRATION_DATE >= ?",
-        ["2025-01-01"]
+        "SELECT CUSTOMER_NAME, EMAIL FROM CUSTOMERS WHERE REGISTRATION_DATE >= ?", ["2025-01-01"]
     )
 except DatabaseError as e:
     print(f"Database error: {e}")
@@ -178,12 +172,13 @@ This package is fully typed and includes inline type stubs:
 ```python
 from pyhdb_rs import ConnectionBuilder, Connection, Cursor
 
+
 def query_data(uri: str, status: str) -> list[tuple[int, str, str]]:
     conn = ConnectionBuilder.from_url(uri).build()
     cursor: Cursor = conn.cursor()
     cursor.execute(
         "SELECT ORDER_ID, CUSTOMER_NAME, ORDER_STATUS FROM SALES_ORDERS WHERE ORDER_STATUS = ?",
-        [status]
+        [status],
     )
     result = cursor.fetchall()
     conn.close()
