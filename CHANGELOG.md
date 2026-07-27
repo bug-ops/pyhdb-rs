@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`quinn-proto`**: Bump 0.11.14 → 0.11.16, resolving `GHSA-4w2j-m93h-cj5j` (`RUSTSEC-2026-0185`), a remote memory exhaustion issue from unbounded out-of-order stream reassembly
+
 ## [0.3.12] - 2026-07-07
 
 ### Added
