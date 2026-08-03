@@ -31,7 +31,7 @@ jobs:
           cargo codspeed build -p hdbconnect-mcp --features cache
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@v4
+        uses: CodSpeedHQ/action@v5.0.1
         with:
           mode: simulation
           run: cargo codspeed run
@@ -56,7 +56,7 @@ jobs:
           cargo codspeed build -p hdbconnect-mcp --features cache -m memory
 
       - name: Run benchmarks with memory profiling
-        uses: CodSpeedHQ/action@v4
+        uses: CodSpeedHQ/action@v5.0.1
         with:
           mode: memory
           run: cargo codspeed run
@@ -81,7 +81,7 @@ jobs:
           cargo codspeed build -p hdbconnect-mcp --features cache -m walltime
 
       - name: Run benchmarks with walltime measurement
-        uses: CodSpeedHQ/action@v4
+        uses: CodSpeedHQ/action@v5.0.1
         with:
           mode: walltime
           run: cargo codspeed run
@@ -114,7 +114,7 @@ jobs:
         run: pip install pytest pytest-codspeed pytest-asyncio pyarrow polars pandas
 
       - name: Run Python benchmarks
-        uses: CodSpeedHQ/action@v4
+        uses: CodSpeedHQ/action@v5.0.1
         with:
           mode: simulation
           run: pytest tests/python/benchmarks/ --codspeed
