@@ -45,7 +45,7 @@ jobs:
           cache-target: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: mozilla-actions/sccache-action@v0.0.10
+      - uses: mozilla-actions/sccache-action@v0.0.11
       - name: Clippy
         run: cargo clippy --workspace --all-features -- -D warnings
         env:
@@ -85,7 +85,7 @@ jobs:
           cache-target: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: mozilla-actions/sccache-action@v0.0.10
+      - uses: mozilla-actions/sccache-action@v0.0.11
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -328,7 +328,7 @@ jobs:
           cache-target: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: mozilla-actions/sccache-action@v0.0.10
+      - uses: mozilla-actions/sccache-action@v0.0.11
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -384,7 +384,7 @@ jobs:
           cache-target: release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: mozilla-actions/sccache-action@v0.0.10
+      - uses: mozilla-actions/sccache-action@v0.0.11
       - name: Check MSRV
         run: cargo check --workspace
         env:
