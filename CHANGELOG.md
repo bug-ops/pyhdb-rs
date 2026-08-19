@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`h2`**: Bump 0.4.15 → 0.4.16, resolving `RUSTSEC-2026-0258`, unbounded empty DATA frame queuing that could lead to unbounded memory usage or a panic
+- **`lru`**: Bump 0.18.1 → 0.18.2, resolving a use-after-free / double-free on eviction triggered by panicking `Drop` implementations during cache operations
+
 ## [0.3.13] - 2026-07-27
 
 ### Security
