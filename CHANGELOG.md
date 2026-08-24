@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`h2`**: Bump 0.4.15 → 0.4.16, resolving `RUSTSEC-2026-0258`, unbounded empty DATA frame queuing that could lead to unbounded memory usage or a panic
 - **`lru`**: Bump 0.18.1 → 0.18.2, resolving a use-after-free / double-free on eviction triggered by panicking `Drop` implementations during cache operations
 
+### Fixed
+
+- **CI (clippy)**: Resolve `clippy::unused_async_trait_impl` errors in `hdbconnect-mcp`, newly enforced by clippy on rustc 1.98.0
+
 ## [0.3.13] - 2026-07-27
 
 ### Security
