@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::time::Duration;
 
 use deadpool::managed::{self, Metrics, RecycleResult};
@@ -25,10 +26,14 @@ impl managed::Manager for ConnectionManager {
         Connection::new(self.url.clone()).await
     }
 
-    async fn recycle(&self, _conn: &mut Connection, _: &Metrics) -> RecycleResult<Self::Error> {
+    fn recycle(
+        &self,
+        _conn: &mut Connection,
+        _: &Metrics,
+    ) -> impl Future<Output = RecycleResult<Self::Error>> {
         // Skip connection validation during recycle.
         // Connection errors will be caught on actual query execution.
-        Ok(())
+        std::future::ready(Ok(()))
     }
 }
 

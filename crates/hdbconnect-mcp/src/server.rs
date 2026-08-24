@@ -1205,6 +1205,7 @@ fn json_value_to_sql_literal(value: &serde_json::Value) -> String {
 }
 
 #[tool_handler]
+#[allow(clippy::unused_async_trait_impl)]
 impl RmcpServerHandler for ServerHandler {
     #[allow(clippy::field_reassign_with_default)]
     fn get_info(&self) -> rmcp::model::ServerInfo {
