@@ -7,10 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.14] - 2026-08-26
+
 ### Security
 
 - **`h2`**: Bump 0.4.15 → 0.4.16, resolving `RUSTSEC-2026-0258`, unbounded empty DATA frame queuing that could lead to unbounded memory usage or a panic
 - **`lru`**: Bump 0.18.1 → 0.18.2, resolving a use-after-free / double-free on eviction triggered by panicking `Drop` implementations during cache operations
+
+### Changed
+
+- **Dependencies**: Bump `rmcp` 2.2.0 → 3.1.4 (#176, #178, #182)
+- **Dependencies**: Bump `arrow`, `arrow-array`, `arrow-buffer`, `arrow-data`, `arrow-schema` 59.1 → 59.2, `clap` 4.6.4 → 4.6.6, `pyo3` 0.29.0 → 0.29.2 (#178)
+- **Dependencies**: Bump `async-trait` 0.1.91 → 0.1.92, `thiserror` 2.0.19 → 2.0.20 (#179)
+- **Dependencies**: Bump `toml` 1.1.3 → 1.1.4, `rustls` 0.23.42 → 0.23.43 (#175)
+- **Dependencies**: Lockfile refresh (~70 transitive packages, including `aws-lc-rs`, `bitflags`, `syn`, `base64`, `aho-corasick`)
+- **CI**: Bump `CodSpeedHQ/action` 4 → 5.0.3 (#174, #177), `mozilla-actions/sccache-action` 0.0.10 → 0.0.11 (#174), `lewagon/wait-on-check-action` 1.9.0 → 1.9.1 (#180)
 
 ### Fixed
 
@@ -838,7 +849,8 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.13...HEAD
+[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.14...HEAD
+[0.3.14]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.13...v0.3.14
 [0.3.13]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.10...v0.3.11
