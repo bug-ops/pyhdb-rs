@@ -159,7 +159,7 @@ dependencies = [
  "arrow-ipc",
  "arrow-ord",
  "arrow-row",
- "arrow-schema",
+ "arrow-schema 59.3.0",
  "arrow-select",
  "arrow-string",
 ]
@@ -173,7 +173,7 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-data",
- "arrow-schema",
+ "arrow-schema 59.3.0",
  "chrono",
  "num-traits",
 ]
@@ -187,7 +187,7 @@ dependencies = [
  "ahash",
  "arrow-buffer",
  "arrow-data",
- "arrow-schema",
+ "arrow-schema 59.3.0",
  "chrono",
  "chrono-tz",
  "half",
@@ -220,7 +220,7 @@ dependencies = [
  "arrow-buffer",
  "arrow-data",
  "arrow-ord",
- "arrow-schema",
+ "arrow-schema 59.3.0",
  "arrow-select",
  "atoi",
  "base64 0.23.1",
@@ -239,7 +239,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ba2f832eaeca24b8f26143dba750e42ee4ab51cf7d65e701ca9607cfda9f358"
 dependencies = [
  "arrow-buffer",
- "arrow-schema",
+ "arrow-schema 59.3.0",
  "half",
  "num-integer",
  "num-traits",
@@ -254,7 +254,7 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-data",
- "arrow-schema",
+ "arrow-schema 59.3.0",
  "arrow-select",
  "flatbuffers",
 ]
@@ -268,7 +268,7 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-data",
- "arrow-schema",
+ "arrow-schema 59.3.0",
  "arrow-select",
 ]
 
@@ -281,7 +281,7 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-data",
- "arrow-schema",
+ "arrow-schema 59.3.0",
  "half",
 ]
 
@@ -295,6 +295,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arrow-schema"
+version = "60.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f85a9a58cd03560526b0066487574aacb9008e413504fa0ee23d61141e96c338"
+
+[[package]]
 name = "arrow-select"
 version = "59.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -304,7 +310,7 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-data",
- "arrow-schema",
+ "arrow-schema 59.3.0",
  "num-traits",
 ]
 
@@ -317,7 +323,7 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-data",
- "arrow-schema",
+ "arrow-schema 59.3.0",
  "arrow-select",
  "memchr",
  "num-traits",
@@ -1564,7 +1570,7 @@ dependencies = [
  "arrow-array",
  "arrow-buffer",
  "arrow-data",
- "arrow-schema",
+ "arrow-schema 60.0.0",
  "bigdecimal",
  "codspeed-criterion-compat",
  "dhat",
@@ -1620,7 +1626,7 @@ name = "hdbconnect-py"
 version = "0.3.14"
 dependencies = [
  "arrow-array",
- "arrow-schema",
+ "arrow-schema 60.0.0",
  "codspeed-criterion-compat",
  "deadpool",
  "hdbconnect-arrow",
@@ -3088,7 +3094,7 @@ dependencies = [
  "arrow-buffer",
  "arrow-cast",
  "arrow-data",
- "arrow-schema",
+ "arrow-schema 59.3.0",
  "arrow-select",
  "chrono",
  "chrono-tz",
