@@ -1208,8 +1208,8 @@ fn json_value_to_sql_literal(value: &serde_json::Value) -> String {
 #[allow(clippy::unused_async_trait_impl)]
 impl RmcpServerHandler for ServerHandler {
     #[allow(clippy::field_reassign_with_default)]
-    fn get_info(&self) -> rmcp::model::ServerInfo {
-        let mut info = rmcp::model::ServerInfo::default();
+    fn get_info(&self) -> rmcp::model::ServerConfig {
+        let mut info = rmcp::model::ServerConfig::default();
         info.instructions = Some(
             "MCP server for SAP HANA database. Provides tools to query and explore HANA databases."
                 .to_string(),
