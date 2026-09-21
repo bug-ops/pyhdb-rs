@@ -35,7 +35,7 @@ multiple_crate_versions = "allow"
 anyhow = "1.0"
 arrow = { version = "59.2", default-features = false }
 arrow-array = "59.2"
-arrow-buffer = "59.2"
+arrow-buffer = "60.0"
 arrow-data = "59.2"
 arrow-schema = "59.2"
 async-trait = "0.1"
