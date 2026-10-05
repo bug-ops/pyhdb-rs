@@ -1596,7 +1596,7 @@ version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56cd0d1f60cbdbb19bc1616fe9d625193119144bd40a8c6db22e007aa47de8ee"
 dependencies = [
- "hdbconnect_impl 0.33.0",
+ "hdbconnect_impl",
 ]
 
 [[package]]
@@ -1683,47 +1683,11 @@ dependencies = [
 
 [[package]]
 name = "hdbconnect_async"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14ecfe32d8cd4c1135e168ab9819fceec60247cfc314a9bd9e3bf81fe84d354e"
+checksum = "d97ad2a680ce507d5f33c29153bec24bea88610a3b15bb3ff0fd47d737051f3d"
 dependencies = [
- "hdbconnect_impl 0.32.0",
-]
-
-[[package]]
-name = "hdbconnect_impl"
-version = "0.32.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac3d271e4c2a3e519a08a2cd1477fe7786874000c27e0f2bd7d6875f5e1f528e"
-dependencies = [
- "async-trait",
- "bigdecimal",
- "bitflags 2.13.1",
- "byteorder",
- "cesu8",
- "crypto-common 0.1.6",
- "debug-ignore",
- "hmac 0.12.1",
- "log",
- "lz4_flex 0.11.6",
- "num",
- "num-bigint 0.4.8",
- "pbkdf2 0.12.2",
- "rand 0.9.5",
- "rustls",
- "rustls-webpki",
- "secstr",
- "serde",
- "serde_db",
- "sha2 0.10.9",
- "thiserror 2.0.21",
- "time",
- "tokio",
- "tokio-rustls",
- "url",
- "username",
- "vec_map",
- "webpki-roots",
+ "hdbconnect_impl",
 ]
 
 [[package]]
@@ -1732,6 +1696,7 @@ version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c474672cc2bc2cf74de21bb17903d2c14a4655a6f1f64153be2f9dab448ffb06"
 dependencies = [
+ "async-trait",
  "bigdecimal",
  "bitflags 2.13.1",
  "byteorder",
@@ -1740,10 +1705,10 @@ dependencies = [
  "debug-ignore",
  "hmac 0.13.0",
  "log",
- "lz4_flex 0.14.0",
+ "lz4_flex",
  "num",
  "num-bigint 0.4.8",
- "pbkdf2 0.13.0",
+ "pbkdf2",
  "rand 0.10.2",
  "rustls",
  "rustls-webpki",
@@ -1753,6 +1718,7 @@ dependencies = [
  "sha2 0.11.0",
  "thiserror 2.0.21",
  "time",
+ "tokio",
  "tokio-rustls",
  "url",
  "username",
@@ -2433,15 +2399,6 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "lz4_flex"
-version = "0.11.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "373f5eceeeab7925e0c1098212f2fbc4d416adec9d35051a6ab251e824c1854a"
-dependencies = [
- "twox-hash",
-]
-
-[[package]]
-name = "lz4_flex"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ecbdfe44b1bd960b68170b417450a628c43f7cf56bb3c5317e61cb230ee7f226"
@@ -2943,15 +2900,6 @@ name = "pastey"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4"
-
-[[package]]
-name = "pbkdf2"
-version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8ed6a7761f76e3b9f92dfb0a60a6a6477c61024b775147ff0973a02653abaf2"
-dependencies = [
- "digest 0.10.7",
-]
 
 [[package]]
 name = "pbkdf2"
@@ -4378,7 +4326,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.3.4",
+ "getrandom 0.4.3",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
