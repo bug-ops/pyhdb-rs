@@ -46,7 +46,7 @@ criterion = { version = "4.3.0", package = "codspeed-criterion-compat" }
 deadpool = { version = "0.13", default-features = false }
 dhat = "0.3"
 futures = "0.3"
-hdbconnect = "0.32"
+hdbconnect = "0.33"
 hdbconnect_async = "0.32"
 hdbconnect-arrow = { path = "crates/hdbconnect-arrow", version = "0.3.14" }
 jsonwebtoken = { version = "11.0", features = ["rust_crypto"] }
