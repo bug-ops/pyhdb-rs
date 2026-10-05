@@ -4,6 +4,9 @@
 //! This is important for applications that need to maintain open cursors across transaction
 //! boundaries, especially when using pooled connections.
 
+// pyo3 `from_py_object` expansion calls `clone` on this `Copy` type
+#![allow(clippy::clone_on_copy)]
+
 use pyo3::prelude::*;
 
 /// Controls result set behavior across transaction boundaries.

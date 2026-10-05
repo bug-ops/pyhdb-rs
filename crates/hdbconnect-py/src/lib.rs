@@ -89,14 +89,14 @@ const PARAMSTYLE: &str = "qmark";
 ///     `OperationalError`: If connection fails
 ///
 /// Example:
-///     ```python
-///     # Basic connection
-///     conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015")
+/// ```python
+/// # Basic connection
+/// conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015")
 ///
-///     # Connection with custom configuration
-///     config = ConnectionConfig(fetch_size=50000, read_timeout=60.0)
-///     conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015", config=config)
-///     ```
+/// # Connection with custom configuration
+/// config = ConnectionConfig(fetch_size=50000, read_timeout=60.0)
+/// conn = pyhdb_rs.connect("hdbsql://user:pass@host:30015", config=config)
+/// ```
 #[pyfunction]
 #[pyo3(signature = (url, *, config=None))]
 fn connect(url: &str, config: Option<&PyConnectionConfig>) -> PyResult<PyConnection> {

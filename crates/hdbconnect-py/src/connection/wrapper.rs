@@ -744,18 +744,18 @@ impl PyConnection {
     ///     `RecordBatchReader` for streaming results
     ///
     /// Example:
-    ///     ```python
-    ///     from pyhdb_rs import ArrowConfig
-    ///     import polars as pl
+    /// ```python
+    /// from pyhdb_rs import ArrowConfig
+    /// import polars as pl
     ///
-    ///     # With default config
-    ///     reader = conn.execute_arrow("SELECT * FROM T")
-    ///     df = pl.from_arrow(reader)
+    /// # With default config
+    /// reader = conn.execute_arrow("SELECT * FROM T")
+    /// df = pl.from_arrow(reader)
     ///
-    ///     # With custom batch size
-    ///     config = ArrowConfig(batch_size=10000)
-    ///     reader = conn.execute_arrow("SELECT * FROM T", config=config)
-    ///     ```
+    /// # With custom batch size
+    /// config = ArrowConfig(batch_size=10000)
+    /// reader = conn.execute_arrow("SELECT * FROM T", config=config)
+    /// ```
     #[pyo3(signature = (sql, config=None))]
     fn execute_arrow(
         &self,

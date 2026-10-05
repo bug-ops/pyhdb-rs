@@ -297,17 +297,17 @@ impl PyCursor {
     ///     Input parameters unchanged (per DB-API 2.0 spec)
     ///
     /// Example:
-    ///     ```python
-    ///     # Procedure: CREATE PROCEDURE GET_USER(IN user_id INT)
-    ///     result = cursor.callproc("GET_USER", [123])
-    ///     row = cursor.fetchone()  # Get output from first result set
+    /// ```python
+    /// # Procedure: CREATE PROCEDURE GET_USER(IN user_id INT)
+    /// result = cursor.callproc("GET_USER", [123])
+    /// row = cursor.fetchone()  # Get output from first result set
     ///
-    ///     # For procedures returning multiple result sets:
-    ///     cursor.callproc("MULTI_RESULT_PROC")
-    ///     first_results = cursor.fetchall()
-    ///     if cursor.nextset():
-    ///         second_results = cursor.fetchall()
-    ///     ```
+    /// # For procedures returning multiple result sets:
+    /// cursor.callproc("MULTI_RESULT_PROC")
+    /// first_results = cursor.fetchall()
+    /// if cursor.nextset():
+    ///     second_results = cursor.fetchall()
+    /// ```
     #[pyo3(signature = (procname, parameters=None))]
     fn callproc<'py>(
         &mut self,
@@ -366,16 +366,16 @@ impl PyCursor {
     ///     True if there is another result set, False otherwise
     ///
     /// Example:
-    ///     ```python
-    ///     cursor.callproc("MULTI_RESULT_PROC")
-    ///     first_results = cursor.fetchall()
+    /// ```python
+    /// cursor.callproc("MULTI_RESULT_PROC")
+    /// first_results = cursor.fetchall()
     ///
-    ///     if cursor.nextset():
-    ///         second_results = cursor.fetchall()
+    /// if cursor.nextset():
+    ///     second_results = cursor.fetchall()
     ///
-    ///     if cursor.nextset():
-    ///         third_results = cursor.fetchall()
-    ///     ```
+    /// if cursor.nextset():
+    ///     third_results = cursor.fetchall()
+    /// ```
     #[allow(clippy::needless_range_loop)]
     fn nextset(&self) -> bool {
         let mut guard = self.inner.lock();
@@ -532,20 +532,20 @@ impl PyCursor {
     ///     `RecordBatchReader` for streaming results
     ///
     /// Example:
-    ///     ```python
-    ///     from pyhdb_rs import ArrowConfig
-    ///     import polars as pl
+    /// ```python
+    /// from pyhdb_rs import ArrowConfig
+    /// import polars as pl
     ///
-    ///     cursor.execute("SELECT * FROM T")
+    /// cursor.execute("SELECT * FROM T")
     ///
-    ///     # With default config
-    ///     reader = cursor.fetch_arrow()
-    ///     df = pl.from_arrow(reader)
+    /// # With default config
+    /// reader = cursor.fetch_arrow()
+    /// df = pl.from_arrow(reader)
     ///
-    ///     # With custom batch size
-    ///     config = ArrowConfig(batch_size=10000)
-    ///     reader = cursor.fetch_arrow(config=config)
-    ///     ```
+    /// # With custom batch size
+    /// config = ArrowConfig(batch_size=10000)
+    /// reader = cursor.fetch_arrow(config=config)
+    /// ```
     #[pyo3(signature = (config=None))]
     fn fetch_arrow(
         &self,
@@ -587,18 +587,18 @@ impl PyCursor {
     ///     `RecordBatchReader` for streaming results
     ///
     /// Example:
-    ///     ```python
-    ///     from pyhdb_rs import ArrowConfig
-    ///     import polars as pl
+    /// ```python
+    /// from pyhdb_rs import ArrowConfig
+    /// import polars as pl
     ///
-    ///     # With default config
-    ///     reader = cursor.execute_arrow("SELECT * FROM T")
-    ///     df = pl.from_arrow(reader)
+    /// # With default config
+    /// reader = cursor.execute_arrow("SELECT * FROM T")
+    /// df = pl.from_arrow(reader)
     ///
-    ///     # With custom batch size
-    ///     config = ArrowConfig(batch_size=10000)
-    ///     reader = cursor.execute_arrow("SELECT * FROM T", config=config)
-    ///     ```
+    /// # With custom batch size
+    /// config = ArrowConfig(batch_size=10000)
+    /// reader = cursor.execute_arrow("SELECT * FROM T", config=config)
+    /// ```
     #[pyo3(signature = (sql, config=None))]
     fn execute_arrow(
         &self,
