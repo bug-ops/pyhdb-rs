@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Benchmarks**: Use `collect(engine="streaming")` in the polars streaming benchmark, fixing failure on polars 2.0
+- **Benchmarks**: Use `collect(engine="streaming")` in the polars streaming benchmark, fixing failure on polars 2.0 (#208)
 
 ## [0.3.14] - 2026-08-26
 
