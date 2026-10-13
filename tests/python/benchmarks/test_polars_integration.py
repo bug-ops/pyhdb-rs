@@ -165,6 +165,8 @@ class TestPolarsMemoryBenchmarks:
         df = pl.DataFrame(mock_arrow_data(100_000))
 
         def streaming_groupby() -> pl.DataFrame:
-            return df.lazy().group_by("region").agg(pl.col("amount").sum()).collect(streaming=True)
+            return (
+                df.lazy().group_by("region").agg(pl.col("amount").sum()).collect(engine="streaming")
+            )
 
         benchmark(streaming_groupby)
