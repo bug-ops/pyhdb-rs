@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Benchmarks**: Use `collect(engine="streaming")` in the polars streaming benchmark, fixing failure on polars 2.0 (#208)
+- **Dependencies**: Bump `chacha20` 0.10.1 → 0.10.2, replacing a yanked release (#211)
 
 ## [0.3.14] - 2026-08-26
 
