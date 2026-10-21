@@ -28,7 +28,7 @@ Apache Arrow integration for the [hdbconnect](https://crates.io/crates/hdbconnec
 
 ```toml
 [dependencies]
-hdbconnect-arrow = "0.3"
+hdbconnect-arrow = "0.4"
 ```
 
 Or with cargo-add:
@@ -118,7 +118,7 @@ Enable the optional `profiling` feature flag to integrate [dhat](https://docs.rs
 
 ```toml
 [dependencies]
-hdbconnect-arrow = { version = "0.3", features = ["profiling"] }
+hdbconnect-arrow = { version = "0.4", features = ["profiling"] }
 ```
 
 This enables allocation tracking with zero impact on release builds through conditional compilation. See `src/profiling.rs` for usage examples.
@@ -231,7 +231,7 @@ Enable optional features in `Cargo.toml`:
 
 ```toml
 [dependencies]
-hdbconnect-arrow = { version = "0.3", features = ["async", "test-utils", "profiling"] }
+hdbconnect-arrow = { version = "0.4", features = ["async", "test-utils", "profiling"] }
 ```
 
 | Feature | Description | Default |
