@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependencies**: Bump `pyo3` 0.29 → 0.30, `pyo3-arrow` 0.19 → 0.20, `pyo3-async-runtimes` 0.29 → 0.30; drop now-default `skip_from_py_object` from `#[pyclass]` attributes (#212)
+- **Dependencies**: Bump `arrow*` 59.3.1, `rmcp` 3.6, `lru` 0.19, `parking_lot` 0.13, `jsonwebtoken` 11.1, `tokio` 1.54, `tower-http` 0.7.1, `codspeed-criterion-compat` 6.0, plus lockfile refresh (#212)
+
 ### Fixed
 
 - **Benchmarks**: Use `collect(engine="streaming")` in the polars streaming benchmark, fixing failure on polars 2.0 (#208)

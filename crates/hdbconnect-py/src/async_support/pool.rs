@@ -418,11 +418,7 @@ impl PyConnectionPool {
 ///     .network_group("analytics_group")
 ///     .build())
 /// ```
-#[pyclass(
-    name = "ConnectionPoolBuilder",
-    module = "hdbconnect.aio",
-    skip_from_py_object
-)]
+#[pyclass(name = "ConnectionPoolBuilder", module = "hdbconnect.aio")]
 #[derive(Debug, Clone, Default)]
 pub struct PyConnectionPoolBuilder {
     url: Option<String>,
@@ -642,7 +638,7 @@ impl PyConnectionPoolBuilder {
     }
 }
 
-#[pyclass(name = "PoolStatus", module = "hdbconnect.aio", skip_from_py_object)]
+#[pyclass(name = "PoolStatus", module = "hdbconnect.aio")]
 #[derive(Debug, Clone)]
 pub struct PoolStatus {
     #[pyo3(get)]
