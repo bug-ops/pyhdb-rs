@@ -1305,6 +1305,8 @@ impl PooledConnection {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -1368,10 +1370,7 @@ mod tests {
             TlsConfigInner::RootCertificates,
         );
         assert!(manager.tls_config.is_some());
-        assert!(matches!(
-            manager.tls_config,
-            Some(TlsConfigInner::RootCertificates)
-        ));
+        assert_matches!(manager.tls_config, Some(TlsConfigInner::RootCertificates));
     }
 
     #[test]

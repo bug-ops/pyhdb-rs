@@ -95,6 +95,7 @@ impl JwtValidator {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use jsonwebtoken::{EncodingKey, Header, encode};
@@ -184,7 +185,7 @@ mod tests {
         let token = create_test_token(&claims, secret);
         let result = validator.validate(&token).await;
 
-        assert!(matches!(result, Err(AuthError::TokenExpired)));
+        assert_matches!(result, Err(AuthError::TokenExpired));
     }
 
     #[tokio::test]
@@ -210,7 +211,7 @@ mod tests {
         let token = create_test_token(&claims, secret);
         let result = validator.validate(&token).await;
 
-        assert!(matches!(result, Err(AuthError::InvalidIssuer)));
+        assert_matches!(result, Err(AuthError::InvalidIssuer));
     }
 
     #[tokio::test]
@@ -235,7 +236,7 @@ mod tests {
         let token = create_test_token(&claims, "wrong-secret-key-at-least-32-bytes");
         let result = validator.validate(&token).await;
 
-        assert!(matches!(result, Err(AuthError::InvalidSignature)));
+        assert_matches!(result, Err(AuthError::InvalidSignature));
     }
 
     #[tokio::test]
@@ -289,7 +290,7 @@ mod tests {
         let token = create_test_token(&claims, secret);
         let result = validator.validate(&token).await;
 
-        assert!(matches!(result, Err(AuthError::InvalidAudience)));
+        assert_matches!(result, Err(AuthError::InvalidAudience));
     }
 
     #[tokio::test]
@@ -303,6 +304,6 @@ mod tests {
         let validator = JwtValidator::new(config, None);
         let result = validator.validate("not.a.valid.token").await;
 
-        assert!(matches!(result, Err(AuthError::InvalidToken)));
+        assert_matches!(result, Err(AuthError::InvalidToken));
     }
 }

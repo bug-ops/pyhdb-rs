@@ -255,6 +255,8 @@ impl MockRowBuilder {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -276,14 +278,14 @@ mod tests {
         let row = MockRow::nulls(5);
         assert_eq!(row.len(), 5);
         for i in 0..5 {
-            assert!(matches!(row.get(i), HdbValue::NULL));
+            assert_matches!(row.get(i), HdbValue::NULL);
         }
     }
 
     #[test]
     fn test_mock_row_index() {
         let row = MockRow::new(vec![HdbValue::INT(42)]);
-        assert!(matches!(row[0], HdbValue::INT(42)));
+        assert_matches!(row[0], HdbValue::INT(42));
     }
 
     #[test]
@@ -297,9 +299,9 @@ mod tests {
             .build();
 
         assert_eq!(row.len(), 5);
-        assert!(matches!(row.get(0), HdbValue::INT(42)));
-        assert!(matches!(row.get(2), HdbValue::NULL));
-        assert!(matches!(row.get(4), HdbValue::BOOLEAN(true)));
+        assert_matches!(row.get(0), HdbValue::INT(42));
+        assert_matches!(row.get(2), HdbValue::NULL);
+        assert_matches!(row.get(4), HdbValue::BOOLEAN(true));
     }
 
     #[test]

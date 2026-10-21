@@ -209,6 +209,8 @@ impl PyTlsConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -216,7 +218,7 @@ mod tests {
         let config = PyTlsConfig {
             inner: TlsConfigInner::Directory("/path/to/certs".to_string()),
         };
-        assert!(matches!(config.inner, TlsConfigInner::Directory(_)));
+        assert_matches!(config.inner, TlsConfigInner::Directory(_));
     }
 
     #[test]
@@ -224,7 +226,7 @@ mod tests {
         let config = PyTlsConfig {
             inner: TlsConfigInner::Environment("HANA_CA_CERT".to_string()),
         };
-        assert!(matches!(config.inner, TlsConfigInner::Environment(_)));
+        assert_matches!(config.inner, TlsConfigInner::Environment(_));
     }
 
     #[test]
@@ -233,7 +235,7 @@ mod tests {
         let config = PyTlsConfig {
             inner: TlsConfigInner::Direct(pem.to_string()),
         };
-        assert!(matches!(config.inner, TlsConfigInner::Direct(_)));
+        assert_matches!(config.inner, TlsConfigInner::Direct(_));
     }
 
     #[test]
@@ -241,7 +243,7 @@ mod tests {
         let config = PyTlsConfig {
             inner: TlsConfigInner::RootCertificates,
         };
-        assert!(matches!(config.inner, TlsConfigInner::RootCertificates));
+        assert_matches!(config.inner, TlsConfigInner::RootCertificates);
     }
 
     #[test]
@@ -249,7 +251,7 @@ mod tests {
         let config = PyTlsConfig {
             inner: TlsConfigInner::Insecure,
         };
-        assert!(matches!(config.inner, TlsConfigInner::Insecure));
+        assert_matches!(config.inner, TlsConfigInner::Insecure);
     }
 
     #[test]
@@ -258,7 +260,7 @@ mod tests {
             inner: TlsConfigInner::Directory("/path".to_string()),
         };
         let cloned = config.clone();
-        assert!(matches!(cloned.inner, TlsConfigInner::Directory(_)));
+        assert_matches!(cloned.inner, TlsConfigInner::Directory(_));
     }
 
     #[test]

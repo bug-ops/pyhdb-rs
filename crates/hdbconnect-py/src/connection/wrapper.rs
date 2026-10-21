@@ -827,12 +827,14 @@ impl PyConnection {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
     fn test_connection_inner_disconnected() {
         let inner = ConnectionInner::Disconnected;
-        assert!(matches!(inner, ConnectionInner::Disconnected));
+        assert_matches!(inner, ConnectionInner::Disconnected);
     }
 
     #[test]

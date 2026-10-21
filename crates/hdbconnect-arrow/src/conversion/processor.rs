@@ -379,6 +379,8 @@ impl HanaBatchProcessor {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use arrow_schema::{DataType, Field, Schema};
 
     use super::*;
@@ -434,7 +436,7 @@ mod tests {
 
         let profile = SchemaProfile::analyze(&schema);
         assert!(!profile.is_homogeneous());
-        assert!(matches!(profile, SchemaProfile::Mixed));
+        assert_matches!(profile, SchemaProfile::Mixed);
     }
 
     #[test]
@@ -459,7 +461,7 @@ mod tests {
 
         let profile = SchemaProfile::analyze(&schema);
         assert!(!profile.is_homogeneous());
-        assert!(matches!(profile, SchemaProfile::Mixed));
+        assert_matches!(profile, SchemaProfile::Mixed);
     }
 
     #[test]

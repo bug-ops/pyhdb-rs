@@ -88,6 +88,7 @@ pub fn effective_schema_filter(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::collections::HashMap;
 
     use super::*;
@@ -207,7 +208,7 @@ mod tests {
         });
         let claims = create_claims(None);
         let result = resolver.resolve(&claims);
-        assert!(matches!(result, Err(AuthError::MissingTenantClaim)));
+        assert_matches!(result, Err(AuthError::MissingTenantClaim));
     }
 
     #[test]
@@ -228,7 +229,7 @@ mod tests {
     fn test_effective_schema_filter_admin_bypass() {
         let server_filter = SchemaFilter::AllowAll;
         let result = effective_schema_filter(&server_filter, Some("TENANT1"), true);
-        assert!(matches!(result, SchemaFilter::AllowAll));
+        assert_matches!(result, SchemaFilter::AllowAll);
     }
 
     #[test]
@@ -249,6 +250,6 @@ mod tests {
     fn test_effective_schema_filter_no_tenant() {
         let server_filter = SchemaFilter::AllowAll;
         let result = effective_schema_filter(&server_filter, None, false);
-        assert!(matches!(result, SchemaFilter::AllowAll));
+        assert_matches!(result, SchemaFilter::AllowAll);
     }
 }

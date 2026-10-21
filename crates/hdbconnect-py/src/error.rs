@@ -274,6 +274,8 @@ pub fn register_exceptions(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -328,16 +330,16 @@ mod tests {
     #[test]
     fn test_error_constructors() {
         let err = PyHdbError::interface("test");
-        assert!(matches!(err, PyHdbError::Interface(_)));
+        assert_matches!(err, PyHdbError::Interface(_));
 
         let err = PyHdbError::programming("test");
-        assert!(matches!(err, PyHdbError::Programming(_)));
+        assert_matches!(err, PyHdbError::Programming(_));
     }
 
     #[test]
     fn test_error_interface_constructor() {
         let err = PyHdbError::interface("connection failed");
-        assert!(matches!(err, PyHdbError::Interface(_)));
+        assert_matches!(err, PyHdbError::Interface(_));
         assert!(err.to_string().contains("InterfaceError"));
         assert!(err.to_string().contains("connection failed"));
     }
@@ -345,49 +347,49 @@ mod tests {
     #[test]
     fn test_error_operational_constructor() {
         let err = PyHdbError::operational("connection lost");
-        assert!(matches!(err, PyHdbError::Operational(_)));
+        assert_matches!(err, PyHdbError::Operational(_));
         assert!(err.to_string().contains("OperationalError"));
     }
 
     #[test]
     fn test_error_programming_constructor() {
         let err = PyHdbError::programming("syntax error");
-        assert!(matches!(err, PyHdbError::Programming(_)));
+        assert_matches!(err, PyHdbError::Programming(_));
         assert!(err.to_string().contains("ProgrammingError"));
     }
 
     #[test]
     fn test_error_integrity_constructor() {
         let err = PyHdbError::integrity("constraint violation");
-        assert!(matches!(err, PyHdbError::Integrity(_)));
+        assert_matches!(err, PyHdbError::Integrity(_));
         assert!(err.to_string().contains("IntegrityError"));
     }
 
     #[test]
     fn test_error_data_constructor() {
         let err = PyHdbError::data("type conversion failed");
-        assert!(matches!(err, PyHdbError::Data(_)));
+        assert_matches!(err, PyHdbError::Data(_));
         assert!(err.to_string().contains("DataError"));
     }
 
     #[test]
     fn test_error_not_supported_constructor() {
         let err = PyHdbError::not_supported("feature not available");
-        assert!(matches!(err, PyHdbError::NotSupported(_)));
+        assert_matches!(err, PyHdbError::NotSupported(_));
         assert!(err.to_string().contains("NotSupportedError"));
     }
 
     #[test]
     fn test_error_internal_constructor() {
         let err = PyHdbError::internal("unexpected state");
-        assert!(matches!(err, PyHdbError::Internal(_)));
+        assert_matches!(err, PyHdbError::Internal(_));
         assert!(err.to_string().contains("InternalError"));
     }
 
     #[test]
     fn test_error_arrow_constructor() {
         let err = PyHdbError::arrow("conversion failed");
-        assert!(matches!(err, PyHdbError::Arrow(_)));
+        assert_matches!(err, PyHdbError::Arrow(_));
         assert!(err.to_string().contains("ArrowError"));
     }
 
@@ -426,136 +428,136 @@ mod tests {
     #[test]
     fn test_categorize_hana_error_integrity_codes() {
         let err = categorize_hana_error("[301] duplicate key".to_string());
-        assert!(matches!(err, PyHdbError::Integrity(_)));
+        assert_matches!(err, PyHdbError::Integrity(_));
 
         let err = categorize_hana_error("[302] referential integrity".to_string());
-        assert!(matches!(err, PyHdbError::Integrity(_)));
+        assert_matches!(err, PyHdbError::Integrity(_));
 
         let err = categorize_hana_error("[303] check constraint".to_string());
-        assert!(matches!(err, PyHdbError::Integrity(_)));
+        assert_matches!(err, PyHdbError::Integrity(_));
 
         let err = categorize_hana_error("[461] unique constraint".to_string());
-        assert!(matches!(err, PyHdbError::Integrity(_)));
+        assert_matches!(err, PyHdbError::Integrity(_));
     }
 
     #[test]
     fn test_categorize_hana_error_programming_codes() {
         let err = categorize_hana_error("[257] syntax error".to_string());
-        assert!(matches!(err, PyHdbError::Programming(_)));
+        assert_matches!(err, PyHdbError::Programming(_));
 
         let err = categorize_hana_error("[260] table not found".to_string());
-        assert!(matches!(err, PyHdbError::Programming(_)));
+        assert_matches!(err, PyHdbError::Programming(_));
 
         let err = categorize_hana_error("[261] column not found".to_string());
-        assert!(matches!(err, PyHdbError::Programming(_)));
+        assert_matches!(err, PyHdbError::Programming(_));
 
         let err = categorize_hana_error("[262] invalid identifier".to_string());
-        assert!(matches!(err, PyHdbError::Programming(_)));
+        assert_matches!(err, PyHdbError::Programming(_));
 
         let err = categorize_hana_error("[263] parse error".to_string());
-        assert!(matches!(err, PyHdbError::Programming(_)));
+        assert_matches!(err, PyHdbError::Programming(_));
     }
 
     #[test]
     fn test_categorize_hana_error_data_codes() {
         let err = categorize_hana_error("[304] numeric overflow".to_string());
-        assert!(matches!(err, PyHdbError::Data(_)));
+        assert_matches!(err, PyHdbError::Data(_));
 
         let err = categorize_hana_error("[305] division by zero".to_string());
-        assert!(matches!(err, PyHdbError::Data(_)));
+        assert_matches!(err, PyHdbError::Data(_));
 
         let err = categorize_hana_error("[306] string too long".to_string());
-        assert!(matches!(err, PyHdbError::Data(_)));
+        assert_matches!(err, PyHdbError::Data(_));
 
         let err = categorize_hana_error("[411] type mismatch".to_string());
-        assert!(matches!(err, PyHdbError::Data(_)));
+        assert_matches!(err, PyHdbError::Data(_));
 
         let err = categorize_hana_error("[412] conversion error".to_string());
-        assert!(matches!(err, PyHdbError::Data(_)));
+        assert_matches!(err, PyHdbError::Data(_));
     }
 
     #[test]
     fn test_categorize_hana_error_unknown_code_defaults_to_operational() {
         let err = categorize_hana_error("[999] unknown error".to_string());
-        assert!(matches!(err, PyHdbError::Operational(_)));
+        assert_matches!(err, PyHdbError::Operational(_));
     }
 
     #[test]
     fn test_categorize_hana_error_by_message_content_connection() {
         let err = categorize_hana_error("connection refused".to_string());
-        assert!(matches!(err, PyHdbError::Operational(_)));
+        assert_matches!(err, PyHdbError::Operational(_));
 
         let err = categorize_hana_error("Connection lost".to_string());
-        assert!(matches!(err, PyHdbError::Operational(_)));
+        assert_matches!(err, PyHdbError::Operational(_));
     }
 
     #[test]
     fn test_categorize_hana_error_by_message_content_timeout() {
         let err = categorize_hana_error("timeout occurred".to_string());
-        assert!(matches!(err, PyHdbError::Operational(_)));
+        assert_matches!(err, PyHdbError::Operational(_));
 
         let err = categorize_hana_error("TIMEOUT: operation took too long".to_string());
-        assert!(matches!(err, PyHdbError::Operational(_)));
+        assert_matches!(err, PyHdbError::Operational(_));
     }
 
     #[test]
     fn test_categorize_hana_error_by_message_content_syntax() {
         let err = categorize_hana_error("syntax error near SELECT".to_string());
-        assert!(matches!(err, PyHdbError::Programming(_)));
+        assert_matches!(err, PyHdbError::Programming(_));
 
         let err = categorize_hana_error("SYNTAX ERROR in query".to_string());
-        assert!(matches!(err, PyHdbError::Programming(_)));
+        assert_matches!(err, PyHdbError::Programming(_));
     }
 
     #[test]
     fn test_categorize_hana_error_by_message_content_parse() {
         let err = categorize_hana_error("parse error".to_string());
-        assert!(matches!(err, PyHdbError::Programming(_)));
+        assert_matches!(err, PyHdbError::Programming(_));
 
         let err = categorize_hana_error("PARSE failed".to_string());
-        assert!(matches!(err, PyHdbError::Programming(_)));
+        assert_matches!(err, PyHdbError::Programming(_));
     }
 
     #[test]
     fn test_categorize_hana_error_by_message_content_constraint() {
         let err = categorize_hana_error("constraint violation".to_string());
-        assert!(matches!(err, PyHdbError::Integrity(_)));
+        assert_matches!(err, PyHdbError::Integrity(_));
 
         let err = categorize_hana_error("CONSTRAINT check failed".to_string());
-        assert!(matches!(err, PyHdbError::Integrity(_)));
+        assert_matches!(err, PyHdbError::Integrity(_));
     }
 
     #[test]
     fn test_categorize_hana_error_by_message_content_duplicate() {
         let err = categorize_hana_error("duplicate key".to_string());
-        assert!(matches!(err, PyHdbError::Integrity(_)));
+        assert_matches!(err, PyHdbError::Integrity(_));
 
         let err = categorize_hana_error("DUPLICATE value".to_string());
-        assert!(matches!(err, PyHdbError::Integrity(_)));
+        assert_matches!(err, PyHdbError::Integrity(_));
     }
 
     #[test]
     fn test_categorize_hana_error_by_message_content_type() {
         let err = categorize_hana_error("type mismatch".to_string());
-        assert!(matches!(err, PyHdbError::Data(_)));
+        assert_matches!(err, PyHdbError::Data(_));
 
         let err = categorize_hana_error("TYPE error".to_string());
-        assert!(matches!(err, PyHdbError::Data(_)));
+        assert_matches!(err, PyHdbError::Data(_));
     }
 
     #[test]
     fn test_categorize_hana_error_by_message_content_conversion() {
         let err = categorize_hana_error("conversion failed".to_string());
-        assert!(matches!(err, PyHdbError::Data(_)));
+        assert_matches!(err, PyHdbError::Data(_));
 
         let err = categorize_hana_error("CONVERSION error".to_string());
-        assert!(matches!(err, PyHdbError::Data(_)));
+        assert_matches!(err, PyHdbError::Data(_));
     }
 
     #[test]
     fn test_categorize_hana_error_unknown_message_defaults_to_operational() {
         let err = categorize_hana_error("something went wrong".to_string());
-        assert!(matches!(err, PyHdbError::Operational(_)));
+        assert_matches!(err, PyHdbError::Operational(_));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -566,7 +568,7 @@ mod tests {
     fn test_from_url_parse_error() {
         let url_err = url::Url::parse("not a valid url").unwrap_err();
         let err: PyHdbError = url_err.into();
-        assert!(matches!(err, PyHdbError::Interface(_)));
+        assert_matches!(err, PyHdbError::Interface(_));
         assert!(err.to_string().contains("invalid URL"));
     }
 
@@ -578,7 +580,7 @@ mod tests {
     fn test_from_arrow_conversion_error() {
         let arrow_err = hdbconnect_arrow::ArrowConversionError::schema_mismatch(5, 3);
         let err: PyHdbError = arrow_err.into();
-        assert!(matches!(err, PyHdbError::Arrow(_)));
+        assert_matches!(err, PyHdbError::Arrow(_));
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -630,7 +632,7 @@ mod tests {
     #[test]
     fn test_error_with_empty_message() {
         let err = PyHdbError::interface("");
-        assert!(matches!(err, PyHdbError::Interface(_)));
+        assert_matches!(err, PyHdbError::Interface(_));
     }
 
     #[test]

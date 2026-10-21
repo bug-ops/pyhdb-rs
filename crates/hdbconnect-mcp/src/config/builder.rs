@@ -446,6 +446,7 @@ impl Default for ConfigBuilder {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::collections::HashSet;
 
     use super::*;
@@ -687,7 +688,7 @@ mod tests {
             .build()
             .unwrap();
 
-        assert!(matches!(config.schema_filter(), SchemaFilter::Whitelist(_)));
+        assert_matches!(config.schema_filter(), SchemaFilter::Whitelist(_));
     }
 
     #[test]
