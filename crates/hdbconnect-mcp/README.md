@@ -279,7 +279,7 @@ Enable HTTP transport for remote MCP access.
 
 ```toml
 [dependencies]
-hdbconnect-mcp = { version = "0.3", features = ["http"] }
+hdbconnect-mcp = { version = "0.4", features = ["http"] }
 ```
 
 Run with `--transport http --http-host 0.0.0.0 --http-port 8080`. Combine with the `auth` feature for OIDC/JWT-protected remote access; see [`deploy/`](deploy/) for a sample systemd unit and Kubernetes manifests.
@@ -290,7 +290,7 @@ Enable in-memory caching for schema metadata and query results.
 
 ```toml
 [dependencies]
-hdbconnect-mcp = { version = "0.3", features = ["cache"] }
+hdbconnect-mcp = { version = "0.4", features = ["cache"] }
 ```
 
 #### Cache Deployment Notes
@@ -318,7 +318,7 @@ Enable OIDC/JWT authentication and multi-tenant support.
 
 ```toml
 [dependencies]
-hdbconnect-mcp = { version = "0.3", features = ["auth", "http", "cache"] }
+hdbconnect-mcp = { version = "0.4", features = ["auth", "http", "cache"] }
 ```
 
 **Security features:**
@@ -334,7 +334,7 @@ Expose Prometheus metrics via the `metrics`/`metrics-exporter-prometheus` crates
 
 ```toml
 [dependencies]
-hdbconnect-mcp = { version = "0.3", features = ["metrics", "http"] }
+hdbconnect-mcp = { version = "0.4", features = ["metrics", "http"] }
 ```
 
 ### `telemetry`
@@ -343,7 +343,7 @@ Export distributed traces over OTLP using `opentelemetry`/`tracing-opentelemetry
 
 ```toml
 [dependencies]
-hdbconnect-mcp = { version = "0.3", features = ["telemetry"] }
+hdbconnect-mcp = { version = "0.4", features = ["telemetry"] }
 ```
 
 ## Architecture

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-21
+
 ### Changed
 
 - **MSRV**: Raise minimum supported Rust version 1.88 → 1.96, required by `parking_lot` 0.13 and `assert_matches!` (#212)
@@ -860,7 +862,8 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.14...HEAD
+[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.14...v0.4.0
 [0.3.14]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.13...v0.3.14
 [0.3.13]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.11...v0.3.12
