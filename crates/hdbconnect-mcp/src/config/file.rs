@@ -191,6 +191,7 @@ struct ObservabilityConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::io::Write;
 
     use tempfile::NamedTempFile;
@@ -432,7 +433,7 @@ mode = "none"
         let builder = load_from_file(temp_file.path(), ConfigBuilder::new()).unwrap();
         let config = builder.build().unwrap();
 
-        assert!(matches!(config.schema_filter, SchemaFilter::AllowAll));
+        assert_matches!(config.schema_filter, SchemaFilter::AllowAll);
     }
 
     #[test]

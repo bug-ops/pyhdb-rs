@@ -81,6 +81,8 @@ impl PyCursorHoldability {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
@@ -125,26 +127,17 @@ mod tests {
     #[test]
     fn test_cursor_holdability_to_hdbconnect() {
         let none: hdbconnect_async::CursorHoldability = PyCursorHoldability::None.into();
-        assert!(matches!(none, hdbconnect_async::CursorHoldability::None));
+        assert_matches!(none, hdbconnect_async::CursorHoldability::None);
 
         let commit: hdbconnect_async::CursorHoldability = PyCursorHoldability::Commit.into();
-        assert!(matches!(
-            commit,
-            hdbconnect_async::CursorHoldability::Commit
-        ));
+        assert_matches!(commit, hdbconnect_async::CursorHoldability::Commit);
 
         let rollback: hdbconnect_async::CursorHoldability = PyCursorHoldability::Rollback.into();
-        assert!(matches!(
-            rollback,
-            hdbconnect_async::CursorHoldability::Rollback
-        ));
+        assert_matches!(rollback, hdbconnect_async::CursorHoldability::Rollback);
 
         let both: hdbconnect_async::CursorHoldability =
             PyCursorHoldability::CommitAndRollback.into();
-        assert!(matches!(
-            both,
-            hdbconnect_async::CursorHoldability::CommitAndRollback
-        ));
+        assert_matches!(both, hdbconnect_async::CursorHoldability::CommitAndRollback);
     }
 
     #[test]

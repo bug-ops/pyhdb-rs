@@ -215,12 +215,14 @@ impl AuthConfig {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
     fn test_auth_mode_default() {
         let mode = AuthMode::default();
-        assert!(matches!(mode, AuthMode::None));
+        assert_matches!(mode, AuthMode::None);
     }
 
     #[test]
@@ -289,13 +291,13 @@ mod tests {
     #[test]
     fn test_schema_mapping_strategy() {
         let direct = SchemaMappingStrategy::Direct;
-        assert!(matches!(direct, SchemaMappingStrategy::Direct));
+        assert_matches!(direct, SchemaMappingStrategy::Direct);
 
         let prefix = SchemaMappingStrategy::Prefix("APP".to_string());
-        assert!(matches!(prefix, SchemaMappingStrategy::Prefix(_)));
+        assert_matches!(prefix, SchemaMappingStrategy::Prefix(_));
 
         let suffix = SchemaMappingStrategy::Suffix("DATA".to_string());
-        assert!(matches!(suffix, SchemaMappingStrategy::Suffix(_)));
+        assert_matches!(suffix, SchemaMappingStrategy::Suffix(_));
     }
 
     #[test]
@@ -305,7 +307,7 @@ mod tests {
         map.insert("tenant2".to_string(), "SCHEMA_2".to_string());
 
         let lookup = SchemaMappingStrategy::Lookup(map);
-        assert!(matches!(lookup, SchemaMappingStrategy::Lookup(_)));
+        assert_matches!(lookup, SchemaMappingStrategy::Lookup(_));
     }
 
     #[test]
@@ -398,7 +400,7 @@ mod tests {
     #[test]
     fn test_auth_config_default() {
         let config = AuthConfig::default();
-        assert!(matches!(config.mode, AuthMode::None));
+        assert_matches!(config.mode, AuthMode::None);
         assert!(!config.tenant.enabled);
         assert!(!config.rbac.enabled);
     }

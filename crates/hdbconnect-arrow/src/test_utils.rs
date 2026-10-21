@@ -291,6 +291,8 @@ pub fn assert_hdb_value_eq(actual: &HdbValue<'_>, expected: &HdbValue<'_>) {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
     use crate::traits::row::RowLike;
 
@@ -452,9 +454,9 @@ mod tests {
     #[test]
     fn test_simple_test_rows_values() {
         let rows = simple_test_rows(3);
-        assert!(matches!(rows[0].get(0), HdbValue::INT(0)));
-        assert!(matches!(rows[1].get(0), HdbValue::INT(1)));
-        assert!(matches!(rows[2].get(0), HdbValue::INT(2)));
+        assert_matches!(rows[0].get(0), HdbValue::INT(0));
+        assert_matches!(rows[1].get(0), HdbValue::INT(1));
+        assert_matches!(rows[2].get(0), HdbValue::INT(2));
     }
 
     #[test]
@@ -509,7 +511,7 @@ mod tests {
         let row = null_row(5);
         assert_eq!(row.len(), 5);
         for i in 0..5 {
-            assert!(matches!(row.get(i), HdbValue::NULL));
+            assert_matches!(row.get(i), HdbValue::NULL);
         }
     }
 
@@ -528,13 +530,13 @@ mod tests {
     #[test]
     fn test_mixed_type_row_values() {
         let row = mixed_type_row();
-        assert!(matches!(row.get(0), HdbValue::TINYINT(1)));
-        assert!(matches!(row.get(1), HdbValue::SMALLINT(2)));
-        assert!(matches!(row.get(2), HdbValue::INT(3)));
-        assert!(matches!(row.get(3), HdbValue::BIGINT(4)));
-        assert!(matches!(row.get(6), HdbValue::STRING(_)));
-        assert!(matches!(row.get(7), HdbValue::BOOLEAN(true)));
-        assert!(matches!(row.get(8), HdbValue::NULL));
+        assert_matches!(row.get(0), HdbValue::TINYINT(1));
+        assert_matches!(row.get(1), HdbValue::SMALLINT(2));
+        assert_matches!(row.get(2), HdbValue::INT(3));
+        assert_matches!(row.get(3), HdbValue::BIGINT(4));
+        assert_matches!(row.get(6), HdbValue::STRING(_));
+        assert_matches!(row.get(7), HdbValue::BOOLEAN(true));
+        assert_matches!(row.get(8), HdbValue::NULL);
     }
 
     #[test]

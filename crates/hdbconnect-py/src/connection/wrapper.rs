@@ -32,12 +32,7 @@ pub enum ConnectionInner {
 }
 
 /// Python-exposed cache statistics.
-#[pyclass(
-    name = "CacheStats",
-    module = "pyhdb_rs._core",
-    frozen,
-    skip_from_py_object
-)]
+#[pyclass(name = "CacheStats", module = "pyhdb_rs._core", frozen)]
 #[derive(Debug, Clone)]
 pub struct PyCacheStats {
     /// Current number of cached statements.
@@ -832,12 +827,14 @@ impl PyConnection {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
+
     use super::*;
 
     #[test]
     fn test_connection_inner_disconnected() {
         let inner = ConnectionInner::Disconnected;
-        assert!(matches!(inner, ConnectionInner::Disconnected));
+        assert_matches!(inner, ConnectionInner::Disconnected);
     }
 
     #[test]

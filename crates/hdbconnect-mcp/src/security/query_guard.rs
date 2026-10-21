@@ -127,6 +127,7 @@ impl<E: std::error::Error + 'static> std::error::Error for ExecuteError<E> {
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches;
     use std::collections::HashSet;
 
     use super::*;
@@ -156,7 +157,7 @@ mod tests {
             .await;
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), Error::QueryTimeout(_)));
+        assert_matches!(result.unwrap_err(), Error::QueryTimeout(_));
     }
 
     #[test]
