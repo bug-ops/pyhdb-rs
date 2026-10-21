@@ -210,7 +210,7 @@ flowchart TB
 ## Requirements
 
 - **Python** 3.12+ (for pyhdb_rs)
-- **Rust** 1.88+ (for building from source or MCP server)
+- **Rust** 1.95+ (for building from source or MCP server)
 
 ## Resources
 

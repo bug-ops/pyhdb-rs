@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/hdbconnect-mcp)](https://crates.io/crates/hdbconnect-mcp)
 [![docs.rs](https://img.shields.io/docsrs/hdbconnect-mcp)](https://docs.rs/hdbconnect-mcp)
 [![License](https://img.shields.io/badge/license-Apache%202.0%20OR%20MIT-blue.svg)](../../LICENSE-APACHE)
-[![MSRV](https://img.shields.io/badge/MSRV-1.88-blue)](https://www.rust-lang.org)
+[![MSRV](https://img.shields.io/badge/MSRV-1.95-blue)](https://www.rust-lang.org)
 [![CI](https://github.com/bug-ops/pyhdb-rs/workflows/CI/badge.svg)](https://github.com/bug-ops/pyhdb-rs/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/bug-ops/pyhdb-rs/branch/main/graph/badge.svg?flag=hdbconnect-mcp)](https://codecov.io/gh/bug-ops/pyhdb-rs)
 
@@ -35,7 +35,7 @@ cargo install --path .
 ```
 
 > [!IMPORTANT]
-> Requires Rust 1.88 or later. See the [`hdbconnect-arrow` MSRV policy](../hdbconnect-arrow/README.md#msrv-policy) (this crate shares the workspace MSRV).
+> Requires Rust 1.95 or later. See the [`hdbconnect-arrow` MSRV policy](../hdbconnect-arrow/README.md#msrv-policy) (this crate shares the workspace MSRV).
 
 ## Quick Start
 
