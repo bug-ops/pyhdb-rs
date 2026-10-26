@@ -20,6 +20,11 @@ ignore = [
     # decryption) over network, which we do not perform. Our use case is a resource
     # server validating tokens, not generating them.
     "RUSTSEC-2023-0071",
+    # RUSTSEC-2026-0387: timing variability in crypto-bigint 0.5.x
+    # Transitive via elliptic-curve 0.13 (p256/p384 in jsonwebtoken/openidconnect); the fix
+    # needs crypto-bigint >=0.7.6, unreachable without upstream major bumps. We only verify
+    # signatures with public keys, no secret-dependent operations.
+    "RUSTSEC-2026-0387",
 ]
 
 [licenses]
