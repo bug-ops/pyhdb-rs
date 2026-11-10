@@ -33,11 +33,11 @@ multiple_crate_versions = "allow"
 # Dependencies sorted ALPHABETICALLY - versions only (features in crates)
 [workspace.dependencies]
 anyhow = "1.0"
-arrow = { version = "59.3.1", default-features = false }
-arrow-array = "59.3.1"
-arrow-buffer = "59.3.1"
-arrow-data = "59.3.1"
-arrow-schema = "59.3.1"
+arrow = { version = "60.1.0", default-features = false }
+arrow-array = "60.1.0"
+arrow-buffer = "60.1.0"
+arrow-data = "60.1.0"
+arrow-schema = "60.1.0"
 async-trait = "0.1"
 axum = "0.8.9"
 bigdecimal = "0.4"
