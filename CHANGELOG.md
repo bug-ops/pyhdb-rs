@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependencies**: Bump `arrow*` 59 → 60 and `pyo3-arrow` 0.20 → 0.21 (#228)
+
 ## [0.4.0] - 2026-10-21
 
 ### Changed
