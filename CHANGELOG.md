@@ -7,9 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-16
+
 ### Changed
 
-- **Dependencies**: Bump `arrow*` 59 → 60 and `pyo3-arrow` 0.20 → 0.21 (#228)
+- **Dependencies**: Bump `arrow*` 59.3 → 60.1, `pyo3-arrow` 0.20 → 0.21, `rmcp` 3.6 → 3.10, plus minor/patch group updates (#214, #216, #225, #226, #228, #229)
+- **BREAKING** **`hdbconnect-arrow`**: Sealed HANA type-category markers (`Numeric`, `Decimal`, `StringType`, `Binary`, `Lob`, `Temporal`, `Spatial`) are now uninhabited structs wrapping `Infallible` instead of empty enums (#229)
+- **CI**: Bump `CodSpeedHQ/action` to 5.6.3 (#215, #221, #227); ignore major `arrow` updates in Dependabot until `pyo3-arrow` supported arrow 60 (#224)
+
+### Fixed
+
+- **CI**: Disable `sccache` on Windows test runners, where it exceeded the command-line length limit building `hdbconnect-mcp` (#229)
+
+### Security
+
+- **`cargo-deny`**: Ignore `RUSTSEC-2026-0387` (`crypto-bigint` 0.5.x timing variability), a transitive dependency of `elliptic-curve` 0.13 used only for public-key signature verification (#214)
 
 ## [0.4.0] - 2026-10-21
 
@@ -866,7 +878,8 @@ Initial release of pyhdb-rs — high-performance Python driver for SAP HANA.
 - Build provenance attestations for all release artifacts
 - Dependency auditing with cargo-deny
 
-[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/bug-ops/pyhdb-rs/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/bug-ops/pyhdb-rs/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.14...v0.4.0
 [0.3.14]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.13...v0.3.14
 [0.3.13]: https://github.com/bug-ops/pyhdb-rs/compare/v0.3.12...v0.3.13
