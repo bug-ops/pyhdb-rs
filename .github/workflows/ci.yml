@@ -94,7 +94,8 @@ jobs:
         # hdbconnect-py is tested via Python tests (test-python job).
         run: cargo nextest run --workspace --all-features --exclude hdbconnect-py
         env:
-          RUSTC_WRAPPER: sccache
+          # sccache exceeds the Windows command-line length limit (os error 206) on hdbconnect-mcp
+          RUSTC_WRAPPER: ${{ runner.os != 'Windows' && 'sccache' || '' }}
           SCCACHE_GHA_ENABLED: "true"
 
   # Build wheels for testing (one per OS, abi3 compatible with all Python versions)

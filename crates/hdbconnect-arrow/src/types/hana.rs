@@ -19,6 +19,7 @@
 //! // These are different types - cannot be mixed up!
 //! ```
 
+use std::convert::Infallible;
 use std::marker::PhantomData;
 
 use crate::traits::sealed::private::Sealed;
@@ -40,7 +41,7 @@ pub trait HanaTypeCategory: Sealed {
 ///
 /// These types map directly to Arrow primitive arrays.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Numeric {}
+pub struct Numeric(Infallible);
 
 impl Sealed for Numeric {}
 impl HanaTypeCategory for Numeric {
@@ -51,7 +52,7 @@ impl HanaTypeCategory for Numeric {
 ///
 /// These types require precision and scale tracking and map to Arrow Decimal128.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Decimal {}
+pub struct Decimal(Infallible);
 
 impl Sealed for Decimal {}
 impl HanaTypeCategory for Decimal {
@@ -62,7 +63,7 @@ impl HanaTypeCategory for Decimal {
 ///
 /// All string types map to Arrow Utf8 or `LargeUtf8`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StringType {}
+pub struct StringType(Infallible);
 
 impl Sealed for StringType {}
 impl HanaTypeCategory for StringType {
@@ -73,7 +74,7 @@ impl HanaTypeCategory for StringType {
 ///
 /// Maps to Arrow Binary or `FixedSizeBinary`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Binary {}
+pub struct Binary(Infallible);
 
 impl Sealed for Binary {}
 impl HanaTypeCategory for Binary {
@@ -85,7 +86,7 @@ impl HanaTypeCategory for Binary {
 /// LOB types require special streaming handling for large values.
 /// Maps to Arrow `LargeUtf8` or `LargeBinary`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Lob {}
+pub struct Lob(Infallible);
 
 impl Sealed for Lob {}
 impl HanaTypeCategory for Lob {
@@ -96,7 +97,7 @@ impl HanaTypeCategory for Lob {
 ///
 /// Maps to Arrow Date32, Time64, or Timestamp.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Temporal {}
+pub struct Temporal(Infallible);
 
 impl Sealed for Temporal {}
 impl HanaTypeCategory for Temporal {
@@ -107,7 +108,7 @@ impl HanaTypeCategory for Temporal {
 ///
 /// Spatial types are serialized as WKB binary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Spatial {}
+pub struct Spatial(Infallible);
 
 impl Sealed for Spatial {}
 impl HanaTypeCategory for Spatial {
