@@ -40,7 +40,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-hdbconnect-py = "0.4"
+hdbconnect-py = "0.5"
 ```
 
 > [!IMPORTANT]
@@ -88,7 +88,7 @@ Enables async/await support with tokio runtime and deadpool connection pool.
 
 ```toml
 [dependencies]
-hdbconnect-py = { version = "0.4", features = ["async"] }
+hdbconnect-py = { version = "0.5", features = ["async"] }
 ```
 
 > [!TIP]
